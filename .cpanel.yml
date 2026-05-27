@@ -1,0 +1,10 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/websiapnb
+    # 1. Sync Frontend Build (React) to public_html (keep the 'api' directory intact)
+    - rsync -av --delete --exclude='api' apps/web/dist/ $DEPLOYPATH/public_html/
+    # 2. Sync Backend (Laravel Core) to backend_cpl
+    - rsync -av --exclude='.env' --exclude='storage/framework/sessions/*' --exclude='storage/framework/views/*' --exclude='storage/framework/cache/*' --exclude='storage/logs/*' --exclude='bootstrap/cache/*' apps/api/ $DEPLOYPATH/backend_cpl/
+    # 3. Sync Backend Public files to public_html/api
+    - rsync -av apps/api/public/ $DEPLOYPATH/public_html/api/
