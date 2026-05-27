@@ -29,8 +29,12 @@ class RouteServiceProvider extends ServiceProvider
         });
 
         $this->routes(function () {
+            $isSubfolderApi = isset($_SERVER['SCRIPT_NAME']) && 
+                (strpos($_SERVER['SCRIPT_NAME'], '/api/') === 0 || $_SERVER['SCRIPT_NAME'] === '/api');
+            $prefix = $isSubfolderApi ? '' : 'api';
+
             Route::middleware('api')
-                ->prefix('api')
+                ->prefix($prefix)
                 ->group(base_path('routes/api.php'));
 
             Route::middleware('web')
