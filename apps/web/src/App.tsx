@@ -1,32 +1,52 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { branding } from '@cpl-pnb/ui';
+// Removed unused branding
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { RadarChart } from './components/RadarChart';
 import { BarChart } from './components/BarChart';
 import { CplPrintTemplate } from './components/CplPrintTemplate';
+import { LandingPage } from './components/LandingPage';
 
 // API Configuration
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_BASE = import.meta.env.PROD 
+  ? '/api' 
+  : (import.meta.env.VITE_API_URL || 'http://localhost:4000/api');
 
 async function apiCall(path: string, method: string = 'GET', body: any = null) {
   const options: RequestInit = {
     method,
     credentials: 'include',
   };
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+
+  const getCookie = (name: string) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift();
+  };
+  
+  const token = getCookie('XSRF-TOKEN');
+  if (token && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
+    headers['X-XSRF-TOKEN'] = decodeURIComponent(token);
+  }
+
   if (body) {
     options.body = JSON.stringify(body);
-    options.headers = {
-      'Content-Type': 'application/json',
-    };
+    headers['Content-Type'] = 'application/json';
   }
+  
+  options.headers = headers;
+  
   const res = await fetch(`${API_BASE}${path}`, options);
   if (!res.ok) {
     let msg = `API Error: ${res.statusText}`;
     try {
       const errJson = await res.json();
-      msg = errJson.error || errJson.message || msg;
+      msg = errJson.message || errJson.error || msg;
     } catch (e) {}
     throw new Error(msg);
   }
@@ -130,6 +150,23 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
+
+  // Handle Browser Back Button for Landing Page
+  useEffect(() => {
+    const handlePopState = () => {
+      if (!isLoggedIn && !showLanding) {
+        setShowLanding(true);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isLoggedIn, showLanding]);
+
+  const handleShowLogin = (_role: 'admin' | 'dosen') => {
+    window.history.pushState({ loginPage: true }, '');
+    setShowLanding(false);
+  };
 
   // Toast Notification state
   const [toastMessage, setToastMessage] = useState('');
@@ -252,7 +289,7 @@ export default function App() {
   // Verification on mount
   const checkSession = async () => {
     try {
-      const data = await apiCall('/auth/get-session');
+      const data = await apiCall('/me');
       if (data && data.user) {
         setCurrentUser(data.user);
         setIsLoggedIn(true);
@@ -1608,8 +1645,14 @@ export default function App() {
 
     setLoginLoading(true);
     try {
-      // Better Auth path
-      const result = await apiCall('/auth/sign-in/email', 'POST', {
+      // CSRF initialization for Sanctum (supports subdirectory deployment in production)
+      const csrfUrl = import.meta.env.PROD
+        ? `${API_BASE}/sanctum/csrf-cookie`
+        : `${API_BASE.replace('/api', '')}/sanctum/csrf-cookie`;
+      await fetch(csrfUrl, { method: 'GET', credentials: 'include' });
+
+      // Call Laravel login endpoint
+      const result = await apiCall('/login', 'POST', {
         email: emailInput.trim(),
         password: passwordInput,
       });
@@ -1698,17 +1741,22 @@ export default function App() {
 
   // Logout handler
   const handleLogout = async () => {
-    try {
-      await apiCall('/auth/sign-out', 'POST');
-    } catch (e) {}
-    setIsLoggedIn(false);
-    setCurrentUser(null);
-    setSelectedStudentId('');
-    setSelectedStudentAchievements([]);
+    if (window.confirm('Apakah Anda yakin ingin keluar?')) {
+      try {
+        await apiCall('/logout', 'POST');
+      } catch (err) {
+        console.error('Logout error:', err);
+      } finally {
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+        setSelectedStudentId('');
+        setSelectedStudentAchievements([]);
+      }
+    }
   };
 
   // Print Laporan to PDF
-  const handlePrintReport = async (elementId: string, filename: string, isPrintTemplate = false) => {
+  const handlePrintReport = async (elementId: string, filename: string, _isPrintTemplate = false) => {
     const input = document.getElementById(elementId);
     if (!input) {
       showToast('Gagal mencetak: area laporan tidak ditemukan.');
@@ -1722,7 +1770,7 @@ export default function App() {
 
       const canvas = await html2canvas(input, {
         scale: 2, 
-        backgroundColor: isPrintTemplate ? '#ffffff' : '#051424', 
+        backgroundColor: '#FFFFFF', 
         logging: false,
       });
 
@@ -2183,102 +2231,124 @@ export default function App() {
     );
   }
 
-  // LOGIN SCREEN
+  // LANDING PAGE & LOGIN SCREEN
   if (!isLoggedIn) {
+    if (showLanding) {
+      return (
+        <LandingPage onLoginClick={handleShowLogin} />
+      );
+    }
+
     return (
-      <main className="flex min-h-screen">
+      <main className="flex min-h-screen font-sans">
         {/* Left Panel: Branding & Illustration */}
-        <section className="hidden lg:flex lg:w-1/2 left-panel-gradient relative flex-col justify-between p-3xl overflow-hidden">
-          <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px]"></div>
-          <div className="absolute bottom-[-5%] left-[-5%] w-[300px] h-[300px] bg-secondary/10 rounded-full blur-[80px]"></div>
+        <section className="hidden lg:flex lg:w-[55%] relative flex-col justify-between p-12 overflow-hidden bg-[#0d2a6a]">
+          {/* Background image overlay with blue tint */}
+          <div className="absolute inset-0 z-0">
+             <div className="absolute inset-0 bg-[#0d2a6a]/90 z-10 mix-blend-multiply"></div>
+             {/* Using a placeholder university building image */}
+             <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?q=80&w=2070')] bg-cover bg-center opacity-30 mix-blend-overlay"></div>
+          </div>
           
-          <div className="relative z-10">
-            <div className="flex items-center gap-md">
-              <img 
-                alt="PNB Logo" 
-                className="w-12 h-12" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGC8kmhkNvKUL_fCK6qbnqcVT_s9SCV1b_tIGRONIUvb9oiU77KjuHprKDaXCyIhnMYCGumOTTgLjwMKdN34rkMzuaMH9gQaqOf3dwyZTwaDZYPOkf_rf8mz6bZTsTSCGrOTaDO5FC65xtsvvzq2_HYq7GHFkC7Zs6iZBsbSTMTyvHV2Iin6tBDv3QDcisK9VUhWiKb3o_riQXamRnUfQm34dVgwVH2UFJw6nz1GNzsyh4fpWijFshzHQ3QuUUmYXsD11M5LgMahYv"
-              />
-              <div>
-                <h1 className="font-display-2xl text-display-2xl text-primary tracking-tight">{branding.institution}</h1>
-                <p className="font-label-sm text-label-sm text-on-surface-variant">{branding.slogan}</p>
-              </div>
+          {/* Top Left Logo */}
+          <div className="relative z-20 flex items-center gap-4">
+            <img 
+              alt="PNB Logo" 
+              className="w-14 h-14" 
+              src="https://upload.wikimedia.org/wikipedia/id/e/ed/Logo_Politeknik_Negeri_Bali.png"
+            />
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-xl leading-tight tracking-wide">POLITEKNIK</span>
+              <span className="text-white font-bold text-xl leading-tight tracking-wide">NEGERI BALI</span>
             </div>
           </div>
 
-          <div className="relative z-10 flex flex-col gap-lg">
-            <div className="max-w-md">
-              <h2 className="font-display-3xl text-display-3xl text-white mb-md leading-tight">
-                Sistem Pengukuran Capaian Pembelajaran Lulusan (CPL)
-              </h2>
-              <p className="font-body-base text-body-base text-on-surface-variant leading-relaxed">
-                Platform integrasi data akademik untuk memantau dan mengevaluasi capaian standar kompetensi lulusan secara real-time dan akurat.
-              </p>
-            </div>
-            <div className="mt-xl">
-              <img 
-                className="rounded-xl glass-card p-xs w-full object-cover h-[320px] shadow-2xl" 
-                alt="A professional high-tech data visualization dashboard"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFPj8WFmcV5KmE0r3JpNR4XL7Z9f_9AxHihDmyVQMI2buIoyaz9u3_sfnDVnzy4C3VUUJzVhe72y9dGQ_UaMwkHgGHxw3l0FX7ORbNSWnSTKirS4fv7nlQykg2vQI3k7aHZyZbpSXpP-SyUto_soc5-oHIXDORQwsBemJpNI09gPJD2fmc6qy8PiU_s4lYg5nxnOTxhSmf81xyOwRozZLcLCZMdah-Xi4EN17A_jPO1DKjnG_FyQnULNeIwZ4gIAbjci4kZFPydkpe"
-              />
-            </div>
-          </div>
-
-          <div className="relative z-10">
-            <p className="font-label-xs text-label-xs text-on-surface-variant/50">
-              {branding.copyright}
+          {/* Main Text Area */}
+          <div className="relative z-20 flex flex-col mt-32 mb-auto">
+            <h2 className="text-white text-3xl mb-1 font-medium tracking-wide">Sistem Informasi</h2>
+            <h1 className="text-[#FFC107] text-5xl font-bold leading-[1.15] max-w-[90%]">
+              Capaian Pembelajaran Lulusan (CPL)
+            </h1>
+            <div className="w-12 h-1 bg-[#FFC107] my-6"></div>
+            <p className="text-white/90 text-lg max-w-[85%] leading-relaxed font-light">
+              Platform pengelolaan dan pemantauan CPL berbasis mata kuliah untuk mendukung akreditasi dan mutu akademik PNB.
             </p>
+          </div>
+
+          {/* Bottom Left Yellow Curve (SVG) */}
+          <div className="absolute bottom-0 left-0 w-full h-[180px] z-10 overflow-hidden">
+             <svg viewBox="0 0 500 150" preserveAspectRatio="none" className="h-full w-full opacity-90 scale-x-125 origin-left">
+               <path d="M-50,150 C100,50 300,100 500,0 L500,150 Z" fill="#FFC107" opacity="0.3"></path>
+               <path d="M-50,150 C150,100 250,120 500,50 L500,150 Z" fill="#FFC107"></path>
+             </svg>
           </div>
         </section>
 
         {/* Right Panel: Login Form */}
-        <section 
-          ref={rightPanelRef}
-          className="w-full lg:w-1/2 bg-mesh flex items-center justify-center p-gutter relative transition-all duration-300"
-        >
-          <div className="absolute top-lg left-lg lg:hidden flex items-center gap-sm">
-            <img 
-              alt="PNB Logo" 
-              className="w-8 h-8" 
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4EAvP_JqLVGexSK5KCGkMyOdwfvKMn4A0B87FMiXPZMtuRTIrV-pWzjvtvahF8hvO4QtbT14UkP2sVVmUZGDbB6CebVXWhlovkuQva5REoLJnOFYkN9hS3yiVuAo3M_rVeoeiQT93pQxd-zd6GnznENNuEfoLqfgpFm97zYQw2f19OZosVWfa-FTKlQUeuXH-cCTIlly7EWAMr_STRMeiMis8U-4X9DRBEYej7XgovIgKRXupCZloR0rOuCpjV8weQOCFlbnOpEJy"
-            />
-            <span className="font-headline-xl text-headline-xl text-primary">CPL PNB</span>
+        <section className="w-full lg:w-[45%] bg-[#F8FAFC] flex flex-col justify-center items-center relative overflow-hidden">
+          {/* Top Right Subtle Pattern */}
+          <div className="absolute top-[-100px] right-[-100px] w-[400px] h-[400px] rounded-full border-[60px] border-black/[0.02]"></div>
+          <div className="absolute top-[-50px] right-[-50px] w-[300px] h-[300px] rounded-full border-[40px] border-black/[0.02]"></div>
+          
+          {/* Bottom Right Yellow Accent */}
+          <div className="absolute bottom-[-20px] right-[-20px] w-48 h-48 opacity-80 rotate-12">
+             <svg viewBox="0 0 100 100" className="w-full h-full fill-[#FFC107]">
+               <path d="M100 100 V 30 Q 30 30 0 100 Z" />
+             </svg>
           </div>
 
-          <div className="w-full max-w-[440px]">
-            <div className="glass-card rounded-xl p-2xl flex flex-col gap-xl">
-              <div className="text-center">
-                <h3 className="font-display-2xl text-display-2xl text-white mb-xs">Selamat Datang</h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">Masuk ke akun Anda untuk melanjutkan</p>
+          <div className="absolute top-8 left-8 lg:hidden flex items-center gap-3">
+            <img 
+              alt="PNB Logo" 
+              className="w-10 h-10" 
+              src="https://upload.wikimedia.org/wikipedia/id/e/ed/Logo_Politeknik_Negeri_Bali.png"
+            />
+            <span className="font-bold text-xl text-[#0d2a6a]">CPL PNB</span>
+          </div>
+
+          <div className="w-full max-w-[580px] z-10 p-4 sm:p-8">
+            <div className="bg-white rounded-[2rem] shadow-[0_8px_40px_rgb(0,0,0,0.06)] p-8 sm:px-14 sm:py-16 flex flex-col relative border border-black/[0.02]">
+              
+              {/* Logo & Title */}
+              <div className="flex flex-col items-center text-center mb-10">
+                <img 
+                  alt="PNB Logo" 
+                  className="w-24 h-24 object-contain mb-5" 
+                  src="https://upload.wikimedia.org/wikipedia/id/e/ed/Logo_Politeknik_Negeri_Bali.png"
+                />
+                <h3 className="text-[#0d2a6a] font-bold text-[1.15rem] mb-4 tracking-wider uppercase">POLITEKNIK NEGERI BALI</h3>
+                <p className="text-gray-500 text-[15px] leading-relaxed max-w-[95%] mx-auto font-medium">
+                  Masuk untuk mengakses Sistem Informasi Capaian Pembelajaran Lulusan (CPL)
+                </p>
               </div>
 
               {loginError && (
-                <div className="bg-error-container/30 border border-error/50 rounded-lg p-md text-error text-body-sm text-center flex items-center justify-center gap-sm">
-                  <span className="material-symbols-outlined text-md">error</span>
+                <div className="bg-red-50 text-red-600 rounded-xl p-4 text-[15px] text-center flex items-center justify-center gap-2 mb-6 border border-red-100">
+                  <span className="material-symbols-outlined text-[20px]">error</span>
                   <span>{loginError}</span>
                 </div>
               )}
 
               {loginSuccess && (
-                <div className="bg-tertiary-container/30 border border-tertiary/50 rounded-lg p-md text-tertiary text-body-sm text-center flex items-center justify-center gap-sm">
-                  <span className="material-symbols-outlined text-md">check_circle</span>
+                <div className="bg-green-50 text-green-600 rounded-xl p-4 text-[15px] text-center flex items-center justify-center gap-2 mb-6 border border-green-100">
+                  <span className="material-symbols-outlined text-[20px]">check_circle</span>
                   <span>Login Berhasil! Mengalihkan...</span>
                 </div>
               )}
 
-              <form className="flex flex-col gap-lg" onSubmit={handleLogin}>
-                <div className="flex flex-col gap-sm">
-                  <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs" htmlFor="email">
-                    Email / Username
+              <form className="flex flex-col gap-6" onSubmit={handleLogin}>
+                <div className="flex flex-col gap-3">
+                  <label className="text-[15px] font-bold text-gray-800 ml-1" htmlFor="email">
+                    Username
                   </label>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant select-none">
+                    <span className="material-symbols-outlined absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 text-[22px]">
                       person
                     </span>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md pl-[48px] pr-md text-on-surface font-body-base placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-all" 
+                      className="w-full bg-[#F1F5F9] border-none rounded-full py-[18px] pl-[52px] pr-5 text-gray-800 text-[15px] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0d2a6a]/30 transition-all" 
                       id="email" 
-                      placeholder="superadmin@cpl-pnb.ac.id" 
+                      placeholder="Masukkan username" 
                       type="text"
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
@@ -2287,40 +2357,44 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-sm">
-                  <div className="flex justify-between items-center ml-xs">
-                    <label className="font-label-sm text-label-sm text-on-surface-variant" htmlFor="password">
-                      Password
-                    </label>
-                  </div>
+                <div className="flex flex-col gap-3">
+                  <label className="text-[15px] font-bold text-gray-800 ml-1" htmlFor="password">
+                    Kata Sandi
+                  </label>
                   <div className="relative">
-                    <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant select-none">
+                    <span className="material-symbols-outlined absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 text-[22px]">
                       lock
                     </span>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md pl-[48px] pr-[48px] text-on-surface font-body-base placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary transition-all" 
+                      className="w-full bg-[#F1F5F9] border-none rounded-full py-[18px] pl-[52px] pr-[52px] text-gray-800 text-[15px] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0d2a6a]/30 transition-all" 
                       id="password" 
-                      placeholder="••••••••" 
+                      placeholder="Masukkan kata sandi" 
                       type={showPassword ? 'text' : 'password'}
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
                       disabled={loginLoading || loginSuccess}
                     />
                     <button 
-                      className="absolute right-md top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors focus:outline-none flex items-center justify-center" 
+                      className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#0d2a6a] transition-colors focus:outline-none flex items-center justify-center" 
                       onClick={() => setShowPassword(!showPassword)} 
                       type="button"
                       disabled={loginLoading || loginSuccess}
                     >
-                      <span className="material-symbols-outlined select-none" id="password-toggle-icon">
+                      <span className="material-symbols-outlined text-[22px]">
                         {showPassword ? 'visibility_off' : 'visibility'}
                       </span>
                     </button>
                   </div>
                 </div>
 
+                <div className="flex justify-end mt-[-4px]">
+                  <a className="text-[#0d2a6a] text-[15px] font-semibold hover:underline" href="#">
+                    Lupa kata sandi?
+                  </a>
+                </div>
+
                 <button 
-                  className={`w-full bg-primary text-on-primary font-headline-lg text-headline-lg py-md rounded-lg primary-glow flex items-center justify-center gap-sm mt-md ${
+                  className={`w-full bg-[#0d2a6a] hover:bg-[#12398b] text-white font-bold py-[18px] rounded-full flex items-center justify-center gap-2 mt-4 transition-colors shadow-lg shadow-[#0d2a6a]/20 ${
                     loginLoading || loginSuccess ? 'opacity-80 cursor-not-allowed' : ''
                   }`}
                   type="submit"
@@ -2328,27 +2402,25 @@ export default function App() {
                 >
                   {loginLoading ? (
                     <>
+                      <span className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></span>
                       <span>Memproses...</span>
-                      <span className="animate-spin rounded-full h-5 w-5 border-2 border-on-primary border-t-transparent"></span>
                     </>
                   ) : (
                     <>
+                      <span className="material-symbols-outlined text-[20px]">login</span>
                       <span>Masuk</span>
-                      <span className="material-symbols-outlined">login</span>
                     </>
                   )}
                 </button>
               </form>
 
-              <div className="mt-sm pt-lg border-t border-outline-variant/30 text-center">
-                <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  Butuh bantuan? <a className="text-secondary font-label-sm hover:underline" href="#">Hubungi Admin IT</a>
+              <div className="mt-12 text-center border-t border-gray-100 pt-6">
+                <p className="text-gray-500 text-[13px] font-medium">
+                  © 2024 <span className="text-[#0d2a6a]">Politeknik Negeri Bali</span>. All rights reserved.
                 </p>
               </div>
             </div>
           </div>
-
-          <div className="absolute bottom-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
         </section>
       </main>
     );
@@ -2356,145 +2428,152 @@ export default function App() {
 
   // MAIN LAYOUT (LOGGED IN)
   return (
-    <div className="font-body-base text-body-base selection:bg-primary/30 min-h-screen flex">
-      {/* SideNavBar */}
-      <aside className="fixed left-0 top-0 h-screen w-[260px] bg-surface-dim border-r border-outline-variant flex flex-col py-lg z-30">
-        <div className="px-lg mb-xl">
-          <h1 className="font-display-2xl text-display-2xl font-bold text-primary">CPL PNB</h1>
-          <p className="font-label-sm text-label-sm text-outline">Academic System</p>
+    <div className="font-body-base text-body-base selection:bg-primary/30 min-h-screen flex flex-col bg-background">
+      {/* Topbar */}
+      <header className="sticky top-0 z-40 w-full h-[72px] bg-primary flex items-center justify-between px-xl shadow-md">
+        <div className="flex items-center gap-md">
+          <img 
+            alt="PNB Logo" 
+            className="w-12 h-12 bg-white rounded-full p-1" 
+            src="https://upload.wikimedia.org/wikipedia/id/e/ed/Logo_Politeknik_Negeri_Bali.png"
+          />
+          <div>
+            <h1 className="font-headline-xl text-white font-bold leading-tight">Sistem Informasi Capaian Pembelajaran Lulusan</h1>
+            <p className="font-label-sm text-white/80 leading-tight">Politeknik Negeri Bali</p>
+          </div>
         </div>
-
-        <nav className="flex-1 px-sm space-y-xs overflow-y-auto custom-scrollbar">
-          {currentUser?.role === 'super_admin' ? (
-            <>
-              {/* Departments CRUD */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'departments' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => setActiveTab('departments')}
-              >
-                <span className="material-symbols-outlined">domain</span>
-                <span>Jurusan (Departments)</span>
-              </button>
-
-              {/* Admins CRUD */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'admins' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => setActiveTab('admins')}
-              >
-                <span className="material-symbols-outlined">admin_panel_settings</span>
-                <span>Admin Jurusan</span>
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Dashboard Tab */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'dashboard' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => setActiveTab('dashboard')}
-              >
-                <span className="material-symbols-outlined">dashboard</span>
-                <span>Dashboard</span>
-              </button>
-
-              {/* Mahasiswa Tab */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'mahasiswa' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => setActiveTab('mahasiswa')}
-              >
-                <span className="material-symbols-outlined">group</span>
-                <span>Mahasiswa</span>
-              </button>
-
-              {/* Mata Kuliah */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'matakuliah' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => setActiveTab('matakuliah')}
-              >
-                <span className="material-symbols-outlined">book</span>
-                <span>Mata Kuliah</span>
-              </button>
-
-              {/* CPL */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'cpl' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => setActiveTab('cpl')}
-              >
-                <span className="material-symbols-outlined">verified</span>
-                <span>CPL</span>
-              </button>
-
-              {/* Input Nilai */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'nilai' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => setActiveTab('nilai')}
-              >
-                <span className="material-symbols-outlined">edit_note</span>
-                <span>Input Nilai</span>
-              </button>
-
-              {/* Hasil CPL */}
-              <button 
-                className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                  activeTab === 'hasil_cpl' 
-                    ? 'text-primary font-bold border-r-4 border-primary bg-primary/10' 
-                    : 'text-on-surface-variant hover:bg-surface-bright hover:text-on-surface'
-                }`} 
-                onClick={() => {
-                  setActiveTab('hasil_cpl');
-                  // Select first student if available and none selected
-                  if (students.length > 0 && !selectedStudentId) {
-                    setSelectedStudentId(students[0].id);
-                  }
-                }}
-              >
-                <span className="material-symbols-outlined">analytics</span>
-                <span>Hasil CPL</span>
-              </button>
-            </>
-          )}
-        </nav>
-
-        <div className="px-md mt-auto pt-lg border-t border-outline-variant/30">
+        <div className="flex items-center gap-lg">
+          <div className="text-white text-label-sm">
+            Selamat datang, <b>{currentUser?.name}</b>
+          </div>
           <button 
-            className="w-full flex items-center gap-md px-md py-sm rounded-lg text-error hover:bg-error/10 transition-all duration-200 ease-in-out font-label-sm text-label-sm text-left" 
-            onClick={handleLogout}
+            onClick={handleLogout} 
+            className="bg-white text-primary px-md py-sm rounded-md font-label-sm font-bold shadow-sm hover:bg-surface-variant transition-colors"
           >
-            <span className="material-symbols-outlined">logout</span>
-            <span>Keluar</span>
+            Log Out
           </button>
         </div>
-      </aside>
+      </header>
 
-      {/* Main Content Area */}
-      <main className="ml-[260px] h-screen overflow-y-auto flex flex-col flex-1 relative bg-mesh">
+      <div className="flex flex-1 overflow-hidden">
+        {/* SideNavBar */}
+        <aside className="w-[260px] bg-surface border-r border-outline overflow-y-auto flex flex-col py-lg z-30 shrink-0">
+          <nav className="flex-1 px-md space-y-unit custom-scrollbar">
+            {currentUser?.role === 'super_admin' ? (
+              <>
+                {/* Departments CRUD */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'departments' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('departments')}
+                >
+                  <span className="material-symbols-outlined">domain</span>
+                  <span>Jurusan (Departments)</span>
+                </button>
+
+                {/* Admins CRUD */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'admins' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('admins')}
+                >
+                  <span className="material-symbols-outlined">admin_panel_settings</span>
+                  <span>Admin Jurusan</span>
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Dashboard Tab */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'dashboard' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('dashboard')}
+                >
+                  <span className="material-symbols-outlined">dashboard</span>
+                  <span>Dashboard</span>
+                </button>
+
+                {/* Mahasiswa Tab */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'mahasiswa' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('mahasiswa')}
+                >
+                  <span className="material-symbols-outlined">group</span>
+                  <span>Mahasiswa</span>
+                </button>
+
+                {/* Mata Kuliah */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'matakuliah' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('matakuliah')}
+                >
+                  <span className="material-symbols-outlined">book</span>
+                  <span>Mata Kuliah</span>
+                </button>
+
+                {/* CPL */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'cpl' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('cpl')}
+                >
+                  <span className="material-symbols-outlined">verified</span>
+                  <span>CPL</span>
+                </button>
+
+                {/* Input Nilai */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'nilai' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('nilai')}
+                >
+                  <span className="material-symbols-outlined">edit_note</span>
+                  <span>Input Nilai</span>
+                </button>
+
+                {/* Hasil CPL */}
+                <button 
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'hasil_cpl' 
+                      ? 'text-primary font-bold bg-primary/5' 
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`} 
+                  onClick={() => setActiveTab('hasil_cpl')}
+                >
+                  <span className="material-symbols-outlined">analytics</span>
+                  <span>Hasil CPL</span>
+                </button>
+              </>
+            )}
+          </nav>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 relative flex flex-col overflow-y-auto bg-background">
+          <div className="flex-1 max-w-7xl mx-auto w-full p-lg lg:p-2xl flex flex-col gap-lg">
         {/* Toast alert popup */}
         {toastMessage && (
           <div className="fixed top-20 right-6 z-50 bg-primary-container text-on-primary-container px-lg py-md rounded-xl shadow-2xl border border-primary/20 flex items-center gap-sm animate-bounce">
@@ -2502,29 +2581,6 @@ export default function App() {
             <span className="font-label-sm text-label-sm font-bold">{toastMessage}</span>
           </div>
         )}
-
-        {/* TopNavBar */}
-        <header className="sticky top-0 z-20 w-full h-[64px] bg-surface/70 backdrop-blur-xl border-b border-white/10 shadow-sm flex justify-between items-center px-gutter">
-          <div className="flex items-center gap-md">
-            <span className="font-headline-xl text-headline-xl font-bold text-on-surface">
-              {currentUser?.role === 'super_admin' ? 'Super Admin Portal' : (currentUser?.departmentName || 'Admin Portal')}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-lg">
-            <div className="flex items-center gap-md">
-              <div className="text-right">
-                <p className="font-label-sm text-label-sm font-bold text-on-surface">{currentUser?.name || 'User'}</p>
-                <p className="text-[10px] text-outline uppercase tracking-wider font-semibold">
-                  {currentUser?.role === 'super_admin' ? 'Super Admin' : 'Admin Jurusan'}
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-full border border-primary/20 bg-primary/10 flex items-center justify-center text-primary font-bold">
-                {(currentUser?.name || 'U')[0].toUpperCase()}
-              </div>
-            </div>
-          </div>
-        </header>
 
         {/* Dynamic Route Switching */}
 
@@ -2552,13 +2608,13 @@ export default function App() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">No</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Kode</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Nama Jurusan</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Aksi</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kode</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Nama Jurusan</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant/10">
+                  <tbody className="divide-y divide-outline-variant/50">
                     {departments.length > 0 ? (
                       departments.map((dept, index) => (
                         <tr key={dept.id} className="hover-row transition-colors">
@@ -2618,14 +2674,14 @@ export default function App() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">No</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Nama Admin</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Email</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Jurusan</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Aksi</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Nama Admin</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Email</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Jurusan</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant/10">
+                  <tbody className="divide-y divide-outline-variant/50">
                     {admins.length > 0 ? (
                       admins.map((adm, index) => (
                         <tr key={adm.id} className="hover-row transition-colors">
@@ -2901,7 +2957,7 @@ export default function App() {
               </div>
 
               {/* Radar SVG Chart */}
-              <div className="mt-2xl h-[400px] w-full flex items-center justify-center relative overflow-hidden bg-white/5 rounded-3xl border border-white/5 shadow-inner">
+              <div className="mt-2xl h-[400px] w-full flex items-center justify-center relative overflow-hidden bg-white/5 rounded-3xl border border-slate-200 shadow-inner">
                 <RadarChart
                   avgSikap={avgSikap}
                   avgPengetahuan={avgPengetahuan}
@@ -3042,16 +3098,16 @@ export default function App() {
                               }}
                             />
                           </th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">No</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">NIM</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Nama</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Angkatan</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Kelas</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Status</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Aksi</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">NIM</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Nama</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Angkatan</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kelas</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Status</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-outline-variant/10">
+                      <tbody className="divide-y divide-outline-variant/50">
                         {currentItems.length > 0 ? (
                           currentItems.map((student, idx) => (
                             <tr 
@@ -3199,7 +3255,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="space-y-md border-t border-white/5 pt-lg">
+                      <div className="space-y-md border-t border-slate-200 pt-lg">
                         <div className="flex justify-between items-center">
                           <span className="text-on-surface-variant font-label-sm text-label-sm">Program Studi</span>
                           <span className="text-on-surface font-label-sm text-label-sm font-semibold">{currentUser?.departmentName}</span>
@@ -3231,7 +3287,7 @@ export default function App() {
                         <h4 className="font-headline-lg text-headline-lg text-on-surface font-bold">Profil Kompetensi</h4>
                         <span className="material-symbols-outlined text-outline">radar</span>
                       </div>
-                      <div className="h-[300px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-white/5 shadow-inner">
+                      <div className="h-[300px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-slate-200 shadow-inner">
                         <svg className="w-[260px] h-[260px]" viewBox="0 0 300 300">
                           {/* Concentric Grid Circles */}
                           {[20, 40, 60, 80, 100].map((rValue) => (
@@ -3284,7 +3340,7 @@ export default function App() {
                         <span className="material-symbols-outlined text-outline">bar_chart</span>
                       </div>
                       
-                      <div className="h-[300px] w-full flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-white/5 shadow-inner px-lg">
+                      <div className="h-[300px] w-full flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-slate-200 shadow-inner px-lg">
                         <svg className="w-full h-[260px]" viewBox="0 0 800 300" preserveAspectRatio="none">
                           {/* Grid Lines */}
                           {[20, 80, 140, 200, 260].map((yVal, idx) => (
@@ -3332,7 +3388,7 @@ export default function App() {
 
                     {/* Achievements Table */}
                     <section className="col-span-12 glass-panel rounded-xl overflow-hidden shadow-xl">
-                      <div className="p-lg border-b border-white/5 flex flex-wrap items-center justify-between bg-white/5 gap-md">
+                      <div className="p-lg border-b border-slate-200 flex flex-wrap items-center justify-between bg-white/5 gap-md">
                         <h4 className="font-headline-lg text-headline-lg text-on-surface font-bold">Rincian Capaian per Dimensi</h4>
                       </div>
 
@@ -3386,7 +3442,7 @@ export default function App() {
                     </section>
                   </div>
                 ) : (
-                  <div className="p-xl text-center text-on-surface-variant bg-white/5 rounded-2xl border border-white/5 mt-lg flex-1 flex flex-col items-center justify-center">
+                  <div className="p-xl text-center text-on-surface-variant bg-white/5 rounded-2xl border border-slate-200 mt-lg flex-1 flex flex-col items-center justify-center">
                     <span className="material-symbols-outlined text-[48px] text-outline mb-md">analytics</span>
                     <p className="font-headline-sm text-headline-sm font-bold mb-xs">CPL Belum Diukur</p>
                     <p className="text-body-sm text-outline">Mahasiswa ini belum memiliki data nilai untuk perhitungan CPL.</p>
@@ -3504,21 +3560,21 @@ export default function App() {
                             }}
                           />
                         </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">No</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('code')}>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('code')}>
                           <div className="flex items-center gap-xs">Kode MK <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'code' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'code' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
                         </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('name')}>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('name')}>
                           <div className="flex items-center gap-xs">Nama Mata Kuliah <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'name' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'name' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
                         </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('sks')}>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('sks')}>
                           <div className="flex items-center justify-center gap-xs">SKS <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'sks' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'sks' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
                         </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">CPL Terpetakan</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Aksi</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">CPL Terpetakan</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-outline-variant/10">
+                    <tbody className="divide-y divide-outline-variant/50">
                       {filteredCourses.length > 0 ? (
                         filteredCourses.map((course, index) => (
                           <React.Fragment key={course.id}>
@@ -3597,7 +3653,7 @@ export default function App() {
                                             <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase text-center">Aksi</th>
                                           </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-outline-variant/10">
+                                        <tbody className="divide-y divide-outline-variant/50">
                                           {courseMappings.length > 0 ? (
                                             courseMappings.map(cm => (
                                               <tr key={cm.id}>
@@ -3727,15 +3783,15 @@ export default function App() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">No</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Kode CPL</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Kategori</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Deskripsi</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Target Nilai</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Aksi</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kode CPL</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kategori</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Deskripsi</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Target Nilai</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-outline-variant/10">
+                    <tbody className="divide-y divide-outline-variant/50">
                       {cpls.length > 0 ? (
                         cpls.map((cpl, index) => (
                           <tr key={cpl.id} className="hover-row transition-colors">
@@ -3802,15 +3858,15 @@ export default function App() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">No</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Mata Kuliah</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">CPL</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Kategori CPL</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Bobot</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Aksi</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Mata Kuliah</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">CPL</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kategori CPL</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Bobot</th>
+                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant/10">
+                  <tbody className="divide-y divide-outline-variant/50">
                     {mappings.length > 0 ? (
                       mappings.map((map, index) => (
                         <tr key={map.id} className="hover-row transition-colors">
@@ -3930,17 +3986,17 @@ export default function App() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">No</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Kode MK</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Nama Mata Kuliah</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">SKS</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Semester</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">T.A</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Nilai Angka</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-center">Aksi</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kode MK</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Nama Mata Kuliah</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">SKS</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Semester</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">T.A</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Nilai Angka</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-outline-variant/10">
+                      <tbody className="divide-y divide-outline-variant/50">
                         {grades.length > 0 ? (
                           grades.map((grade, index) => (
                             <tr key={grade.id} className="hover-row transition-colors">
@@ -4038,15 +4094,15 @@ export default function App() {
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider w-16">No</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">NIM</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Nama Lengkap</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Angkatan</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider">Kelas</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant uppercase tracking-wider text-right">Aksi</th>
+                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider w-16">No</th>
+                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">NIM</th>
+                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Nama Lengkap</th>
+                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Angkatan</th>
+                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kelas</th>
+                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-right">Aksi</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-outline-variant/10">
+                        <tbody className="divide-y divide-outline-variant/50">
                           {filtered.map((s, index) => (
                             <tr 
                               key={s.id} 
@@ -4094,7 +4150,7 @@ export default function App() {
                     <span className="material-symbols-outlined text-[28px]">school</span>
                   </div>
                   <div>
-                    <div className="font-label-xs text-on-surface-variant uppercase tracking-wider mb-1">Rata-rata IPK</div>
+                    <div className="font-label-xs text-on-surface-variant font-bold uppercase tracking-wider mb-1">Rata-rata IPK</div>
                     <div className="font-display-md font-bold text-primary">
                       {cplMatrixAverageIpk !== null ? cplMatrixAverageIpk.toFixed(2) : '-'}
                     </div>
@@ -4133,7 +4189,7 @@ export default function App() {
               </div>
             </div>
 
-            <div id="laporan-hasil-cpl-content" className="space-y-lg bg-[#051424] p-md sm:p-0 rounded-2xl">
+            <div id="laporan-hasil-cpl-content" className="space-y-lg p-md sm:p-0 rounded-2xl">
               {/* Header Khusus Print (tersembunyi secara visual kecuali untuk pdf/print) */}
               <div className="hidden print:block bg-surface-container rounded-xl p-lg border border-outline-variant/30 mb-lg">
                 <div className="flex justify-between items-center border-b border-outline-variant/20 pb-md mb-md">
@@ -4171,7 +4227,7 @@ export default function App() {
                       <h4 className="font-headline-lg text-headline-lg text-on-surface font-bold">Profil Kompetensi Kelas</h4>
                       <span className="material-symbols-outlined text-outline">radar</span>
                     </div>
-                    <div className="h-[400px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-white/5 shadow-inner overflow-hidden">
+                    <div className="h-[400px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-slate-200 shadow-inner overflow-hidden">
                       <RadarChart
                         avgSikap={avgSikap}
                         avgPengetahuan={avgPengetahuan}
@@ -4184,7 +4240,7 @@ export default function App() {
 
                 {/* Achievements Table */}
                 <section className="col-span-12 glass-panel rounded-xl overflow-hidden shadow-xl">
-                  <div className="p-lg border-b border-white/5 flex flex-wrap items-center justify-between bg-white/5 gap-md">
+                  <div className="p-lg border-b border-slate-200 flex flex-wrap items-center justify-between bg-white/5 gap-md">
                     <h4 className="font-headline-lg text-headline-lg text-on-surface font-bold">Rincian Rata-rata Capaian</h4>
                   </div>
 
@@ -4251,7 +4307,7 @@ export default function App() {
                 </section>
               </div>
             ) : (
-              <div className="p-xl text-center text-on-surface-variant bg-white/5 rounded-2xl border border-white/5">
+              <div className="p-xl text-center text-on-surface-variant bg-white/5 rounded-2xl border border-slate-200">
                 Belum ada data CPL terukur.
               </div>
             )}
@@ -4269,14 +4325,16 @@ export default function App() {
         )}
 
         {/* Footer */}
-        <footer className="mt-auto px-gutter py-lg border-t border-white/5 flex justify-between items-center opacity-60 bg-surface/20">
+        <footer className="mt-auto px-gutter py-lg border-t border-slate-200 flex justify-between items-center opacity-60 bg-surface/20">
           <p className="font-label-xs text-label-xs text-on-surface-variant">© 2024 Politeknik Negeri Bali. All rights reserved.</p>
           <div className="flex gap-lg">
             <a className="font-label-xs text-label-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Pusat Bantuan</a>
             <a className="font-label-xs text-label-xs text-on-surface-variant hover:text-primary transition-colors" href="#">Kebijakan Privasi</a>
           </div>
         </footer>
-      </main>
+          </div>
+        </main>
+      </div>
 
       {/* ================= CRUD MODALS ================= */}
       {isModalOpen && (
@@ -4304,7 +4362,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nama Jurusan</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="e.g. Manajemen Informatika"
                       type="text"
                       value={deptFormName}
@@ -4314,7 +4372,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Kode Jurusan</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="e.g. MI"
                       type="text"
                       value={deptFormCode}
@@ -4330,7 +4388,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nama Lengkap</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="Nama Admin"
                       type="text"
                       value={adminFormName}
@@ -4340,7 +4398,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Email</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="email@pnb.ac.id"
                       type="email"
                       value={adminFormEmail}
@@ -4352,7 +4410,7 @@ export default function App() {
                       Password {modalAction === 'edit' && '(Kosongkan jika tidak ingin diubah)'}
                     </label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="••••••••"
                       type="password"
                       value={adminFormPassword}
@@ -4362,7 +4420,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Pilih Jurusan</label>
                     <select 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all cursor-pointer"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all cursor-pointer"
                       value={adminFormDeptId}
                       onChange={(e) => setAdminFormDeptId(e.target.value)}
                     >
@@ -4381,7 +4439,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">NIM</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="Masukkan NIM Mahasiswa"
                       type="text"
                       value={studentFormNim}
@@ -4392,7 +4450,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nama Lengkap</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="Nama Lengkap"
                       type="text"
                       value={studentFormName}
@@ -4403,7 +4461,7 @@ export default function App() {
                     <div className="flex flex-col gap-sm">
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Angkatan</label>
                       <select 
-                        className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         value={studentFormAngkatan}
                         onChange={(e) => setStudentFormAngkatan(e.target.value)}
                       >
@@ -4420,7 +4478,7 @@ export default function App() {
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Kelas</label>
                       <input 
                         type="text"
-                        className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         placeholder="Contoh: A, B, C, atau 2A"
                         value={studentFormKelas}
                         onChange={(e) => setStudentFormKelas(e.target.value)}
@@ -4458,7 +4516,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Kode Mata Kuliah</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="e.g. MKK201"
                       type="text"
                       value={courseFormCode}
@@ -4468,7 +4526,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nama Mata Kuliah</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="e.g. Algoritma & Pemrograman"
                       type="text"
                       value={courseFormName}
@@ -4478,7 +4536,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">SKS</label>
                     <select 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       value={courseFormSks}
                       onChange={(e) => setCourseFormSks(Number(e.target.value))}
                     >
@@ -4499,7 +4557,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Kode CPL</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       placeholder="e.g. CPL-01"
                       type="text"
                       value={cplFormCode}
@@ -4509,7 +4567,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Kategori CPL</label>
                     <select 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       value={cplFormCat}
                       onChange={(e: any) => setCplFormCat(e.target.value)}
                     >
@@ -4522,7 +4580,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Deskripsi CPL</label>
                     <textarea 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all min-h-[80px]"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all min-h-[80px]"
                       placeholder="Deskripsi Capaian Kompetensi..."
                       value={cplFormDesc}
                       onChange={(e) => setCplFormDesc(e.target.value)}
@@ -4531,7 +4589,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Target Nilai Kelulusan</label>
                     <input 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       type="number"
                       value={cplFormTarget}
                       onChange={(e) => setCplFormTarget(Number(e.target.value))}
@@ -4549,7 +4607,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Mata Kuliah</label>
                     <select 
-                      className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       value={gradeFormCourseId}
                       onChange={(e) => setGradeFormCourseId(e.target.value)}
                     >
@@ -4563,7 +4621,7 @@ export default function App() {
                     <div className="flex flex-col gap-sm">
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nilai Huruf</label>
                       <select 
-                        className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         value={gradeFormLetter}
                         onChange={(e) => setGradeFormLetter(e.target.value)}
                       >
@@ -4581,7 +4639,7 @@ export default function App() {
                     <div className="flex flex-col gap-sm">
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Semester</label>
                       <input 
-                        className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         placeholder="e.g. IV"
                         type="text"
                         value={gradeFormSemester}
@@ -4591,7 +4649,7 @@ export default function App() {
                     <div className="flex flex-col gap-sm">
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Tahun Akademik</label>
                       <input 
-                        className="w-full bg-surface-dim/50 border border-outline-variant rounded-lg py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         placeholder="e.g. 2024/2025"
                         type="text"
                         value={gradeFormYear}
@@ -4673,7 +4731,7 @@ export default function App() {
             </div>
 
             <div className="p-xl flex flex-col gap-md overflow-y-auto">
-              <div className="bg-white/5 p-md rounded-lg border border-white/5 mb-sm shrink-0">
+              <div className="bg-white/5 p-md rounded-lg border border-slate-200 mb-sm shrink-0">
                 <p className="font-label-xs text-label-xs text-outline uppercase font-semibold mb-xs">Deskripsi CPL</p>
                 <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
                   {selectedStudentAchievements.find(c => c.code === selectedCplForDetail)?.description}
@@ -4690,7 +4748,7 @@ export default function App() {
                       <th className="px-md py-sm font-label-xs text-label-xs text-outline uppercase text-center">Nilai</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant/10">
+                  <tbody className="divide-y divide-outline-variant/50">
                     {cplDetailMappingCourses.map((course) => (
                       <tr key={course.code} className="hover:bg-white/[0.02] transition-colors">
                         <td className="px-md py-md font-body-sm text-primary font-bold">

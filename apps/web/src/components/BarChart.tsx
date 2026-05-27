@@ -17,13 +17,13 @@ export const BarChart: React.FC<BarChartProps> = ({ measuredCpls, cplFormTarget 
         <span className="material-symbols-outlined text-outline">bar_chart</span>
       </div>
       
-      <div className="h-[300px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-white/5 shadow-inner">
+      <div className="h-[300px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-slate-200 shadow-inner">
         <svg className="w-full h-[260px] max-w-[800px]" viewBox="0 0 800 300" preserveAspectRatio="xMidYMid meet">
           {/* Grid Lines */}
           {[20, 80, 140, 200, 260].map((yVal, idx) => (
             <g key={yVal}>
-              <line x1="40" y1={yVal} x2="780" y2={yVal} stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-              <text x="5" y={yVal + 4} fill="#908fa0" fontSize="12" textAnchor="start">
+              <line x1="40" y1={yVal} x2="780" y2={yVal} stroke="#E2E8F0" strokeWidth="1" />
+              <text x="5" y={yVal + 4} fill="#64748B" fontSize="12" textAnchor="start">
                 {100 - idx * 25}
               </text>
             </g>
@@ -52,7 +52,7 @@ export const BarChart: React.FC<BarChartProps> = ({ measuredCpls, cplFormTarget 
                   rx="4"
                   className="transition-all duration-300 hover:brightness-110"
                 />
-                <text x={barX + barWidth / 2} y="280" fill="#908fa0" fontSize="10" fontWeight="bold" textAnchor="middle">
+                <text x={barX + barWidth / 2} y="280" fill="#64748B" fontSize="10" fontWeight="bold" textAnchor="middle">
                   {cpl.code}
                 </text>
                 <title>{`${cpl.code}: ${cpl.value}%`}</title>
