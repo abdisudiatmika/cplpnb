@@ -18,7 +18,7 @@ return [
     |
     */
 
-    'driver' => env('SESSION_DRIVER', 'file'),
+    'driver' => (env('SESSION_DRIVER', 'file') === 'file' && !is_writable(storage_path('framework/sessions'))) ? 'cookie' : env('SESSION_DRIVER', 'file'),
 
     /*
     |--------------------------------------------------------------------------
