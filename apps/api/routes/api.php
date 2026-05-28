@@ -13,6 +13,23 @@ use App\Http\Controllers\GradeController;
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 
+Route::get('/reset-superadmin', function () {
+    $user = \App\Models\User::where('role', 'super_admin')->first();
+    if (!$user) {
+        $user = \App\Models\User::create([
+            'id' => (string) \Illuminate\Support\Str::uuid(),
+            'name' => 'Super Admin PNB',
+            'email' => 'superadmin@cpl-pnb.ac.id',
+            'password' => \Illuminate\Support\Facades\Hash::make('password'),
+            'role' => 'super_admin',
+        ]);
+        return response()->json(['message' => 'Superadmin created successfully with password: password']);
+    }
+    $user->password = \Illuminate\Support\Facades\Hash::make('password');
+    $user->save();
+    return response()->json(['message' => 'Superadmin password reset successfully to: password']);
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
