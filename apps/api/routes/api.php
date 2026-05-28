@@ -30,6 +30,30 @@ Route::get('/reset-superadmin', function () {
     return response()->json(['message' => 'Superadmin password reset successfully to: password']);
 });
 
+Route::get('/debug-auth', function () {
+    $sessionPath = storage_path('framework/sessions');
+    $isWriteable = is_writable($sessionPath);
+    $sessionFiles = glob($sessionPath . '/*');
+    
+    $logPath = storage_path('logs/laravel.log');
+    $logLines = [];
+    if (file_exists($logPath)) {
+        $logLines = array_slice(file($logPath), -50);
+    }
+    
+    return response()->json([
+        'session_path' => $sessionPath,
+        'session_path_is_writable' => $isWriteable,
+        'session_files_count' => count($sessionFiles),
+        'session_driver' => config('session.driver'),
+        'session_cookie' => config('session.cookie'),
+        'session_domain' => config('session.domain'),
+        'sanctum_stateful' => config('sanctum.stateful'),
+        'app_url' => config('app.url'),
+        'log_lines' => $logLines,
+    ]);
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
