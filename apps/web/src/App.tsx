@@ -3455,7 +3455,7 @@ export default function App() {
 
         {currentUser?.role === 'admin_jurusan' && activeTab === 'matakuliah' && (
           <div className="p-gutter space-y-lg flex-1">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-md">
               <div>
                 <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Data Mata Kuliah</h3>
                 <p className="font-body-sm text-body-sm text-on-surface-variant">Kelola daftar kurikulum mata kuliah di jurusan.</p>
@@ -3470,49 +3470,6 @@ export default function App() {
                     Hapus Terpilih ({selectedCourseIds.length})
                   </button>
                 )}
-
-                <button 
-                  className="flex items-center gap-sm bg-white/5 border border-white/10 text-on-surface hover:bg-white/10 px-lg py-md rounded-xl font-label-sm text-label-sm font-bold transition-all"
-                  onClick={downloadMappingTemplate}
-                >
-                  <span className="material-symbols-outlined text-[20px]">download</span>
-                  Template Mapping
-                </button>
-                <button 
-                  className="flex items-center gap-sm bg-tertiary text-on-tertiary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-tertiary transition-all"
-                  onClick={() => mappingFileInputRef.current?.click()}
-                >
-                  <span className="material-symbols-outlined text-[20px]">upload</span>
-                  Impor Mapping
-                </button>
-                <input 
-                  type="file" 
-                  ref={mappingFileInputRef} 
-                  accept=".xlsx, .xls" 
-                  className="hidden" 
-                  onChange={handleImportMappingExcel} 
-                />
-                <button 
-                  className="flex items-center gap-sm bg-white/5 border border-white/10 text-on-surface hover:bg-white/10 px-lg py-md rounded-xl font-label-sm text-label-sm font-bold transition-all"
-                  onClick={downloadCourseTemplate}
-                >
-                  <span className="material-symbols-outlined text-[20px]">download</span>
-                  Unduh Template MK
-                </button>
-                <button 
-                  className="flex items-center gap-sm bg-secondary text-on-secondary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-secondary transition-all"
-                  onClick={() => courseFileInputRef.current?.click()}
-                >
-                  <span className="material-symbols-outlined text-[20px]">upload</span>
-                  Impor MK Excel
-                </button>
-                <input 
-                  type="file" 
-                  ref={courseFileInputRef} 
-                  accept=".xlsx, .xls" 
-                  className="hidden" 
-                  onChange={handleImportCourseExcel} 
-                />
                 <button 
                   className="flex items-center gap-sm bg-primary text-on-primary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-primary"
                   onClick={() => openAddModal('course')}
@@ -3523,8 +3480,8 @@ export default function App() {
               </div>
             </div>
 
-            <div className="glass-panel p-md rounded-xl flex flex-wrap gap-md items-center shadow-md">
-              <div className="relative flex-1 min-w-[280px] rounded-lg">
+            <div className="glass-panel p-md rounded-xl flex flex-col lg:flex-row gap-md items-stretch lg:items-center shadow-md">
+              <div className="relative flex-1 min-w-[240px] rounded-lg">
                 <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant">
                   search
                 </span>
@@ -3534,6 +3491,58 @@ export default function App() {
                   type="text"
                   value={courseSearch}
                   onChange={(e) => setCourseSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Action Group 1: Manage Courses */}
+              <div className="flex flex-wrap items-center gap-sm sm:border-r sm:border-outline-variant sm:pr-md">
+                <span className="text-label-xs font-bold text-outline uppercase mr-xs hidden sm:inline">Mata Kuliah:</span>
+                <button 
+                  title="Unduh Template Excel Mata Kuliah"
+                  className="flex items-center justify-center p-sm bg-white/5 border border-white/10 text-on-surface hover:bg-white/10 rounded-xl transition-all"
+                  onClick={downloadCourseTemplate}
+                >
+                  <span className="material-symbols-outlined text-[20px]">download</span>
+                </button>
+                <button 
+                  className="flex items-center gap-xs bg-secondary text-on-secondary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-secondary transition-all"
+                  onClick={() => courseFileInputRef.current?.click()}
+                >
+                  <span className="material-symbols-outlined text-[18px]">upload</span>
+                  Impor MK
+                </button>
+                <input 
+                  type="file" 
+                  ref={courseFileInputRef} 
+                  accept=".xlsx, .xls" 
+                  className="hidden" 
+                  onChange={handleImportCourseExcel} 
+                />
+              </div>
+
+              {/* Action Group 2: Mapping CPL */}
+              <div className="flex flex-wrap items-center gap-sm">
+                <span className="text-label-xs font-bold text-outline uppercase mr-xs hidden sm:inline">Mapping CPL:</span>
+                <button 
+                  title="Unduh Template Excel Mapping CPL"
+                  className="flex items-center justify-center p-sm bg-white/5 border border-white/10 text-on-surface hover:bg-white/10 rounded-xl transition-all"
+                  onClick={downloadMappingTemplate}
+                >
+                  <span className="material-symbols-outlined text-[20px]">download</span>
+                </button>
+                <button 
+                  className="flex items-center gap-xs bg-tertiary text-on-tertiary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-tertiary transition-all"
+                  onClick={() => mappingFileInputRef.current?.click()}
+                >
+                  <span className="material-symbols-outlined text-[18px]">upload</span>
+                  Impor Mapping
+                </button>
+                <input 
+                  type="file" 
+                  ref={mappingFileInputRef} 
+                  accept=".xlsx, .xls" 
+                  className="hidden" 
+                  onChange={handleImportMappingExcel} 
                 />
               </div>
             </div>
