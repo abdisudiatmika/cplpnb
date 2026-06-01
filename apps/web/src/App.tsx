@@ -207,6 +207,12 @@ export default function App() {
   const [courseSearch, setCourseSearch] = useState('');
   const [courseSortConfig, setCourseSortConfig] = useState<{ key: 'code' | 'name' | 'sks', direction: 'asc' | 'desc' } | null>(null);
 
+  // Pagination states for courses and grades-student list
+  const [coursePage, setCoursePage] = useState(1);
+  const [courseItemsPerPage, setCourseItemsPerPage] = useState(25);
+  const [gradeStudentPage, setGradeStudentPage] = useState(1);
+  const [gradeStudentItemsPerPage, setGradeStudentItemsPerPage] = useState(25);
+
   // Selected entities for specific views
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [selectedStudentAchievements, setSelectedStudentAchievements] = useState<CplAchievement[]>([]);
@@ -2176,10 +2182,42 @@ export default function App() {
   const indexOfFirstItem = indexOfLastItem - studentItemsPerPage;
   const currentItems = filteredStudents.slice(indexOfFirstItem, indexOfLastItem);
 
+  // Pagination calculations for courses
+  const totalCourses = filteredCourses.length;
+  const totalCoursePages = Math.ceil(totalCourses / courseItemsPerPage) || 1;
+  const indexOfLastCourse = coursePage * courseItemsPerPage;
+  const indexOfFirstCourse = indexOfLastCourse - courseItemsPerPage;
+  const currentCourses = filteredCourses.slice(indexOfFirstCourse, indexOfLastCourse);
+
+  // Pagination and filtering calculations for student list inside input nilai
+  const filteredGradeStudents = React.useMemo(() => {
+    return students.filter(s => {
+      const matchSearch = gradeStudentSearch === '' || s.name.toLowerCase().includes(gradeStudentSearch.toLowerCase()) || s.nim.includes(gradeStudentSearch);
+      const matchAngkatan = gradeStudentAngkatan === '' || s.angkatan === gradeStudentAngkatan;
+      const matchKelas = gradeStudentKelas === '' || s.kelas === gradeStudentKelas;
+      return matchSearch && matchAngkatan && matchKelas;
+    });
+  }, [students, gradeStudentSearch, gradeStudentAngkatan, gradeStudentKelas]);
+
+  const totalGradeStudents = filteredGradeStudents.length;
+  const totalGradeStudentPages = Math.ceil(totalGradeStudents / gradeStudentItemsPerPage) || 1;
+  const indexOfLastGradeStudent = gradeStudentPage * gradeStudentItemsPerPage;
+  const indexOfFirstGradeStudent = indexOfLastGradeStudent - gradeStudentItemsPerPage;
+  const currentGradeStudents = filteredGradeStudents.slice(indexOfFirstGradeStudent, indexOfLastGradeStudent);
+
   useEffect(() => {
     setStudentPage(1);
     setSelectedStudentIds([]);
   }, [studentSearch, studentFilterAngkatan, studentFilterKelas]);
+
+  useEffect(() => {
+    setCoursePage(1);
+    setSelectedCourseIds([]);
+  }, [courseSearch]);
+
+  useEffect(() => {
+    setGradeStudentPage(1);
+  }, [gradeStudentSearch, gradeStudentAngkatan, gradeStudentKelas]);
 
   // CPL achievements filtering inside student detail (Hasil CPL Screen)
   // Removed pagination logic
@@ -3551,195 +3589,257 @@ export default function App() {
               {dataLoading ? (
                 <div className="p-xl text-center text-on-surface-variant">Memuat data...</div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                        <th className="px-lg py-md text-center" style={{ width: '40px' }}>
-                          <input 
-                            type="checkbox"
-                            className="rounded border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer w-4 h-4"
-                            checked={filteredCourses.length > 0 && filteredCourses.every(course => selectedCourseIds.includes(course.id))}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedCourseIds(filteredCourses.map(c => c.id));
-                              } else {
-                                setSelectedCourseIds([]);
-                              }
-                            }}
-                          />
-                        </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('code')}>
-                          <div className="flex items-center gap-xs">Kode MK <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'code' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'code' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
-                        </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('name')}>
-                          <div className="flex items-center gap-xs">Nama Mata Kuliah <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'name' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'name' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
-                        </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('sks')}>
-                          <div className="flex items-center justify-center gap-xs">SKS <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'sks' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'sks' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
-                        </th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">CPL Terpetakan</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-outline-variant/50">
-                      {filteredCourses.length > 0 ? (
-                        filteredCourses.map((course, index) => (
-                          <React.Fragment key={course.id}>
-                          <tr className={`hover-row transition-colors cursor-pointer ${expandedCourseId === course.id ? 'bg-primary/5' : ''}`} onClick={() => toggleCoursePanel(course.id)}>
-                            <td className="px-lg py-md text-center" onClick={e => e.stopPropagation()}>
-                              <input 
-                                type="checkbox"
-                                className="rounded border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer w-4 h-4"
-                                checked={selectedCourseIds.includes(course.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedCourseIds(prev => [...prev, course.id]);
-                                  } else {
-                                    setSelectedCourseIds(prev => prev.filter(id => id !== course.id));
-                                  }
-                                }}
-                              />
-                            </td>
-                            <td className="px-lg py-md font-body-sm">{index + 1}</td>
-                            <td className="px-lg py-md font-body-sm font-bold text-primary">{course.code}</td>
-                            <td className="px-lg py-md font-body-sm font-medium text-on-surface">{course.name}</td>
-                            <td className="px-lg py-md font-body-sm text-center font-semibold text-on-surface-variant">{course.sks}</td>
-                            <td className="px-lg py-md">
-                              <div className="flex flex-wrap gap-xs items-center">
-                                {mappings.filter(m => m.courseId === course.id).length > 0 ? (
-                                  mappings.filter(m => m.courseId === course.id).slice(0, 5).map(m => (
-                                    <span key={m.id} className="inline-block px-[6px] py-[2px] rounded bg-white/5 border border-white/10 text-[10px] font-bold text-on-surface-variant">
-                                      {m.cplCode}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="text-[11px] text-on-surface-variant/50 italic">-</span>
-                                )}
-                                {mappings.filter(m => m.courseId === course.id).length > 5 && (
-                                  <span className="inline-block px-[6px] py-[2px] rounded bg-white/5 border border-white/10 text-[10px] font-bold text-on-surface-variant">
-                                    +{mappings.filter(m => m.courseId === course.id).length - 5}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-lg py-md" onClick={e => e.stopPropagation()}>
-                              <div className="flex items-center justify-center gap-sm">
-                                <button 
-                                  className="p-xs text-on-surface-variant hover:text-secondary transition-colors"
-                                  onClick={() => openEditModal('course', course)}
-                                >
-                                  <span className="material-symbols-outlined text-[20px]">edit</span>
-                                </button>
-                                <button 
-                                  className="p-xs text-on-surface-variant hover:text-error transition-colors"
-                                  onClick={() => openDeleteConfirm('course', course.id, course.name)}
-                                >
-                                  <span className="material-symbols-outlined text-[20px]">delete</span>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                          {expandedCourseId === course.id && (
-                            <tr className="bg-surface-dim/30 slide-panel">
-                              <td colSpan={7} className="p-0 border-b border-outline-variant/10">
-                                <div className="p-xl slide-panel-overlay">
-                                  <div className="flex justify-between items-center mb-md">
-                                    <h4 className="font-label-lg font-bold text-on-surface">Detail CPL Terpetakan: {course.name}</h4>
-                                  </div>
-                                  
-                                  {courseMappingLoading ? (
-                                    <div className="py-lg text-center text-on-surface-variant font-body-sm">Memuat data mapping...</div>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
+                          <th className="px-lg py-md text-center" style={{ width: '40px' }}>
+                            <input 
+                              type="checkbox"
+                              className="rounded border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer w-4 h-4"
+                              checked={currentCourses.length > 0 && currentCourses.every(course => selectedCourseIds.includes(course.id))}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCourseIds(currentCourses.map(c => c.id));
+                                } else {
+                                  setSelectedCourseIds([]);
+                                }
+                              }}
+                            />
+                          </th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('code')}>
+                            <div className="flex items-center gap-xs">Kode MK <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'code' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'code' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
+                          </th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('name')}>
+                            <div className="flex items-center gap-xs">Nama Mata Kuliah <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'name' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'name' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
+                          </th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('sks')}>
+                            <div className="flex items-center justify-center gap-xs">SKS <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'sks' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'sks' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
+                          </th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">CPL Terpetakan</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-outline-variant/50">
+                        {currentCourses.length > 0 ? (
+                          currentCourses.map((course, index) => (
+                            <React.Fragment key={course.id}>
+                            <tr className={`hover-row transition-colors cursor-pointer ${expandedCourseId === course.id ? 'bg-primary/5' : ''}`} onClick={() => toggleCoursePanel(course.id)}>
+                              <td className="px-lg py-md text-center" onClick={e => e.stopPropagation()}>
+                                <input 
+                                  type="checkbox"
+                                  className="rounded border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-0 cursor-pointer w-4 h-4"
+                                  checked={selectedCourseIds.includes(course.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedCourseIds(prev => [...prev, course.id]);
+                                    } else {
+                                      setSelectedCourseIds(prev => prev.filter(id => id !== course.id));
+                                    }
+                                  }}
+                                />
+                              </td>
+                              <td className="px-lg py-md font-body-sm">{indexOfFirstCourse + index + 1}</td>
+                              <td className="px-lg py-md font-body-sm font-bold text-primary">{course.code}</td>
+                              <td className="px-lg py-md font-body-sm font-medium text-on-surface">{course.name}</td>
+                              <td className="px-lg py-md font-body-sm text-center font-semibold text-on-surface-variant">{course.sks}</td>
+                              <td className="px-lg py-md">
+                                <div className="flex flex-wrap gap-xs items-center">
+                                  {mappings.filter(m => m.courseId === course.id).length > 0 ? (
+                                    mappings.filter(m => m.courseId === course.id).slice(0, 5).map(m => (
+                                      <span key={m.id} className="inline-block px-[6px] py-[2px] rounded bg-white/5 border border-white/10 text-[10px] font-bold text-on-surface-variant">
+                                        {m.cplCode}
+                                      </span>
+                                    ))
                                   ) : (
-                                    <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/30 overflow-hidden mb-lg">
-                                      <table className="w-full text-left border-collapse">
-                                        <thead>
-                                          <tr className="bg-white/[0.02] border-b border-outline-variant/20">
-                                            <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase">Kode CPL</th>
-                                            <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase">Deskripsi</th>
-                                            <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase text-center">Bobot</th>
-                                            <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase text-center">Aksi</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-outline-variant/50">
-                                          {courseMappings.length > 0 ? (
-                                            courseMappings.map(cm => (
-                                              <tr key={cm.id}>
-                                                <td className="px-lg py-sm font-body-sm font-bold text-secondary">{cm.cplCode}</td>
-                                                <td className="px-lg py-sm font-body-sm text-on-surface-variant truncate max-w-xs" title={cm.cplDescription}>{cm.cplDescription}</td>
-                                                <td className="px-lg py-sm font-body-sm text-center font-bold text-tertiary">{cm.weight}</td>
-                                                <td className="px-lg py-sm text-center">
-                                                  <button 
-                                                    className="p-xs text-on-surface-variant hover:text-error transition-colors"
-                                                    onClick={() => handleDeleteInlineMapping(cm.id)}
-                                                    title="Hapus Pemetaan"
-                                                  >
-                                                    <span className="material-symbols-outlined text-[18px]">delete</span>
-                                                  </button>
-                                                </td>
-                                              </tr>
-                                            ))
-                                          ) : (
-                                            <tr>
-                                              <td colSpan={4} className="px-lg py-md text-center text-on-surface-variant font-body-sm italic">Belum ada CPL yang terpetakan untuk mata kuliah ini.</td>
-                                            </tr>
-                                          )}
-                                        </tbody>
-                                      </table>
-                                    </div>
+                                    <span className="text-[11px] text-on-surface-variant/50 italic">-</span>
                                   )}
-
-                                  <div className="flex flex-col md:flex-row gap-sm items-end bg-primary/5 p-lg rounded-xl border border-primary/20">
-                                    <div className="flex-1 w-full">
-                                      <label className="font-label-xs text-on-surface-variant mb-xs block">Tambah CPL Baru</label>
-                                      <select 
-                                        className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg py-sm px-md text-on-surface font-body-sm focus:outline-none focus:border-primary transition-all"
-                                        value={inlineMapCplId}
-                                        onChange={e => setInlineMapCplId(e.target.value)}
-                                      >
-                                        <option value="">-- Pilih CPL --</option>
-                                        {cpls
-                                          .filter(c => !courseMappings.some(cm => cm.cplId === c.id))
-                                          .map(c => (
-                                            <option key={c.id} value={c.id}>{c.code} - {c.description.substring(0, 60)}...</option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                    <div className="w-full md:w-32">
-                                      <label className="font-label-xs text-on-surface-variant mb-xs block">Bobot</label>
-                                      <input 
-                                        className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg py-sm px-md text-on-surface font-body-sm focus:outline-none focus:border-primary transition-all"
-                                        type="number"
-                                        step="0.1"
-                                        min="0.1"
-                                        value={inlineMapWeight}
-                                        onChange={e => setInlineMapWeight(Number(e.target.value))}
-                                      />
-                                    </div>
-                                    <button 
-                                      className="flex items-center gap-xs bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold glow-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                                      onClick={handleAddInlineMapping}
-                                      disabled={!inlineMapCplId || inlineMapWeight <= 0}
-                                    >
-                                      <span className="material-symbols-outlined text-[18px]">add</span>
-                                      Simpan
-                                    </button>
-                                  </div>
+                                  {mappings.filter(m => m.courseId === course.id).length > 5 && (
+                                    <span className="inline-block px-[6px] py-[2px] rounded bg-white/5 border border-white/10 text-[10px] font-bold text-on-surface-variant">
+                                      +{mappings.filter(m => m.courseId === course.id).length - 5}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-lg py-md" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-center gap-sm">
+                                  <button 
+                                    className="p-xs text-on-surface-variant hover:text-secondary transition-colors"
+                                    onClick={() => openEditModal('course', course)}
+                                  >
+                                    <span className="material-symbols-outlined text-[20px]">edit</span>
+                                  </button>
+                                  <button 
+                                    className="p-xs text-on-surface-variant hover:text-error transition-colors"
+                                    onClick={() => openDeleteConfirm('course', course.id, course.name)}
+                                  >
+                                    <span className="material-symbols-outlined text-[20px]">delete</span>
+                                  </button>
                                 </div>
                               </td>
                             </tr>
-                          )}
-                          </React.Fragment>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data mata kuliah.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                            {expandedCourseId === course.id && (
+                              <tr className="bg-surface-dim/30 slide-panel">
+                                <td colSpan={7} className="p-0 border-b border-outline-variant/10">
+                                  <div className="p-xl slide-panel-overlay">
+                                    <div className="flex justify-between items-center mb-md">
+                                      <h4 className="font-label-lg font-bold text-on-surface">Detail CPL Terpetakan: {course.name}</h4>
+                                    </div>
+                                    
+                                    {courseMappingLoading ? (
+                                      <div className="py-lg text-center text-on-surface-variant font-body-sm">Memuat data mapping...</div>
+                                    ) : (
+                                      <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/30 overflow-hidden mb-lg">
+                                        <table className="w-full text-left border-collapse">
+                                          <thead>
+                                            <tr className="bg-white/[0.02] border-b border-outline-variant/20">
+                                              <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase">Kode CPL</th>
+                                              <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase">Deskripsi</th>
+                                              <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase text-center">Bobot</th>
+                                              <th className="px-lg py-sm font-label-xs text-on-surface-variant uppercase text-center">Aksi</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-outline-variant/50">
+                                            {courseMappings.length > 0 ? (
+                                              courseMappings.map(cm => (
+                                                <tr key={cm.id}>
+                                                  <td className="px-lg py-sm font-body-sm font-bold text-secondary">{cm.cplCode}</td>
+                                                  <td className="px-lg py-sm font-body-sm text-on-surface-variant truncate max-w-xs" title={cm.cplDescription}>{cm.cplDescription}</td>
+                                                  <td className="px-lg py-sm font-body-sm text-center font-bold text-tertiary">{cm.weight}</td>
+                                                  <td className="px-lg py-sm text-center">
+                                                    <button 
+                                                      className="p-xs text-on-surface-variant hover:text-error transition-colors"
+                                                      onClick={() => handleDeleteInlineMapping(cm.id)}
+                                                      title="Hapus Pemetaan"
+                                                    >
+                                                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                                                    </button>
+                                                  </td>
+                                                </tr>
+                                              ))
+                                            ) : (
+                                              <tr>
+                                                <td colSpan={4} className="px-lg py-md text-center text-on-surface-variant font-body-sm italic">Belum ada CPL yang terpetakan untuk mata kuliah ini.</td>
+                                              </tr>
+                                            )}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+
+                                    <div className="flex flex-col md:flex-row gap-sm items-end bg-primary/5 p-lg rounded-xl border border-primary/20">
+                                      <div className="flex-1 w-full">
+                                        <label className="font-label-xs text-on-surface-variant mb-xs block">Tambah CPL Baru</label>
+                                        <select 
+                                          className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg py-sm px-md text-on-surface font-body-sm focus:outline-none focus:border-primary transition-all"
+                                          value={inlineMapCplId}
+                                          onChange={e => setInlineMapCplId(e.target.value)}
+                                        >
+                                          <option value="">-- Pilih CPL --</option>
+                                          {cpls
+                                            .filter(c => !courseMappings.some(cm => cm.cplId === c.id))
+                                            .map(c => (
+                                              <option key={c.id} value={c.id}>{c.code} - {c.description.substring(0, 60)}...</option>
+                                            ))}
+                                        </select>
+                                      </div>
+                                      <div className="w-full md:w-32">
+                                        <label className="font-label-xs text-on-surface-variant mb-xs block">Bobot</label>
+                                        <input 
+                                          className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg py-sm px-md text-on-surface font-body-sm focus:outline-none focus:border-primary transition-all"
+                                          type="number"
+                                          step="0.1"
+                                          min="0.1"
+                                          value={inlineMapWeight}
+                                          onChange={e => setInlineMapWeight(Number(e.target.value))}
+                                        />
+                                      </div>
+                                      <button 
+                                        className="flex items-center gap-xs bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold glow-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                        onClick={handleAddInlineMapping}
+                                        disabled={!inlineMapCplId || inlineMapWeight <= 0}
+                                      >
+                                        <span className="material-symbols-outlined text-[18px]">add</span>
+                                        Simpan
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            </React.Fragment>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data mata kuliah.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="p-lg flex items-center justify-between border-t border-outline-variant/30 bg-white/[0.02] flex-wrap gap-md">
+                    <div className="flex items-center gap-md flex-wrap">
+                      <p className="font-body-sm text-body-sm text-on-surface-variant">
+                        Menampilkan {currentCourses.length} dari {totalCourses} Mata Kuliah
+                      </p>
+                      <div className="flex items-center gap-xs">
+                        <span className="font-body-sm text-body-sm text-on-surface-variant">Tampilkan:</span>
+                        <select 
+                          value={courseItemsPerPage}
+                          onChange={(e) => {
+                            setCourseItemsPerPage(Number(e.target.value));
+                            setCoursePage(1);
+                          }}
+                          className="bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-xs font-body-sm text-body-sm text-on-surface outline-none focus:border-primary cursor-pointer"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-xs flex-wrap">
+                      <button 
+                        className="w-10 h-10 flex items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-bright transition-colors disabled:opacity-50"
+                        onClick={() => coursePage > 1 && setCoursePage(coursePage - 1)}
+                        disabled={coursePage === 1}
+                      >
+                        <span className="material-symbols-outlined">chevron_left</span>
+                      </button>
+                      {Array.from({ length: totalCoursePages }).map((_, pIdx) => {
+                        // Limit visible pages to prevent UI break if there are too many pages
+                        if (totalPages > 6 && Math.abs(coursePage - (pIdx + 1)) > 2 && pIdx + 1 !== 1 && pIdx + 1 !== totalCoursePages) {
+                          if (pIdx + 1 === 2 || pIdx + 1 === totalCoursePages - 1) {
+                            return <span key={pIdx} className="px-xs text-outline select-none">...</span>;
+                          }
+                          return null;
+                        }
+                        return (
+                          <button 
+                            key={pIdx}
+                            className={`w-10 h-10 flex items-center justify-center rounded-lg font-bold transition-all ${
+                              coursePage === pIdx + 1 ? 'bg-primary text-on-primary shadow-md' : 'text-on-surface-variant hover:bg-surface-bright'
+                            }`}
+                            onClick={() => setCoursePage(pIdx + 1)}
+                          >
+                            {pIdx + 1}
+                          </button>
+                        );
+                      })}
+                      <button 
+                        className="w-10 h-10 flex items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-bright transition-colors disabled:opacity-50"
+                        onClick={() => coursePage < totalCoursePages && setCoursePage(coursePage + 1)}
+                        disabled={coursePage === totalCoursePages}
+                      >
+                        <span className="material-symbols-outlined">chevron_right</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -4088,48 +4188,104 @@ export default function App() {
 
                 <div className="glass-panel rounded-xl overflow-hidden shadow-xl">
                   {(() => {
-                    const filtered = students.filter(s => {
-                      const matchSearch = gradeStudentSearch === '' || s.name.toLowerCase().includes(gradeStudentSearch.toLowerCase()) || s.nim.includes(gradeStudentSearch);
-                      const matchAngkatan = gradeStudentAngkatan === '' || s.angkatan === gradeStudentAngkatan;
-                      const matchKelas = gradeStudentKelas === '' || s.kelas === gradeStudentKelas;
-                      return matchSearch && matchAngkatan && matchKelas;
-                    });
-
-                    if (filtered.length === 0) {
+                    if (filteredGradeStudents.length === 0) {
                       return <div className="text-on-surface-variant p-xl text-center">Tidak ada mahasiswa yang cocok.</div>;
                     }
 
                     return (
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider w-16">No</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">NIM</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Nama Lengkap</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Angkatan</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kelas</th>
-                            <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-right">Aksi</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-outline-variant/50">
-                          {filtered.map((s, index) => (
-                            <tr 
-                              key={s.id} 
-                              className="hover-row transition-colors cursor-pointer group"
-                              onClick={() => handleSelectStudentForGrades(s.id)}
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
+                                <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider w-16">No</th>
+                                <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">NIM</th>
+                                <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Nama Lengkap</th>
+                                <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Angkatan</th>
+                                <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kelas</th>
+                                <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-right">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-outline-variant/50">
+                              {currentGradeStudents.map((s, index) => (
+                                <tr 
+                                  key={s.id} 
+                                  className="hover-row transition-colors cursor-pointer group"
+                                  onClick={() => handleSelectStudentForGrades(s.id)}
+                                >
+                                  <td className="px-lg py-md font-body-sm text-on-surface-variant">{indexOfFirstGradeStudent + index + 1}</td>
+                                  <td className="px-lg py-md font-body-sm font-bold text-on-surface">{s.nim}</td>
+                                  <td className="px-lg py-md font-body-sm font-medium text-primary">{s.name}</td>
+                                  <td className="px-lg py-md font-body-sm text-on-surface-variant">{s.angkatan}</td>
+                                  <td className="px-lg py-md font-body-sm text-on-surface-variant">{s.kelas}</td>
+                                  <td className="px-lg py-md text-right">
+                                    <span className="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pagination */}
+                        <div className="p-lg flex items-center justify-between border-t border-outline-variant/30 bg-white/[0.02] flex-wrap gap-md">
+                          <div className="flex items-center gap-md flex-wrap">
+                            <p className="font-body-sm text-body-sm text-on-surface-variant">
+                              Menampilkan {currentGradeStudents.length} dari {totalGradeStudents} Mahasiswa
+                            </p>
+                            <div className="flex items-center gap-xs">
+                              <span className="font-body-sm text-body-sm text-on-surface-variant">Tampilkan:</span>
+                              <select 
+                                value={gradeStudentItemsPerPage}
+                                onChange={(e) => {
+                                  setGradeStudentItemsPerPage(Number(e.target.value));
+                                  setGradeStudentPage(1);
+                                }}
+                                className="bg-surface-container border border-outline-variant rounded-lg px-sm py-xs font-body-sm text-body-sm text-on-surface outline-none focus:border-primary cursor-pointer"
+                              >
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-xs flex-wrap">
+                            <button 
+                              className="w-10 h-10 flex items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-bright transition-colors disabled:opacity-50"
+                              onClick={() => gradeStudentPage > 1 && setGradeStudentPage(gradeStudentPage - 1)}
+                              disabled={gradeStudentPage === 1}
                             >
-                              <td className="px-lg py-md font-body-sm text-on-surface-variant">{index + 1}</td>
-                              <td className="px-lg py-md font-body-sm font-bold text-on-surface">{s.nim}</td>
-                              <td className="px-lg py-md font-body-sm font-medium text-primary">{s.name}</td>
-                              <td className="px-lg py-md font-body-sm text-on-surface-variant">{s.angkatan}</td>
-                              <td className="px-lg py-md font-body-sm text-on-surface-variant">{s.kelas}</td>
-                              <td className="px-lg py-md text-right">
-                                <span className="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                              <span className="material-symbols-outlined">chevron_left</span>
+                            </button>
+                            {Array.from({ length: totalGradeStudentPages }).map((_, pIdx) => {
+                              if (totalGradeStudentPages > 6 && Math.abs(gradeStudentPage - (pIdx + 1)) > 2 && pIdx + 1 !== 1 && pIdx + 1 !== totalGradeStudentPages) {
+                                if (pIdx + 1 === 2 || pIdx + 1 === totalGradeStudentPages - 1) {
+                                  return <span key={pIdx} className="px-xs text-outline select-none">...</span>;
+                                }
+                                return null;
+                              }
+                              return (
+                                <button 
+                                  key={pIdx}
+                                  className={`w-10 h-10 flex items-center justify-center rounded-lg font-bold transition-all ${
+                                    gradeStudentPage === pIdx + 1 ? 'bg-primary text-on-primary shadow-md' : 'text-on-surface-variant hover:bg-surface-bright'
+                                  }`}
+                                  onClick={() => setGradeStudentPage(pIdx + 1)}
+                                >
+                                  {pIdx + 1}
+                                </button>
+                              );
+                            })}
+                            <button 
+                              className="w-10 h-10 flex items-center justify-center rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-bright transition-colors disabled:opacity-50"
+                              onClick={() => gradeStudentPage < totalGradeStudentPages && setGradeStudentPage(gradeStudentPage + 1)}
+                              disabled={gradeStudentPage === totalGradeStudentPages}
+                            >
+                              <span className="material-symbols-outlined">chevron_right</span>
+                            </button>
+                          </div>
+                        </div>
+                      </>
                     );
                   })()}
                 </div>
