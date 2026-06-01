@@ -3496,16 +3496,16 @@ export default function App() {
 
               {/* Action Group 1: Manage Courses */}
               <div className="flex flex-wrap items-center gap-sm sm:border-r sm:border-outline-variant sm:pr-md">
-                <span className="text-label-xs font-bold text-outline uppercase mr-xs hidden sm:inline">Mata Kuliah:</span>
+                <span className="text-label-xs font-bold text-slate-600 uppercase mr-xs hidden sm:inline">Mata Kuliah:</span>
                 <button 
                   title="Unduh Template Excel Mata Kuliah"
-                  className="flex items-center justify-center p-sm bg-white/5 border border-white/10 text-on-surface hover:bg-white/10 rounded-xl transition-all"
+                  className="flex items-center justify-center p-sm bg-slate-100 border border-slate-300 text-slate-700 hover:bg-slate-200 rounded-xl transition-all"
                   onClick={downloadCourseTemplate}
                 >
                   <span className="material-symbols-outlined text-[20px]">download</span>
                 </button>
                 <button 
-                  className="flex items-center gap-xs bg-secondary text-on-secondary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-secondary transition-all"
+                  className="flex items-center gap-xs bg-secondary hover:bg-secondary/90 text-white px-lg py-md rounded-xl font-label-sm text-label-sm font-bold shadow-sm transition-all"
                   onClick={() => courseFileInputRef.current?.click()}
                 >
                   <span className="material-symbols-outlined text-[18px]">upload</span>
@@ -3522,16 +3522,16 @@ export default function App() {
 
               {/* Action Group 2: Mapping CPL */}
               <div className="flex flex-wrap items-center gap-sm">
-                <span className="text-label-xs font-bold text-outline uppercase mr-xs hidden sm:inline">Mapping CPL:</span>
+                <span className="text-label-xs font-bold text-slate-600 uppercase mr-xs hidden sm:inline">Mapping CPL:</span>
                 <button 
                   title="Unduh Template Excel Mapping CPL"
-                  className="flex items-center justify-center p-sm bg-white/5 border border-white/10 text-on-surface hover:bg-white/10 rounded-xl transition-all"
+                  className="flex items-center justify-center p-sm bg-slate-100 border border-slate-300 text-slate-700 hover:bg-slate-200 rounded-xl transition-all"
                   onClick={downloadMappingTemplate}
                 >
                   <span className="material-symbols-outlined text-[20px]">download</span>
                 </button>
                 <button 
-                  className="flex items-center gap-xs bg-tertiary text-on-tertiary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-tertiary transition-all"
+                  className="flex items-center gap-xs bg-primary hover:bg-primary/90 text-white px-lg py-md rounded-xl font-label-sm text-label-sm font-bold shadow-sm transition-all"
                   onClick={() => mappingFileInputRef.current?.click()}
                 >
                   <span className="material-symbols-outlined text-[18px]">upload</span>
