@@ -24,19 +24,21 @@ class GradeController extends Controller
     {
         $studentId = $request->input('studentId', $request->input('student_id'));
         $courseId = $request->input('courseId', $request->input('course_id'));
+        $academicYear = $request->input('academicYear', $request->input('academic_year'));
 
         $request->merge([
             'student_id' => $studentId,
             'course_id' => $courseId,
+            'academic_year' => $academicYear,
         ]);
 
         $validated = $request->validate([
             'student_id' => 'required|exists:students,id',
             'course_id' => 'required|exists:courses,id',
             'grade' => 'required|string|max:10',
-            'score' => 'nullable|numeric|min:0|max:100',
-            'semester' => 'nullable|string|max:50',
-            'academic_year' => 'nullable|string|max:50',
+            'score' => 'required|numeric|min:0|max:100',
+            'semester' => 'required|string|max:50',
+            'academic_year' => 'required|string|max:50',
         ]);
 
         $validated['id'] = (string) Str::uuid();
@@ -57,17 +59,19 @@ class GradeController extends Controller
 
         $studentId = $request->input('studentId', $request->input('student_id'));
         $courseId = $request->input('courseId', $request->input('course_id'));
+        $academicYear = $request->input('academicYear', $request->input('academic_year'));
 
         if ($studentId) $request->merge(['student_id' => $studentId]);
         if ($courseId) $request->merge(['course_id' => $courseId]);
+        if ($academicYear) $request->merge(['academic_year' => $academicYear]);
 
         $validated = $request->validate([
             'student_id' => 'sometimes|required|exists:students,id',
             'course_id' => 'sometimes|required|exists:courses,id',
             'grade' => 'sometimes|required|string|max:10',
-            'score' => 'nullable|numeric|min:0|max:100',
-            'semester' => 'nullable|string|max:50',
-            'academic_year' => 'nullable|string|max:50',
+            'score' => 'sometimes|required|numeric|min:0|max:100',
+            'semester' => 'sometimes|required|string|max:50',
+            'academic_year' => 'sometimes|required|string|max:50',
         ]);
 
         $grade->update($validated);
