@@ -95,16 +95,34 @@ class GradeController extends Controller
         $inserted = [];
         
         foreach ($items as $item) {
-            $grade = StudentGrade::updateOrCreate(
-                [
-                    'student_id' => $item['studentId'] ?? $item['student_id'],
-                    'course_id' => $item['courseId'] ?? $item['course_id']
-                ],
-                [
+            $studentId = $item['studentId'] ?? $item['student_id'] ?? null;
+            $courseId = $item['courseId'] ?? $item['course_id'] ?? null;
+            
+            if (!$studentId || !$courseId) {
+                continue;
+            }
+
+            $grade = StudentGrade::where('student_id', $studentId)
+                ->where('course_id', $courseId)
+                ->first();
+
+            if ($grade) {
+                $updateData = ['grade' => $item['grade']];
+                if (isset($item['score'])) {
+                    $updateData['score'] = $item['score'];
+                }
+                $grade->update($updateData);
+            } else {
+                $grade = StudentGrade::create([
+                    'id' => (string) Str::uuid(),
+                    'student_id' => $studentId,
+                    'course_id' => $courseId,
                     'grade' => $item['grade'],
-                    'id' => (string) Str::uuid()
-                ]
-            );
+                    'score' => $item['score'] ?? 0,
+                    'semester' => $item['semester'] ?? '1',
+                    'academic_year' => $item['academicYear'] ?? $item['academic_year'] ?? '2024/2025',
+                ]);
+            }
             $inserted[] = $grade;
         }
 

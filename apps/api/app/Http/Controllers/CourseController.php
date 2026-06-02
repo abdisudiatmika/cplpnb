@@ -68,4 +68,68 @@ class CourseController extends Controller
         $course->delete();
         return response()->json(null, 204);
     }
+
+    public function mapping(Request $request, string $cplCode)
+    {
+        $departmentId = $request->user()?->department_id;
+        if (!$departmentId) {
+            return response()->json(['error' => 'User does not belong to a department.'], 400);
+        }
+
+        $cpl = \App\Models\Cpl::where('code', $cplCode)
+            ->where('department_id', $departmentId)
+            ->first();
+
+        if (!$cpl) {
+            return response()->json([]);
+        }
+
+        $studentId = $request->query('studentId');
+
+        $query = \App\Models\CourseCplMapping::with(['course'])
+            ->where('cpl_id', $cpl->id)
+            ->whereHas('course', function ($q) use ($departmentId) {
+                $q->where('department_id', $departmentId);
+            });
+
+        $results = $query->get();
+
+        if ($studentId) {
+            $grades = \Illuminate\Support\Facades\DB::table('student_grades')
+                ->where('student_id', $studentId)
+                ->get()
+                ->keyBy('course_id');
+
+            $mapped = $results->map(function ($map) use ($grades) {
+                $course = $map->course;
+                if (!$course) {
+                    return null;
+                }
+                $grade = $grades->get($course->id);
+                return [
+                    'code' => $course->code,
+                    'name' => $course->name,
+                    'sks' => $course->sks,
+                    'grade' => $grade ? $grade->grade : 'Belum Diambil',
+                    'score' => $grade ? ($grade->score !== null ? $grade->score : 0) : 0,
+                ];
+            })->filter()->values();
+
+            return response()->json($mapped);
+        } else {
+            $mapped = $results->map(function ($map) {
+                $course = $map->course;
+                if (!$course) {
+                    return null;
+                }
+                return [
+                    'code' => $course->code,
+                    'name' => $course->name,
+                    'sks' => $course->sks,
+                ];
+            })->filter()->values();
+
+            return response()->json($mapped);
+        }
+    }
 }

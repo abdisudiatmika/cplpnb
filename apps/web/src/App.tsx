@@ -278,7 +278,8 @@ export default function App() {
 
   // Grade form
   const [gradeFormCourseId, setGradeFormCourseId] = useState('');
-  const [gradeFormLetter, setGradeFormLetter] = useState('A');
+  const [gradeFormLetter, setGradeFormLetter] = useState('AB');
+  const [gradeFormScore, setGradeFormScore] = useState('8.0');
   const [gradeFormSemester, setGradeFormSemester] = useState('IV');
   const [gradeFormYear, setGradeFormYear] = useState('2024/2025');
 
@@ -1391,7 +1392,7 @@ export default function App() {
           g.courseName,
           g.sks,
           'Ya', // Default Wajib
-          g.score !== null ? g.score : ''
+          g.score !== null ? (g.score > 10 ? g.score / 10 : g.score) : ''
         ]);
       });
 
@@ -1414,14 +1415,14 @@ export default function App() {
 
   // Helper function to convert score to grade (0-100 to A, B, etc.)
   const getGradeLetter = (score: number) => {
-    if (score >= 85) return 'A';
-    if (score >= 80) return 'A-';
-    if (score >= 75) return 'B+';
-    if (score >= 70) return 'B';
-    if (score >= 65) return 'B-';
-    if (score >= 60) return 'C+';
-    if (score >= 55) return 'C';
-    if (score >= 40) return 'D';
+    if (score === null || score === undefined || isNaN(score)) return 'E';
+    const s = score > 10 ? score / 10 : score;
+    if (s >= 8.1) return 'A';
+    if (s >= 7.6) return 'AB';
+    if (s >= 6.6) return 'B';
+    if (s >= 6.1) return 'BC';
+    if (s >= 5.6) return 'C';
+    if (s >= 4.1) return 'D';
     return 'E';
   };
 
@@ -1935,29 +1936,21 @@ export default function App() {
         const list = await apiCall('/cpl');
         setCpls(list);
       } else if (modalType === 'grade') {
-        if (!gradeFormCourseId || !gradeFormLetter || !gradeFormSemester || !gradeFormYear) {
-          setModalError('Pilih mata kuliah, nilai huruf, semester, dan tahun akademik.');
+        if (!gradeFormCourseId || !gradeFormScore || !gradeFormLetter || !gradeFormSemester || !gradeFormYear) {
+          setModalError('Pilih mata kuliah, masukkan nilai angka, nilai huruf, semester, dan tahun akademik.');
           return;
         }
-        // Score conversion
-        let score = 0;
-        switch (gradeFormLetter) {
-          case 'A': score = 4.0; break;
-          case 'A-': score = 3.7; break;
-          case 'B+': score = 3.3; break;
-          case 'B': score = 3.0; break;
-          case 'B-': score = 2.7; break;
-          case 'C+': score = 2.3; break;
-          case 'C': score = 2.0; break;
-          case 'D': score = 1.0; break;
-          default: score = 0.0;
+        const score = Number(gradeFormScore);
+        if (isNaN(score) || score < 0 || score > 100) {
+          setModalError('Nilai angka harus di antara 0 dan 100.');
+          return;
         }
 
         await apiCall('/grades', 'POST', {
           studentId: selectedStudentId,
           courseId: gradeFormCourseId,
           grade: gradeFormLetter,
-          score,
+          score: score,
           semester: gradeFormSemester,
           academicYear: gradeFormYear,
         });
@@ -2060,7 +2053,8 @@ export default function App() {
       setCplFormTarget(75);
     } else if (type === 'grade') {
       setGradeFormCourseId(courses[0]?.id || '');
-      setGradeFormLetter('A');
+      setGradeFormScore('8.0');
+      setGradeFormLetter('AB');
       setGradeFormSemester('IV');
       setGradeFormYear('2024/2025');
     }
@@ -3061,7 +3055,7 @@ export default function App() {
                 {/* Search & Filter Bar */}
                 <div className="glass-panel p-md rounded-xl flex flex-wrap gap-md items-center shadow-md">
               <div className="relative flex-1 min-w-[280px] rounded-lg">
-                <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant">
                   search
                 </span>
                 <input 
@@ -3434,11 +3428,11 @@ export default function App() {
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="bg-surface-container-highest/30">
-                              <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider">CPL</th>
-                              <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider">Deskripsi Kompetensi</th>
-                              <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider text-center">Nilai</th>
-                              <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider">Status</th>
-                              <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider text-right">Detail MK</th>
+                              <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider">CPL</th>
+                              <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider">Deskripsi Kompetensi</th>
+                              <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider text-center">Nilai</th>
+                              <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider">Status</th>
+                              <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider text-right">Detail MK</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
@@ -3452,7 +3446,7 @@ export default function App() {
                                     <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold ${
                                       cpl.status === 'Tercapai' ? 'bg-tertiary/20 text-tertiary' :
                                       cpl.status === 'Tidak Tercapai' ? 'bg-error/20 text-error' :
-                                      'bg-outline/20 text-outline'
+                                      'bg-slate-100 text-slate-600 border border-slate-200'
                                     }`}>
                                       {cpl.status}
                                     </span>
@@ -3520,7 +3514,7 @@ export default function App() {
 
             <div className="glass-panel p-md rounded-xl flex flex-col lg:flex-row gap-md items-stretch lg:items-center shadow-md">
               <div className="relative flex-1 min-w-[240px] rounded-lg">
-                <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant">
                   search
                 </span>
                 <input 
@@ -4117,7 +4111,7 @@ export default function App() {
                               <td className="px-lg py-md font-body-sm text-center">{grade.academicYear}</td>
                               <td className="px-lg py-md text-center">
                                 <span className="inline-block px-sm py-[2px] rounded font-bold text-label-xs bg-primary/15 text-primary">
-                                  {grade.score !== null && grade.score !== undefined ? grade.score : '-'}
+                                  {grade.score !== null && grade.score !== undefined ? (grade.score > 10 ? grade.score / 10 : grade.score) : '-'}
                                 </span>
                               </td>
                               <td className="px-lg py-md">
@@ -4148,11 +4142,11 @@ export default function App() {
                   <div className="flex-1 min-w-[200px]">
                     <label className="block font-label-xs text-label-xs text-on-surface-variant mb-xs ml-1 uppercase">Cari Mahasiswa</label>
                     <div className="relative">
-                      <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+                      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
                       <input 
                         type="text" 
                         placeholder="Nama atau NIM..." 
-                        className="w-full bg-surface-container border border-outline-variant rounded-lg pl-xl pr-md py-sm font-label-sm text-on-surface focus:ring-2 focus:ring-primary focus:outline-none"
+                        className="w-full bg-surface-container border border-outline-variant rounded-lg pl-[48px] pr-md py-sm font-label-sm text-on-surface focus:ring-2 focus:ring-primary focus:outline-none"
                         value={gradeStudentSearch}
                         onChange={(e) => setGradeStudentSearch(e.target.value)}
                       />
@@ -4219,7 +4213,7 @@ export default function App() {
                                   <td className="px-lg py-md font-body-sm text-on-surface-variant">{s.angkatan}</td>
                                   <td className="px-lg py-md font-body-sm text-on-surface-variant">{s.kelas}</td>
                                   <td className="px-lg py-md text-right">
-                                    <span className="material-symbols-outlined text-primary opacity-0 group-hover:opacity-100 transition-opacity">chevron_right</span>
+                                    <span className="material-symbols-outlined text-primary/70 group-hover:text-primary transition-colors">chevron_right</span>
                                   </td>
                                 </tr>
                               ))}
@@ -4413,10 +4407,10 @@ export default function App() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-surface-container-highest/30">
-                          <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider">CPL</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider">Deskripsi Kompetensi</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider text-center">Rata-rata Nilai</th>
-                          <th className="px-lg py-md font-label-xs text-label-xs text-outline uppercase tracking-wider text-center">Status Keseluruhan</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider">CPL</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider">Deskripsi Kompetensi</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider text-center">Rata-rata Nilai</th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider text-center">Status Keseluruhan</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
@@ -4432,7 +4426,7 @@ export default function App() {
                                   <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold ${
                                     status === 'Tercapai' ? 'bg-tertiary/20 text-tertiary' :
                                     status === 'Tidak Tercapai' ? 'bg-error/20 text-error' :
-                                    'bg-outline/20 text-outline'
+                                    'bg-slate-100 text-slate-600 border border-slate-200'
                                   }`}>
                                     {status}
                                   </span>
@@ -4772,7 +4766,7 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Mata Kuliah</label>
                     <select 
-                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      className="w-full h-[46px] bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                       value={gradeFormCourseId}
                       onChange={(e) => setGradeFormCourseId(e.target.value)}
                     >
@@ -4782,39 +4776,58 @@ export default function App() {
                       ))}
                     </select>
                   </div>
-                  <div className="grid grid-cols-3 gap-md">
-                    <div className="flex flex-col gap-sm">
+                  <div className="grid grid-cols-12 gap-md">
+                    <div className="flex flex-col gap-sm col-span-3">
+                      <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nilai Angka</label>
+                      <input 
+                        className="w-full h-[46px] bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        placeholder="e.g. 8.0"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={gradeFormScore}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setGradeFormScore(val);
+                          const num = Number(val);
+                          if (!isNaN(num) && num >= 0 && num <= 100) {
+                            setGradeFormLetter(getGradeLetter(num));
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-sm col-span-3">
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nilai Huruf</label>
                       <select 
-                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        disabled
+                        className="w-full h-[46px] bg-slate-50 border border-outline-variant/60 rounded-lg shadow-sm px-md text-slate-500 font-body-base cursor-not-allowed focus:outline-none"
                         value={gradeFormLetter}
                         onChange={(e) => setGradeFormLetter(e.target.value)}
                       >
                         <option value="A">A</option>
-                        <option value="A-">A-</option>
-                        <option value="B+">B+</option>
+                        <option value="AB">AB</option>
                         <option value="B">B</option>
-                        <option value="B-">B-</option>
-                        <option value="C+">C+</option>
+                        <option value="BC">BC</option>
                         <option value="C">C</option>
                         <option value="D">D</option>
-                        <option value="E/F">E/F</option>
+                        <option value="E">E</option>
                       </select>
                     </div>
-                    <div className="flex flex-col gap-sm">
+                    <div className="flex flex-col gap-sm col-span-2">
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Semester</label>
                       <input 
-                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        className="w-full h-[46px] bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         placeholder="e.g. IV"
                         type="text"
                         value={gradeFormSemester}
                         onChange={(e) => setGradeFormSemester(e.target.value)}
                       />
                     </div>
-                    <div className="flex flex-col gap-sm">
-                      <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Tahun Akademik</label>
+                    <div className="flex flex-col gap-sm col-span-4">
+                      <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs whitespace-nowrap">Tahun Akademik</label>
                       <input 
-                        className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                        className="w-full h-[46px] bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         placeholder="e.g. 2024/2025"
                         type="text"
                         value={gradeFormYear}
@@ -4882,56 +4895,56 @@ export default function App() {
       {/* STUDENT CPL COURSE DETAIL MAPPING MODAL */}
       {selectedCplForDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-gutter bg-black/60 backdrop-blur-sm">
-          <div className="glass-panel w-full max-w-[800px] max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            <div className="px-xl py-lg border-b border-outline-variant/30 flex justify-between items-center bg-white/[0.02] shrink-0">
+          <div className="glass-panel w-full max-w-[800px] max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col bg-white">
+            <div className="px-xl py-lg border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
               <div>
-                <h3 className="font-headline-xl text-headline-xl text-white font-bold">
+                <h3 className="font-headline-xl text-headline-xl text-slate-900 font-bold">
                   Detail Pemetaan Mata Kuliah
                 </h3>
                 <p className="font-label-xs text-label-xs text-primary font-bold">{selectedCplForDetail}</p>
               </div>
-              <button className="text-on-surface-variant hover:text-white transition-colors p-xs" onClick={() => setSelectedCplForDetail(null)}>
+              <button className="text-slate-400 hover:text-slate-600 transition-colors p-xs" onClick={() => setSelectedCplForDetail(null)}>
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <div className="p-xl flex flex-col gap-md overflow-y-auto">
-              <div className="bg-white/5 p-md rounded-lg border border-slate-200 mb-sm shrink-0">
-                <p className="font-label-xs text-label-xs text-outline uppercase font-semibold mb-xs">Deskripsi CPL</p>
-                <p className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
+            <div className="p-xl flex flex-col gap-md overflow-y-auto bg-white">
+              <div className="bg-slate-50 p-md rounded-lg border border-slate-200 mb-sm shrink-0">
+                <p className="font-label-xs text-label-xs text-slate-500 uppercase font-bold mb-xs">Deskripsi CPL</p>
+                <p className="font-body-sm text-body-sm text-slate-800 font-medium leading-relaxed">
                   {selectedStudentAchievements.find(c => c.code === selectedCplForDetail)?.description}
                 </p>
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-outline-variant/30 bg-surface-dim/40">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-white/5 border-b border-outline-variant/30">
-                      <th className="px-md py-sm font-label-xs text-label-xs text-outline uppercase">Kode MK</th>
-                      <th className="px-md py-sm font-label-xs text-label-xs text-outline uppercase">Nama Mata Kuliah</th>
-                      <th className="px-md py-sm font-label-xs text-label-xs text-outline uppercase text-center">SKS</th>
-                      <th className="px-md py-sm font-label-xs text-label-xs text-outline uppercase text-center">Nilai</th>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="px-md py-sm font-label-xs text-label-xs text-slate-600 font-bold uppercase">Kode MK</th>
+                      <th className="px-md py-sm font-label-xs text-label-xs text-slate-600 font-bold uppercase">Nama Mata Kuliah</th>
+                      <th className="px-md py-sm font-label-xs text-label-xs text-slate-600 font-bold uppercase text-center">SKS</th>
+                      <th className="px-md py-sm font-label-xs text-label-xs text-slate-600 font-bold uppercase text-center">Nilai</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-outline-variant/50">
+                  <tbody className="divide-y divide-slate-100">
                     {cplDetailMappingCourses.map((course) => (
-                      <tr key={course.code} className="hover:bg-white/[0.02] transition-colors">
+                      <tr key={course.code} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-md py-md font-body-sm text-primary font-bold">
                           {course.code}
                         </td>
-                        <td className="px-md py-md font-body-sm text-on-surface font-medium">
+                        <td className="px-md py-md font-body-sm text-slate-800 font-semibold">
                           {course.name}
                         </td>
-                        <td className="px-md py-md font-body-sm text-on-surface-variant text-center">
+                        <td className="px-md py-md font-body-sm text-slate-700 text-center font-medium">
                           {course.sks}
                         </td>
                         <td className="px-md py-md font-body-sm text-center">
                           <span className={`inline-flex items-center justify-center min-w-[40px] px-sm py-[2px] rounded font-bold text-label-xs ${
-                            course.grade === 'Belum Diambil' ? 'bg-outline/10 text-outline' :
-                            (course.score && course.score < 65) ? 'bg-error/10 text-error' :
+                            course.grade === 'Belum Diambil' ? 'bg-slate-100 text-slate-500' :
+                            (course.score && (course.score > 10 ? course.score / 10 : course.score) < 6.5) ? 'bg-error/10 text-error' :
                             'bg-tertiary/10 text-tertiary'
                           }`}>
-                            {course.grade === 'Belum Diambil' ? 'Belum Diambil' : course.score}
+                            {course.grade === 'Belum Diambil' ? 'Belum Diambil' : `${course.grade} (${course.score !== null && course.score !== undefined ? (course.score > 10 ? course.score / 10 : course.score) : '-'})`}
                           </span>
                         </td>
                       </tr>
@@ -4941,7 +4954,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="px-xl py-lg border-t border-outline-variant/30 bg-white/[0.02] flex justify-end shrink-0">
+            <div className="px-xl py-lg border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
               <button 
                 className="bg-primary text-on-primary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold btn-glow transition-all cursor-pointer"
                 onClick={() => setSelectedCplForDetail(null)}

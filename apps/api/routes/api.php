@@ -93,6 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Bulk endpoints
     Route::post('/cpl/bulk', [CplController::class, 'bulk']);
     Route::post('/courses/bulk', [CourseController::class, 'bulk']);
+    Route::get('/courses/mapping/{cplCode}', [CourseController::class, 'mapping']);
     Route::post('/mappings/bulk', [MappingController::class, 'bulk']);
     Route::post('/students/bulk', [StudentController::class, 'bulk']);
     Route::post('/grades/bulk', [GradeController::class, 'bulk']);

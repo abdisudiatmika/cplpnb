@@ -80,12 +80,14 @@ class CplController extends Controller
     {
         switch ($grade) {
             case 'A': return 95;
+            case 'AB': return 85;
             case 'A-': return 90;
             case 'B+': return 85;
-            case 'B': return 80;
+            case 'B': return 75;
+            case 'BC': return 65;
             case 'B-': return 75;
             case 'C+': return 70;
-            case 'C': return 65;
+            case 'C': return 60;
             case 'D': return 50;
             default: return 0;
         }
@@ -147,7 +149,7 @@ class CplController extends Controller
                     'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
-                    'target' => $cpl->target_score ?? 70,
+                    'target' => $cpl->target_value ?? 70,
                 ];
                 continue;
             }
@@ -188,11 +190,11 @@ class CplController extends Controller
                     'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
-                    'target' => $cpl->target_score ?? 70,
+                    'target' => $cpl->target_value ?? 70,
                 ];
             } else {
                 $value = round($totalCplSum / $studentsMeasured);
-                $target = $cpl->target_score ?? 70;
+                $target = $cpl->target_value ?? 70;
                 $status = $value >= $target ? 'Tercapai' : 'Tidak Tercapai';
                 
                 $averages[] = [
@@ -247,7 +249,7 @@ class CplController extends Controller
                     'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
-                    'target' => $cpl->target_score ?? 70,
+                    'target' => $cpl->target_value ?? 70,
                 ];
                 continue;
             }
@@ -277,11 +279,11 @@ class CplController extends Controller
                     'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
-                    'target' => $cpl->target_score ?? 70,
+                    'target' => $cpl->target_value ?? 70,
                 ];
             } else {
                 $value = round($totalScoreWeight / $totalWeight);
-                $target = $cpl->target_score ?? 70;
+                $target = $cpl->target_value ?? 70;
                 $status = $value >= $target ? 'Tercapai' : 'Tidak Tercapai';
 
                 $achievements[] = [

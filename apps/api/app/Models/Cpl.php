@@ -12,6 +12,13 @@ class Cpl extends Model
 
     protected $fillable = ['code', 'description', 'category', 'target_value', 'department_id'];
 
+    protected $appends = ['targetValue'];
+
+    public function getTargetValueAttribute()
+    {
+        return $this->attributes['target_value'] ?? null;
+    }
+
     public function department()
     {
         return $this->belongsTo(Department::class);

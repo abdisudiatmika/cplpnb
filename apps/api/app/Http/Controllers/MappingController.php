@@ -8,9 +8,14 @@ use Illuminate\Support\Str;
 
 class MappingController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(CourseCplMapping::with(['course', 'cpl'])->get());
+        $courseId = $request->query('courseId', $request->query('course_id'));
+        $query = CourseCplMapping::with(['course', 'cpl']);
+        if ($courseId) {
+            $query->where('course_id', $courseId);
+        }
+        return response()->json($query->get());
     }
 
     public function store(Request $request)
