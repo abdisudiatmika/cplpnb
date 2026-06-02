@@ -15,6 +15,18 @@ class CplController extends Controller
 
     public function store(Request $request)
     {
+        $targetValue = $request->input('targetValue', $request->input('target_value'));
+        $departmentId = $request->input('departmentId', $request->input('department_id'));
+
+        if ($departmentId === null && $request->user()) {
+            $departmentId = $request->user()->department_id;
+        }
+
+        $request->merge([
+            'target_value' => $targetValue,
+            'department_id' => $departmentId,
+        ]);
+
         $validated = $request->validate([
             'code' => 'required|string|max:50',
             'description' => 'required|string',
@@ -38,6 +50,12 @@ class CplController extends Controller
     public function update(Request $request, string $id)
     {
         $cpl = Cpl::findOrFail($id);
+
+        $targetValue = $request->input('targetValue', $request->input('target_value'));
+        $departmentId = $request->input('departmentId', $request->input('department_id'));
+
+        if ($targetValue !== null) $request->merge(['target_value' => $targetValue]);
+        if ($departmentId !== null) $request->merge(['department_id' => $departmentId]);
 
         $validated = $request->validate([
             'code' => 'sometimes|required|string|max:50',

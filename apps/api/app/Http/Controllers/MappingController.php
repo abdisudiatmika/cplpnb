@@ -15,6 +15,14 @@ class MappingController extends Controller
 
     public function store(Request $request)
     {
+        $courseId = $request->input('courseId', $request->input('course_id'));
+        $cplId = $request->input('cplId', $request->input('cpl_id'));
+
+        $request->merge([
+            'course_id' => $courseId,
+            'cpl_id' => $cplId,
+        ]);
+
         $validated = $request->validate([
             'course_id' => 'required|exists:courses,id',
             'cpl_id' => 'required|exists:cpls,id',
@@ -36,6 +44,12 @@ class MappingController extends Controller
     public function update(Request $request, string $id)
     {
         $mapping = CourseCplMapping::findOrFail($id);
+
+        $courseId = $request->input('courseId', $request->input('course_id'));
+        $cplId = $request->input('cplId', $request->input('cpl_id'));
+
+        if ($courseId) $request->merge(['course_id' => $courseId]);
+        if ($cplId) $request->merge(['cpl_id' => $cplId]);
 
         $validated = $request->validate([
             'course_id' => 'sometimes|required|exists:courses,id',

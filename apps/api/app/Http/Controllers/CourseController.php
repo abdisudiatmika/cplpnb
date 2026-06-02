@@ -15,6 +15,14 @@ class CourseController extends Controller
 
     public function store(Request $request)
     {
+        $departmentId = $request->input('departmentId', $request->input('department_id'));
+
+        if ($departmentId === null && $request->user()) {
+            $departmentId = $request->user()->department_id;
+        }
+
+        $request->merge(['department_id' => $departmentId]);
+
         $validated = $request->validate([
             'code' => 'required|string|max:50',
             'name' => 'required|string|max:255',
@@ -37,6 +45,11 @@ class CourseController extends Controller
     public function update(Request $request, string $id)
     {
         $course = Course::findOrFail($id);
+
+        $departmentId = $request->input('departmentId', $request->input('department_id'));
+        if ($departmentId !== null) {
+            $request->merge(['department_id' => $departmentId]);
+        }
 
         $validated = $request->validate([
             'code' => 'sometimes|required|string|max:50',
