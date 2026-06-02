@@ -40,6 +40,26 @@ Route::get('/debug-auth', function () {
     if (file_exists($logPath)) {
         $logLines = array_slice(file($logPath), -50);
     }
+
+    $dbCounts = [];
+    $dbError = null;
+    $dbConnection = null;
+    $dbName = null;
+    try {
+        $dbConnection = \Illuminate\Support\Facades\DB::connection()->getName();
+        $dbName = \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
+        
+        $tables = ['users', 'departments', 'students', 'courses', 'cpls', 'course_cpl_mappings', 'student_grades'];
+        foreach ($tables as $table) {
+            if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
+                $dbCounts[$table] = \Illuminate\Support\Facades\DB::table($table)->count();
+            } else {
+                $dbCounts[$table] = 'Table not found';
+            }
+        }
+    } catch (\Exception $e) {
+        $dbError = $e->getMessage();
+    }
     
     return response()->json([
         'session_path' => $sessionPath,
@@ -50,6 +70,10 @@ Route::get('/debug-auth', function () {
         'session_domain' => config('session.domain'),
         'sanctum_stateful' => config('sanctum.stateful'),
         'app_url' => config('app.url'),
+        'database_connection' => $dbConnection,
+        'database_name' => $dbName,
+        'database_counts' => $dbCounts,
+        'database_error' => $dbError,
         'log_lines' => $logLines,
     ]);
 });

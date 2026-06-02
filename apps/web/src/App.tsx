@@ -11,7 +11,7 @@ import { LandingPage } from './components/LandingPage';
 // API Configuration
 const API_BASE = import.meta.env.PROD 
   ? '/api' 
-  : (import.meta.env.VITE_API_URL || 'http://localhost:4000/api');
+  : (import.meta.env.VITE_API_URL || `http://${window.location.hostname}:4000/api`);
 
 async function apiCall(path: string, method: string = 'GET', body: any = null) {
   const options: RequestInit = {
@@ -2081,7 +2081,7 @@ export default function App() {
       setAdminFormName(item.name);
       setAdminFormEmail(item.email);
       setAdminFormPassword('');
-      setAdminFormDeptId(item.departmentId || '');
+      setAdminFormDeptId(item.department_id || item.departmentId || '');
     } else if (type === 'student') {
       setStudentFormNim(item.nim);
       setStudentFormName(item.name);
