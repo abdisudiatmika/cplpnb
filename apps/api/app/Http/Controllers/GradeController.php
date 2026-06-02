@@ -8,9 +8,16 @@ use Illuminate\Support\Str;
 
 class GradeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(StudentGrade::with(['student', 'course'])->get());
+        $user = $request->user();
+        $query = StudentGrade::with(['student', 'course']);
+        if ($user && $user->role === 'admin_jurusan') {
+            $query->whereHas('student', function($q) use ($user) {
+                $q->where('department_id', $user->department_id);
+            });
+        }
+        return response()->json($query->get());
     }
 
     public function store(Request $request)
@@ -74,8 +81,14 @@ class GradeController extends Controller
         return response()->json(null, 204);
     }
 
-    public function byStudent(string $studentId)
+    public function byStudent(Request $request, string $studentId)
     {
+        $student = \App\Models\Student::findOrFail($studentId);
+        $user = $request->user();
+        if ($user && $user->role === 'admin_jurusan' && $student->department_id !== $user->department_id) {
+            abort(403, 'Unauthorized');
+        }
+
         $grades = StudentGrade::with(['course'])->where('student_id', $studentId)->get()->map(function ($g) {
             if ($g->course) {
                 $g->courseCode = $g->course->code;
@@ -131,7 +144,14 @@ class GradeController extends Controller
 
     public function exportAll(Request $request)
     {
-        $grades = StudentGrade::with(['student', 'course'])->get();
+        $user = $request->user();
+        $query = StudentGrade::with(['student', 'course']);
+        if ($user && $user->role === 'admin_jurusan') {
+            $query->whereHas('student', function($q) use ($user) {
+                $q->where('department_id', $user->department_id);
+            });
+        }
+        $grades = $query->get();
         return response()->json($grades);
     }
 }

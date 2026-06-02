@@ -8,9 +8,14 @@ use Illuminate\Support\Str;
 
 class CourseController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Course::with('department')->get());
+        $user = $request->user();
+        $query = Course::with('department');
+        if ($user && $user->role === 'admin_jurusan') {
+            $query->where('department_id', $user->department_id);
+        }
+        return response()->json($query->get());
     }
 
     public function store(Request $request)

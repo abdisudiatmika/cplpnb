@@ -8,9 +8,14 @@ use Illuminate\Support\Str;
 
 class StudentController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Student::with('department')->get());
+        $user = $request->user();
+        $query = Student::with('department');
+        if ($user && $user->role === 'admin_jurusan') {
+            $query->where('department_id', $user->department_id);
+        }
+        return response()->json($query->get());
     }
 
     public function store(Request $request)
@@ -75,25 +80,28 @@ class StudentController extends Controller
 
     public function stats(Request $request)
     {
+        $user = $request->user();
+        $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
+
         $query = Student::query();
-        if ($request->has('department_id')) {
-            $query->where('department_id', $request->department_id);
+        if ($departmentId) {
+            $query->where('department_id', $departmentId);
         }
 
         $total = $query->count();
 
         // Basic grouping by batch (angkatan)
         $byBatch = Student::select('angkatan', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
-            ->when($request->has('department_id'), function ($q) use ($request) {
-                return $q->where('department_id', $request->department_id);
+            ->when($departmentId, function ($q) use ($departmentId) {
+                return $q->where('department_id', $departmentId);
             })
             ->groupBy('angkatan')
             ->get();
 
         // Basic grouping by class (kelas)
         $byClass = Student::select('kelas', \Illuminate\Support\Facades\DB::raw('count(*) as count'))
-            ->when($request->has('department_id'), function ($q) use ($request) {
-                return $q->where('department_id', $request->department_id);
+            ->when($departmentId, function ($q) use ($departmentId) {
+                return $q->where('department_id', $departmentId);
             })
             ->groupBy('kelas')
             ->get();
@@ -107,7 +115,8 @@ class StudentController extends Controller
 
     public function ipkAverage(Request $request)
     {
-        $departmentId = $request->query('department_id');
+        $user = $request->user();
+        $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
         $angkatan = $request->query('angkatan');
         $kelas = $request->query('kelas');
 

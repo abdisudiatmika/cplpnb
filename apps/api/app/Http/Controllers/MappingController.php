@@ -15,6 +15,12 @@ class MappingController extends Controller
         if ($courseId) {
             $query->where('course_id', $courseId);
         }
+        $user = $request->user();
+        if ($user && $user->role === 'admin_jurusan') {
+            $query->whereHas('course', function($q) use ($user) {
+                $q->where('department_id', $user->department_id);
+            });
+        }
         return response()->json($query->get());
     }
 

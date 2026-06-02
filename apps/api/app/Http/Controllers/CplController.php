@@ -8,9 +8,14 @@ use Illuminate\Support\Str;
 
 class CplController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(Cpl::with('department')->get());
+        $user = $request->user();
+        $query = Cpl::with('department');
+        if ($user && $user->role === 'admin_jurusan') {
+            $query->where('department_id', $user->department_id);
+        }
+        return response()->json($query->get());
     }
 
     public function store(Request $request)
@@ -95,7 +100,8 @@ class CplController extends Controller
 
     public function averages(Request $request)
     {
-        $departmentId = $request->query('department_id');
+        $user = $request->user();
+        $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
         $angkatan = $request->query('angkatan');
         $kelas = $request->query('kelas');
 
@@ -213,9 +219,13 @@ class CplController extends Controller
         return response()->json($averages);
     }
 
-    public function achievements(string $studentId)
+    public function achievements(Request $request, string $studentId)
     {
         $student = \App\Models\Student::findOrFail($studentId);
+        $user = $request->user();
+        if ($user && $user->role === 'admin_jurusan' && $student->department_id !== $user->department_id) {
+            abort(403, 'Unauthorized');
+        }
         $departmentId = $student->department_id;
 
         $allCpls = Cpl::where('department_id', $departmentId)->get();
