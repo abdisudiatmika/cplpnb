@@ -2942,7 +2942,7 @@ export default function App() {
                       <div className="w-full h-full relative">
                         <div 
                           className="absolute bottom-0 w-full chart-bar rounded-t-lg transition-all duration-500 ease-in-out group-hover:brightness-125"
-                          style={{ height: `${Math.max(cplData.value, 2)}%` }}
+                          style={{ height: `${Math.max(cplData.value * 0.8, 2)}%` }}
                         >
                           <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white font-label-xs text-[10px] py-[2px] px-[6px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-md z-20">
                             {cplData.value}%
