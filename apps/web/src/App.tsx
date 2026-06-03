@@ -279,7 +279,7 @@ export default function App() {
   // Grade form
   const [gradeFormCourseId, setGradeFormCourseId] = useState('');
   const [gradeFormLetter, setGradeFormLetter] = useState('AB');
-  const [gradeFormScore, setGradeFormScore] = useState('8.0');
+  const [gradeFormScore, setGradeFormScore] = useState('80');
   const [gradeFormSemester, setGradeFormSemester] = useState('IV');
   const [gradeFormYear, setGradeFormYear] = useState('2024/2025');
 
@@ -1392,7 +1392,7 @@ export default function App() {
           g.courseName,
           g.sks,
           'Ya', // Default Wajib
-          g.score !== null ? (g.score > 10 ? g.score / 10 : g.score) : ''
+          g.score !== null ? (g.score > 10 ? g.score : g.score * 10) : ''
         ]);
       });
 
@@ -1416,13 +1416,13 @@ export default function App() {
   // Helper function to convert score to grade (0-100 to A, B, etc.)
   const getGradeLetter = (score: number) => {
     if (score === null || score === undefined || isNaN(score)) return 'E';
-    const s = score > 10 ? score / 10 : score;
-    if (s >= 8.1) return 'A';
-    if (s >= 7.6) return 'AB';
-    if (s >= 6.6) return 'B';
-    if (s >= 6.1) return 'BC';
-    if (s >= 5.6) return 'C';
-    if (s >= 4.1) return 'D';
+    const s = score <= 10 ? score * 10 : score;
+    if (s >= 81) return 'A';
+    if (s >= 76) return 'AB';
+    if (s >= 66) return 'B';
+    if (s >= 61) return 'BC';
+    if (s >= 56) return 'C';
+    if (s >= 41) return 'D';
     return 'E';
   };
 
@@ -2053,7 +2053,7 @@ export default function App() {
       setCplFormTarget(75);
     } else if (type === 'grade') {
       setGradeFormCourseId(courses[0]?.id || '');
-      setGradeFormScore('8.0');
+      setGradeFormScore('80');
       setGradeFormLetter('AB');
       setGradeFormSemester('IV');
       setGradeFormYear('2024/2025');
@@ -4111,7 +4111,7 @@ export default function App() {
                               <td className="px-lg py-md font-body-sm text-center">{grade.academicYear}</td>
                               <td className="px-lg py-md text-center">
                                 <span className="inline-block px-sm py-[2px] rounded font-bold text-label-xs bg-primary/15 text-primary">
-                                  {grade.score !== null && grade.score !== undefined ? (grade.score > 10 ? grade.score / 10 : grade.score) : '-'}
+                                  {grade.score !== null && grade.score !== undefined ? (grade.score > 10 ? grade.score : grade.score * 10) : '-'}
                                 </span>
                               </td>
                               <td className="px-lg py-md">
@@ -4781,9 +4781,9 @@ export default function App() {
                       <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nilai Angka</label>
                       <input 
                         className="w-full h-[46px] bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
-                        placeholder="e.g. 8.0"
+                        placeholder="e.g. 80"
                         type="number"
-                        step="0.1"
+                        step="1"
                         min="0"
                         max="100"
                         value={gradeFormScore}
@@ -4941,10 +4941,10 @@ export default function App() {
                         <td className="px-md py-md font-body-sm text-center">
                           <span className={`inline-flex items-center justify-center min-w-[40px] px-sm py-[2px] rounded font-bold text-label-xs ${
                             course.grade === 'Belum Diambil' ? 'bg-slate-100 text-slate-500' :
-                            (course.score && (course.score > 10 ? course.score / 10 : course.score) < 6.5) ? 'bg-error/10 text-error' :
+                            (course.score && (course.score > 10 ? course.score : course.score * 10) < 65) ? 'bg-error/10 text-error' :
                             'bg-tertiary/10 text-tertiary'
                           }`}>
-                            {course.grade === 'Belum Diambil' ? 'Belum Diambil' : `${course.grade} (${course.score !== null && course.score !== undefined ? (course.score > 10 ? course.score / 10 : course.score) : '-'})`}
+                            {course.grade === 'Belum Diambil' ? 'Belum Diambil' : `${course.grade} (${course.score !== null && course.score !== undefined ? (course.score > 10 ? course.score : course.score * 10) : '-'})`}
                           </span>
                         </td>
                       </tr>
