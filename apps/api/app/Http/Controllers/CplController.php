@@ -125,7 +125,7 @@ class CplController extends Controller
 
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
             ->join('students', 'student_grades.student_id', '=', 'students.id')
-            ->select('student_grades.student_id', 'student_grades.course_id', 'student_grades.grade')
+            ->select('student_grades.student_id', 'student_grades.course_id', 'student_grades.grade', 'student_grades.score')
             ->when($departmentId, function($q) use ($departmentId) {
                 return $q->where('students.department_id', $departmentId);
             })
@@ -138,7 +138,10 @@ class CplController extends Controller
 
         $gradesMap = [];
         foreach ($allGrades as $g) {
-            $gradesMap[$g->student_id . '_' . $g->course_id] = $g->grade;
+            $gradesMap[$g->student_id . '_' . $g->course_id] = [
+                'grade' => $g->grade,
+                'score' => $g->score,
+            ];
         }
 
         $averages = [];
@@ -170,19 +173,25 @@ class CplController extends Controller
 
                 foreach ($mappings as $map) {
                     $key = $student->id . '_' . $map->course_id;
-                    $grade = $gradesMap[$key] ?? null;
-                    $multiplier = $map->weight * $map->sks;
+                    $gObj = $gradesMap[$key] ?? null;
 
-                    if ($grade && $grade !== 'Belum Diambil') {
-                        $pctValue = $this->convertGradeToPct($grade);
-                        $totalScoreWeight += $pctValue * $multiplier;
+                    if ($gObj && $gObj['grade'] !== 'Belum Diambil') {
+                        $scoreVal = 0;
+                        if (isset($gObj['score']) && $gObj['score'] !== null && $gObj['score'] > 0) {
+                            $scoreVal = $gObj['score'] <= 10 ? $gObj['score'] * 10 : $gObj['score'];
+                        } else {
+                            $scoreVal = $this->convertGradeToPct($gObj['grade']);
+                        }
+
+                        $multiplier = $map->weight;
+                        $totalScoreWeight += $scoreVal * $multiplier;
                         $totalWeight += $multiplier;
                         $takenCoursesCount++;
                     }
                 }
 
                 if ($takenCoursesCount > 0 && $totalWeight > 0) {
-                    $totalCplSum += round($totalScoreWeight / $totalWeight);
+                    $totalCplSum += $totalScoreWeight / $totalWeight;
                     $studentsMeasured++;
                 }
             }
@@ -242,7 +251,10 @@ class CplController extends Controller
 
         $gradesMap = [];
         foreach ($allGrades as $g) {
-            $gradesMap[$g->course_id] = $g->grade;
+            $gradesMap[$g->course_id] = [
+                'grade' => $g->grade,
+                'score' => $g->score,
+            ];
         }
 
         $achievements = [];
@@ -269,12 +281,18 @@ class CplController extends Controller
             $takenCoursesCount = 0;
 
             foreach ($mappings as $map) {
-                $grade = $gradesMap[$map->course_id] ?? null;
-                $multiplier = $map->weight * $map->sks;
+                $gObj = $gradesMap[$map->course_id] ?? null;
 
-                if ($grade && $grade !== 'Belum Diambil') {
-                    $pctValue = $this->convertGradeToPct($grade);
-                    $totalScoreWeight += $pctValue * $multiplier;
+                if ($gObj && $gObj['grade'] !== 'Belum Diambil') {
+                    $scoreVal = 0;
+                    if (isset($gObj['score']) && $gObj['score'] !== null && $gObj['score'] > 0) {
+                        $scoreVal = $gObj['score'] <= 10 ? $gObj['score'] * 10 : $gObj['score'];
+                    } else {
+                        $scoreVal = $this->convertGradeToPct($gObj['grade']);
+                    }
+
+                    $multiplier = $map->weight;
+                    $totalScoreWeight += $scoreVal * $multiplier;
                     $totalWeight += $multiplier;
                     $takenCoursesCount++;
                 }
