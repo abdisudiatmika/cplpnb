@@ -229,6 +229,11 @@ export default function App() {
   const [selectedCplForDetail, setSelectedCplForDetail] = useState<string | null>(null);
   const [cplDetailMappingCourses, setCplDetailMappingCourses] = useState<any[]>([]);
 
+  // Expanded CPL in Rincian Rata-rata Capaian table
+  const [expandedAvgCplId, setExpandedAvgCplId] = useState<string | null>(null);
+  const [expandedAvgCplCourses, setExpandedAvgCplCourses] = useState<any[]>([]);
+  const [expandedAvgCplLoading, setExpandedAvgCplLoading] = useState(false);
+
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'department' | 'admin' | 'student' | 'course' | 'cpl' | 'mapping' | 'grade'>('student');
@@ -4466,21 +4471,111 @@ export default function App() {
                         {cplAverages.length > 0 ? (
                           cplAverages.map((cpl) => {
                             const status = cpl.value === 0 ? 'Belum Diukur' : (cpl.value >= cplFormTarget ? 'Tercapai' : 'Tidak Tercapai');
+                            const isExpanded = expandedAvgCplId === cpl.id;
                             return (
-                              <tr key={cpl.id} className="hover:bg-white/5 transition-colors group">
-                                <td className="px-lg py-lg font-bold text-primary">{cpl.code}</td>
-                                <td className="px-lg py-lg text-body-sm text-on-surface-variant max-w-md">{cpl.description}</td>
-                                <td className="px-lg py-lg text-center font-bold text-headline-lg">{cpl.value === 0 ? '—' : cpl.value}</td>
-                                <td className="px-lg py-lg text-center">
-                                  <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold ${
-                                    status === 'Tercapai' ? 'bg-tertiary/20 text-tertiary' :
-                                    status === 'Tidak Tercapai' ? 'bg-error/20 text-error' :
-                                    'bg-slate-100 text-slate-600 border border-slate-200'
-                                  }`}>
-                                    {status}
-                                  </span>
-                                </td>
-                              </tr>
+                              <React.Fragment key={cpl.id}>
+                                <tr 
+                                  className="hover:bg-primary/[0.03] transition-colors group cursor-pointer"
+                                  onClick={async () => {
+                                    if (isExpanded) {
+                                      setExpandedAvgCplId(null);
+                                      setExpandedAvgCplCourses([]);
+                                      return;
+                                    }
+                                    setExpandedAvgCplId(cpl.id);
+                                    setExpandedAvgCplLoading(true);
+                                    try {
+                                      let url = `/cpl/course-breakdown/${cpl.id}`;
+                                      const params = new URLSearchParams();
+                                      if (cplMatrixAngkatan) params.append('angkatan', cplMatrixAngkatan);
+                                      if (cplMatrixKelas) params.append('kelas', cplMatrixKelas);
+                                      if (params.toString()) url += `?${params.toString()}`;
+                                      const data = await apiCall(url);
+                                      setExpandedAvgCplCourses(data);
+                                    } catch (e: any) {
+                                      showToast(e.message || 'Gagal memuat detail matakuliah.');
+                                      setExpandedAvgCplCourses([]);
+                                    } finally {
+                                      setExpandedAvgCplLoading(false);
+                                    }
+                                  }}
+                                >
+                                  <td className="px-lg py-lg font-bold text-primary">
+                                    <div className="flex items-center gap-sm">
+                                      <span className={`material-symbols-outlined text-[18px] text-primary/60 transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}>chevron_right</span>
+                                      {cpl.code}
+                                    </div>
+                                  </td>
+                                  <td className="px-lg py-lg text-body-sm text-on-surface-variant max-w-md">{cpl.description}</td>
+                                  <td className="px-lg py-lg text-center font-bold text-headline-lg">{cpl.value === 0 ? '—' : cpl.value}</td>
+                                  <td className="px-lg py-lg text-center">
+                                    <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold ${
+                                      status === 'Tercapai' ? 'bg-tertiary/20 text-tertiary' :
+                                      status === 'Tidak Tercapai' ? 'bg-error/20 text-error' :
+                                      'bg-slate-100 text-slate-600 border border-slate-200'
+                                    }`}>
+                                      {status}
+                                    </span>
+                                  </td>
+                                </tr>
+                                {/* Expanded sub-rows: course breakdown */}
+                                {isExpanded && (
+                                  <tr>
+                                    <td colSpan={4} className="p-0">
+                                      <div className="bg-gradient-to-b from-primary/[0.03] to-transparent border-l-4 border-primary/30 mx-md my-sm rounded-lg overflow-hidden animate-fade-in">
+                                        {expandedAvgCplLoading ? (
+                                          <div className="px-xl py-lg text-center text-on-surface-variant font-body-sm flex items-center justify-center gap-sm">
+                                            <span className="material-symbols-outlined animate-spin text-primary">progress_activity</span>
+                                            Memuat detail matakuliah...
+                                          </div>
+                                        ) : expandedAvgCplCourses.length === 0 ? (
+                                          <div className="px-xl py-lg text-center text-on-surface-variant font-body-sm">
+                                            Tidak ada matakuliah penyusun yang terpetakan.
+                                          </div>
+                                        ) : (
+                                          <table className="w-full text-left border-collapse">
+                                            <thead>
+                                              <tr className="bg-primary/[0.05]">
+                                                <th className="px-lg py-sm font-label-xs text-label-xs text-primary/80 font-bold uppercase tracking-wider">Kode MK</th>
+                                                <th className="px-lg py-sm font-label-xs text-label-xs text-primary/80 font-bold uppercase tracking-wider">Nama Matakuliah</th>
+                                                <th className="px-lg py-sm font-label-xs text-label-xs text-primary/80 font-bold uppercase tracking-wider text-center">SKS</th>
+                                                <th className="px-lg py-sm font-label-xs text-label-xs text-primary/80 font-bold uppercase tracking-wider text-center">Bobot</th>
+                                                <th className="px-lg py-sm font-label-xs text-label-xs text-primary/80 font-bold uppercase tracking-wider text-center">Rata-rata Nilai</th>
+                                                <th className="px-lg py-sm font-label-xs text-label-xs text-primary/80 font-bold uppercase tracking-wider text-center">Mahasiswa Dinilai</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-primary/[0.08]">
+                                              {expandedAvgCplCourses.map((course: any, idx: number) => (
+                                                <tr key={idx} className="hover:bg-primary/[0.02] transition-colors">
+                                                  <td className="px-lg py-md font-body-sm text-primary font-bold">{course.course_code}</td>
+                                                  <td className="px-lg py-md font-body-sm text-on-surface font-medium">{course.course_name}</td>
+                                                  <td className="px-lg py-md font-body-sm text-on-surface-variant text-center">{course.sks}</td>
+                                                  <td className="px-lg py-md font-body-sm text-on-surface-variant text-center">{course.weight}</td>
+                                                  <td className="px-lg py-md text-center">
+                                                    <span className={`inline-flex items-center justify-center min-w-[48px] px-sm py-[3px] rounded-md font-bold text-label-sm ${
+                                                      course.average_score === 0 ? 'bg-slate-100 text-slate-500' :
+                                                      course.average_score >= cplFormTarget ? 'bg-tertiary/15 text-tertiary' :
+                                                      'bg-error/15 text-error'
+                                                    }`}>
+                                                      {course.average_score === 0 ? '—' : course.average_score}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-lg py-md font-body-sm text-on-surface-variant text-center">
+                                                    <span className="inline-flex items-center gap-1 text-label-xs">
+                                                      <span className="material-symbols-outlined text-[14px]">group</span>
+                                                      {course.students_graded}
+                                                    </span>
+                                                  </td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
                             );
                           })
                         ) : (

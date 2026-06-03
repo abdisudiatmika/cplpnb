@@ -81,6 +81,97 @@ class CplController extends Controller
         return response()->json(null, 204);
     }
 
+    /**
+     * GET /cpl/course-breakdown/{cplId}
+     * Returns per-course average scores for a specific CPL.
+     */
+    public function courseBreakdown(Request $request, string $cplId)
+    {
+        $user = $request->user();
+        $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
+        $angkatan = $request->query('angkatan');
+        $kelas = $request->query('kelas');
+
+        $cpl = Cpl::findOrFail($cplId);
+
+        // Get mappings for this CPL
+        $mappings = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
+            ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
+            ->select('course_cpl_mappings.course_id', 'course_cpl_mappings.weight', 'courses.code as course_code', 'courses.name as course_name', 'courses.sks')
+            ->where('course_cpl_mappings.cpl_id', $cplId)
+            ->when($departmentId, function($q) use ($departmentId) {
+                return $q->where('courses.department_id', $departmentId);
+            })->get();
+
+        if ($mappings->isEmpty()) {
+            return response()->json([]);
+        }
+
+        // Get filtered students
+        $studentQuery = \App\Models\Student::query();
+        if ($departmentId) $studentQuery->where('department_id', $departmentId);
+        if ($angkatan) $studentQuery->where('angkatan', $angkatan);
+        if ($kelas) $studentQuery->where('kelas', $kelas);
+        $students = $studentQuery->pluck('id');
+
+        if ($students->isEmpty()) {
+            return response()->json($mappings->map(function($map) {
+                return [
+                    'course_code' => $map->course_code,
+                    'course_name' => $map->course_name,
+                    'sks' => $map->sks,
+                    'weight' => $map->weight,
+                    'average_score' => 0,
+                    'students_graded' => 0,
+                ];
+            })->values());
+        }
+
+        // Get all grades for these students & courses
+        $courseIds = $mappings->pluck('course_id');
+        $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
+            ->whereIn('student_id', $students)
+            ->whereIn('course_id', $courseIds)
+            ->get();
+
+        $gradesMap = [];
+        foreach ($allGrades as $g) {
+            $gradesMap[$g->course_id][] = $g;
+        }
+
+        $result = [];
+        foreach ($mappings as $map) {
+            $grades = $gradesMap[$map->course_id] ?? [];
+            $totalScore = 0;
+            $count = 0;
+
+            foreach ($grades as $g) {
+                if ($g->grade === 'Belum Diambil') continue;
+
+                $scoreVal = 0;
+                if (isset($g->score) && $g->score !== null && $g->score > 0) {
+                    $scoreVal = $g->score <= 10 ? $g->score * 10 : $g->score;
+                } else {
+                    $scoreVal = $this->convertGradeToPct($g->grade);
+                }
+
+                $totalScore += $scoreVal;
+                $count++;
+            }
+
+            $result[] = [
+                'course_code' => $map->course_code,
+                'course_name' => $map->course_name,
+                'sks' => $map->sks,
+                'weight' => $map->weight,
+                'average_score' => $count > 0 ? round($totalScore / $count) : 0,
+                'students_graded' => $count,
+            ];
+        }
+
+        return response()->json($result);
+    }
+
     private function convertGradeToPct($grade)
     {
         switch ($grade) {
