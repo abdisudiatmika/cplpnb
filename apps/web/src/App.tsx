@@ -1946,15 +1946,27 @@ export default function App() {
           return;
         }
 
-        await apiCall('/grades', 'POST', {
-          studentId: selectedStudentId,
-          courseId: gradeFormCourseId,
-          grade: gradeFormLetter,
-          score: score,
-          semester: gradeFormSemester,
-          academicYear: gradeFormYear,
-        });
-        showToast('Data nilai berhasil disimpan.');
+        if (modalAction === 'add') {
+          await apiCall('/grades', 'POST', {
+            studentId: selectedStudentId,
+            courseId: gradeFormCourseId,
+            grade: gradeFormLetter,
+            score: score,
+            semester: gradeFormSemester,
+            academicYear: gradeFormYear,
+          });
+          showToast('Data nilai berhasil disimpan.');
+        } else {
+          await apiCall(`/grades/${editingId}`, 'PUT', {
+            studentId: selectedStudentId,
+            courseId: gradeFormCourseId,
+            grade: gradeFormLetter,
+            score: score,
+            semester: gradeFormSemester,
+            academicYear: gradeFormYear,
+          });
+          showToast('Data nilai berhasil diperbarui.');
+        }
         // Refresh
         const list = await apiCall(`/grades/student/${selectedStudentId}`);
         setGrades(list);
@@ -2091,6 +2103,12 @@ export default function App() {
       setCplFormDesc(item.description);
       setCplFormCat(item.category);
       setCplFormTarget(item.targetValue);
+    } else if (type === 'grade') {
+      setGradeFormCourseId(item.course_id || item.courseId || '');
+      setGradeFormScore(String(item.score !== null && item.score !== undefined ? (item.score <= 10 ? item.score * 10 : item.score) : '80'));
+      setGradeFormLetter(item.grade || 'AB');
+      setGradeFormSemester(item.semester || 'IV');
+      setGradeFormYear(item.academicYear || item.academic_year || '2024/2025');
     }
     setIsModalOpen(true);
   };
@@ -4117,8 +4135,16 @@ export default function App() {
                               <td className="px-lg py-md">
                                 <div className="flex items-center justify-center gap-sm">
                                   <button 
+                                    className="p-xs text-on-surface-variant hover:text-primary transition-colors"
+                                    onClick={() => openEditModal('grade', grade)}
+                                    title="Ubah Nilai"
+                                  >
+                                    <span className="material-symbols-outlined text-[20px]">edit</span>
+                                  </button>
+                                  <button 
                                     className="p-xs text-on-surface-variant hover:text-error transition-colors"
                                     onClick={() => openDeleteConfirm('grade', grade.id, `${grade.courseName}`)}
+                                    title="Hapus Nilai"
                                   >
                                     <span className="material-symbols-outlined text-[20px]">delete</span>
                                   </button>
@@ -4766,7 +4792,10 @@ export default function App() {
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Mata Kuliah</label>
                     <select 
-                      className="w-full h-[46px] bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      disabled={modalAction === 'edit'}
+                      className={`w-full h-[46px] border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all ${
+                        modalAction === 'edit' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-surface-container'
+                      }`}
                       value={gradeFormCourseId}
                       onChange={(e) => setGradeFormCourseId(e.target.value)}
                     >
