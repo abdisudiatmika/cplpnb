@@ -3391,7 +3391,7 @@ export default function App() {
                       </div>
                       
                       <div className="h-[300px] w-full flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-slate-200 shadow-inner px-lg">
-                        <svg className="w-full h-[260px]" viewBox="0 0 800 300" preserveAspectRatio="none">
+                        <svg className="w-full h-[260px]" viewBox="0 -35 800 335" preserveAspectRatio="none">
                           {/* Grid Lines */}
                           {[20, 80, 140, 200, 260].map((yVal, idx) => (
                             <g key={yVal}>
@@ -3428,6 +3428,29 @@ export default function App() {
                                 <text x={barX + barWidth / 2} y="280" fill="#908fa0" fontSize="12" fontWeight="bold" textAnchor="middle">
                                   {cpl.code}
                                 </text>
+                                
+                                {/* Custom Hover Tooltip */}
+                                <g className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                                  <rect
+                                    x={barX + barWidth / 2 - 22}
+                                    y={barY - 26}
+                                    width="44"
+                                    height="18"
+                                    rx="4"
+                                    fill="#1E293B"
+                                  />
+                                  <text
+                                    x={barX + barWidth / 2}
+                                    y={barY - 13}
+                                    fill="#FFFFFF"
+                                    fontSize="10"
+                                    fontWeight="bold"
+                                    textAnchor="middle"
+                                  >
+                                    {cpl.value}%
+                                  </text>
+                                </g>
+
                                 <title>{`${cpl.code}: ${cpl.value}%`}</title>
                               </g>
                             );
