@@ -279,7 +279,7 @@ export default function App() {
   const [courseMappings, setCourseMappings] = useState<CourseMapping[]>([]);
   const [courseMappingLoading, setCourseMappingLoading] = useState(false);
   const [inlineMapCplId, setInlineMapCplId] = useState('');
-  const [inlineMapWeight, setInlineMapWeight] = useState(1.0);
+  const [inlineMapWeight, setInlineMapWeight] = useState(1);
 
   // Grade form
   const [gradeFormCourseId, setGradeFormCourseId] = useState('');
@@ -1723,7 +1723,7 @@ export default function App() {
       });
       showToast('CPL berhasil ditambahkan ke mata kuliah.');
       setInlineMapCplId('');
-      setInlineMapWeight(1.0);
+      setInlineMapWeight(1);
       // refresh mappings for this course
       const list = await apiCall(`/mappings?courseId=${expandedCourseId}`);
       setCourseMappings(list);
@@ -1945,7 +1945,7 @@ export default function App() {
           setModalError('Pilih mata kuliah, masukkan nilai angka, nilai huruf, semester, dan tahun akademik.');
           return;
         }
-        const score = Number(gradeFormScore);
+        const score = Number(String(gradeFormScore).replace(',', '.'));
         if (isNaN(score) || score < 0 || score > 100) {
           setModalError('Nilai angka harus di antara 0 dan 100.');
           return;
@@ -3790,8 +3790,8 @@ export default function App() {
                                         <input 
                                           className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg py-sm px-md text-on-surface font-body-sm focus:outline-none focus:border-primary transition-all"
                                           type="number"
-                                          step="0.1"
-                                          min="0.1"
+                                          step="1"
+                                          min="1"
                                           value={inlineMapWeight}
                                           onChange={e => setInlineMapWeight(Number(e.target.value))}
                                         />
@@ -4929,15 +4929,12 @@ export default function App() {
                       <input 
                         className="w-full h-[46px] bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
                         placeholder="e.g. 80"
-                        type="number"
-                        step="1"
-                        min="0"
-                        max="100"
+                        type="text"
                         value={gradeFormScore}
                         onChange={(e) => {
                           const val = e.target.value;
                           setGradeFormScore(val);
-                          const num = Number(val);
+                          const num = Number(val.replace(',', '.'));
                           if (!isNaN(num) && num >= 0 && num <= 100) {
                             setGradeFormLetter(getGradeLetter(num));
                           }
