@@ -196,6 +196,12 @@ class CplController extends Controller
         $angkatan = $request->query('angkatan');
         $kelas = $request->query('kelas');
 
+        $averages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas);
+        return response()->json($averages);
+    }
+
+    private function calculateAveragesInternal($departmentId, $angkatan, $kelas)
+    {
         $cplQuery = Cpl::query();
         if ($departmentId) $cplQuery->where('department_id', $departmentId);
         $allCpls = $cplQuery->get();
@@ -315,8 +321,90 @@ class CplController extends Controller
                 ];
             }
         }
-        
-        return response()->json($averages);
+
+        return $averages;
+    }
+
+    public function courseSummary(Request $request)
+    {
+        $user = $request->user();
+        $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
+        $angkatan = $request->query('angkatan');
+        $kelas = $request->query('kelas');
+
+        $coursesQuery = \App\Models\Course::query();
+        if ($departmentId) $coursesQuery->where('department_id', $departmentId);
+        $courses = $coursesQuery->get();
+
+        $studentQuery = \App\Models\Student::query();
+        if ($departmentId) $studentQuery->where('department_id', $departmentId);
+        if ($angkatan) $studentQuery->where('angkatan', $angkatan);
+        if ($kelas) $studentQuery->where('kelas', $kelas);
+        $studentIds = $studentQuery->pluck('id');
+
+        $allMappings = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
+            ->join('cpls', 'course_cpl_mappings.cpl_id', '=', 'cpls.id')
+            ->select('course_cpl_mappings.course_id', 'course_cpl_mappings.cpl_id', 'course_cpl_mappings.weight', 'cpls.code as cpl_code', 'cpls.description as cpl_desc', 'cpls.target_value')
+            ->get();
+
+        $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
+            ->whereIn('student_id', $studentIds)
+            ->get();
+
+        $gradesByCourse = [];
+        foreach ($allGrades as $g) {
+            $gradesByCourse[$g->course_id][] = $g;
+        }
+
+        $cplAverages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas);
+
+        $result = [];
+        foreach ($courses as $c) {
+            $courseGrades = $gradesByCourse[$c->id] ?? [];
+            $totalScore = 0;
+            $gradedCount = 0;
+
+            foreach ($courseGrades as $g) {
+                if ($g->grade === 'Belum Diambil') continue;
+                $scoreVal = 0;
+                if (isset($g->score) && $g->score !== null && $g->score > 0) {
+                    $scoreVal = $g->score <= 10 ? $g->score * 10 : $g->score;
+                } else {
+                    $scoreVal = $this->convertGradeToPct($g->grade);
+                }
+                $totalScore += $scoreVal;
+                $gradedCount++;
+            }
+
+            $avgGrade = $gradedCount > 0 ? round($totalScore / $gradedCount, 2) : 0;
+
+            $courseMappings = $allMappings->where('course_id', $c->id);
+            $mappingsData = [];
+            foreach ($courseMappings as $map) {
+                $cplAvgObj = collect($cplAverages)->firstWhere('id', $map->cpl_id);
+                $mappingsData[] = [
+                    'cpl_id' => $map->cpl_id,
+                    'cpl_code' => $map->cpl_code,
+                    'cpl_desc' => $map->cpl_desc,
+                    'weight' => $map->weight,
+                    'cpl_average' => $cplAvgObj ? $cplAvgObj['value'] : 0,
+                    'cpl_status' => $cplAvgObj ? $cplAvgObj['status'] : 'Belum Terukur',
+                    'cpl_target' => $map->target_value ?? 70,
+                ];
+            }
+
+            $result[] = [
+                'id' => $c->id,
+                'code' => $c->code,
+                'name' => $c->name,
+                'sks' => $c->sks,
+                'average_grade' => $avgGrade,
+                'grades_count' => $gradedCount,
+                'mappings' => $mappingsData,
+            ];
+        }
+
+        return response()->json($result);
     }
 
     public function achievements(Request $request, string $studentId)

@@ -86,6 +86,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/cpl/averages', [CplController::class, 'averages']);
     Route::get('/cpl/achievements/{id}', [CplController::class, 'achievements']);
     Route::get('/cpl/course-breakdown/{cplId}', [CplController::class, 'courseBreakdown']);
+    Route::get('/cpl/course-summary', [CplController::class, 'courseSummary']);
     Route::get('/cpl', [CplController::class, 'index']);
     Route::post('/cpl', [CplController::class, 'store']);
     Route::put('/cpl/{id}', [CplController::class, 'update']);

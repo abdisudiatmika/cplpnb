@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { RadarChart } from './components/RadarChart';
+import { CourseRadarChart } from './components/CourseRadarChart';
 import { BarChart } from './components/BarChart';
 import { CplPrintTemplate } from './components/CplPrintTemplate';
 import { LandingPage } from './components/LandingPage';
@@ -225,6 +226,15 @@ export default function App() {
   const [cplMatrixKelas, setCplMatrixKelas] = useState('');
   const [cplMatrixAverageIpk, setCplMatrixAverageIpk] = useState<number | null>(null);
   const [selectedStudentForCpl, setSelectedStudentForCpl] = useState<string | null>(null);
+
+  // Course CPL report modal states
+  const [isCourseReportModalOpen, setIsCourseReportModalOpen] = useState(false);
+  const [courseReportAngkatan, setCourseReportAngkatan] = useState('');
+  const [courseReportKelas, setCourseReportKelas] = useState('');
+  const [courseReportSearch, setCourseReportSearch] = useState('');
+  const [courseReportLoading, setCourseReportLoading] = useState(false);
+  const [courseSummaries, setCourseSummaries] = useState<any[]>([]);
+  const [expandedSummaryCourseId, setExpandedSummaryCourseId] = useState<string | null>(null);
 
   const [selectedCplForDetail, setSelectedCplForDetail] = useState<string | null>(null);
   const [cplDetailMappingCourses, setCplDetailMappingCourses] = useState<any[]>([]);
@@ -1640,6 +1650,31 @@ export default function App() {
     loadData();
   }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, selectedStudentForCpl, dashboardAngkatan, dashboardKelas]);
 
+  // Fetch course summary when course report modal is open
+  useEffect(() => {
+    if (!isCourseReportModalOpen) return;
+
+    const fetchCourseSummaries = async () => {
+      setCourseReportLoading(true);
+      try {
+        let url = '/cpl/course-summary';
+        const params = new URLSearchParams();
+        if (courseReportAngkatan) params.append('angkatan', courseReportAngkatan);
+        if (courseReportKelas) params.append('kelas', courseReportKelas);
+        if (params.toString()) url += `?${params.toString()}`;
+
+        const data = await apiCall(url);
+        setCourseSummaries(data);
+      } catch (e: any) {
+        showToast(e.message || 'Gagal memuat laporan capaian mata kuliah.');
+      } finally {
+        setCourseReportLoading(false);
+      }
+    };
+
+    fetchCourseSummaries();
+  }, [isCourseReportModalOpen, courseReportAngkatan, courseReportKelas]);
+
   // Load student grades when selecting another student on Input Nilai tab
   const handleSelectStudentForGrades = (studentId: string) => {
     setSelectedStudentId(studentId);
@@ -2067,6 +2102,396 @@ export default function App() {
       const fileLabel = (studentFilterAngkatan || 'Semua') + '_' + (studentFilterKelas || 'Semua');
       pdf.save(`Laporan_CPL_Mahasiswa_${fileLabel}.pdf`);
       showToast('Berhasil mengunduh semua laporan CPL!');
+    } catch (e: any) {
+      console.error(e);
+      showToast('Gagal memproses laporan CPL massal.');
+    } finally {
+      setBulkDownloadLoading(false);
+    }
+  };
+
+  const drawCourseCplPage = (pdf: any, course: any, angkatan: string, kelas: string) => {
+    // Kop Surat
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(10);
+    pdf.text("KEMENTERIAN PENDIDIKAN, KEBUDAYAAN, RISET, DAN TEKNOLOGI", 105, 15, { align: "center" });
+    pdf.setFontSize(13);
+    pdf.text("POLITEKNIK NEGERI BALI", 105, 21, { align: "center" });
+    pdf.setFontSize(11);
+    pdf.text(`JURUSAN AKUNTANSI / ${currentUser?.departmentName?.toUpperCase() || 'D3 AKUNTANSI'}`, 105, 27, { align: "center" });
+    pdf.setFont("times", "normal");
+    pdf.setFontSize(8.5);
+    pdf.text("Jalan Raya Uluwatu, Jimbaran, Badung, Bali. Telp: (0361) 701981", 105, 31, { align: "center" });
+    
+    // Lines under Kop
+    pdf.setLineWidth(0.6);
+    pdf.line(15, 34, 195, 34);
+    pdf.setLineWidth(0.2);
+    pdf.line(15, 35.5, 195, 35.5);
+
+    // Title
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(11);
+    pdf.text("LAPORAN CAPAIAN PEMBELAJARAN LULUSAN (CPL) PER MATA KULIAH", 105, 44, { align: "center" });
+
+    // Course Info Block
+    pdf.setLineWidth(0.2);
+    pdf.rect(15, 49, 180, 24);
+    
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(9);
+    pdf.text("Nama Mata Kuliah", 18, 54);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${course.name}`, 48, 54);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("Kode Mata Kuliah", 18, 60);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${course.code}`, 48, 60);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("SKS", 18, 66);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${course.sks} SKS`, 48, 66);
+
+    pdf.setFont("times", "bold");
+    pdf.text("Angkatan", 110, 54);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${angkatan || 'Semua Angkatan'}`, 138, 54);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("Kelas", 110, 60);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${kelas || 'Semua Kelas'}`, 138, 60);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("Rata-rata Nilai MK", 110, 66);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${course.average_grade !== null && course.average_grade !== undefined ? Number(course.average_grade).toFixed(2) : '0.00'} (dari ${course.grades_count || 0} mahasiswa)`, 138, 66);
+
+    let currentY = 80;
+    
+    // Table Header
+    pdf.setFillColor(240, 240, 240);
+    pdf.rect(15, currentY, 180, 8, 'F');
+    pdf.rect(15, currentY, 180, 8);
+    
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(8.5);
+    pdf.text("No", 20, currentY + 5.5, { align: "center" });
+    pdf.text("CPL", 35, currentY + 5.5, { align: "center" });
+    pdf.text("Deskripsi Kompetensi CPL", 48, currentY + 5.5);
+    pdf.text("Bobot", 137.5, currentY + 5.5, { align: "center" });
+    pdf.text("Rerata (%)", 155, currentY + 5.5, { align: "center" });
+    pdf.text("Target (%)", 172.5, currentY + 5.5, { align: "center" });
+    pdf.text("Status", 187.5, currentY + 5.5, { align: "center" });
+
+    // Column borders
+    pdf.line(25, currentY, 25, currentY + 8);
+    pdf.line(45, currentY, 45, currentY + 8);
+    pdf.line(130, currentY, 130, currentY + 8);
+    pdf.line(145, currentY, 145, currentY + 8);
+    pdf.line(165, currentY, 165, currentY + 8);
+    pdf.line(180, currentY, 180, currentY + 8);
+
+    currentY += 8;
+    pdf.setFont("times", "normal");
+
+    const mappings = course.mappings || [];
+    if (mappings.length === 0) {
+      pdf.rect(15, currentY, 180, 10);
+      pdf.text("Belum ada CPL terpetakan untuk mata kuliah ini.", 105, currentY + 6.5, { align: "center" });
+      currentY += 10;
+    } else {
+      mappings.forEach((map: any, index: number) => {
+        const descLines = pdf.splitTextToSize(map.cpl_desc || '-', 80);
+        const rowHeight = Math.max(7, 3.8 * descLines.length + 3);
+
+        if (currentY + rowHeight > 248) {
+          pdf.line(15, currentY, 195, currentY);
+          pdf.addPage();
+          currentY = 20;
+
+          pdf.setFillColor(240, 240, 240);
+          pdf.rect(15, currentY, 180, 8, 'F');
+          pdf.rect(15, currentY, 180, 8);
+          
+          pdf.setFont("times", "bold");
+          pdf.text("No", 20, currentY + 5.5, { align: "center" });
+          pdf.text("CPL", 35, currentY + 5.5, { align: "center" });
+          pdf.text("Deskripsi Kompetensi CPL", 48, currentY + 5.5);
+          pdf.text("Bobot", 137.5, currentY + 5.5, { align: "center" });
+          pdf.text("Rerata (%)", 155, currentY + 5.5, { align: "center" });
+          pdf.text("Target (%)", 172.5, currentY + 5.5, { align: "center" });
+          pdf.text("Status", 187.5, currentY + 5.5, { align: "center" });
+
+          pdf.line(25, currentY, 25, currentY + 8);
+          pdf.line(45, currentY, 45, currentY + 8);
+          pdf.line(130, currentY, 130, currentY + 8);
+          pdf.line(145, currentY, 145, currentY + 8);
+          pdf.line(165, currentY, 165, currentY + 8);
+          pdf.line(180, currentY, 180, currentY + 8);
+
+          currentY += 8;
+          pdf.setFont("times", "normal");
+        }
+
+        pdf.rect(15, currentY, 180, rowHeight);
+        pdf.text(String(index + 1), 20, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "bold");
+        pdf.text(map.cpl_code || '-', 35, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "normal");
+
+        descLines.forEach((line: string, lineIdx: number) => {
+          pdf.text(line, 48, currentY + 4.8 + (lineIdx * 3.8));
+        });
+
+        pdf.text(String(map.weight || '-'), 137.5, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "bold");
+        pdf.text(String(map.cpl_average || '0'), 155, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "normal");
+        pdf.text(String(map.cpl_target || cplFormTarget), 172.5, currentY + 4.8, { align: "center" });
+
+        const statusText = map.cpl_status || 'Belum Terukur';
+        pdf.setFont("times", "bold");
+        if (statusText === 'Tercapai') {
+          pdf.setTextColor(20, 120, 60);
+        } else if (statusText === 'Tidak Tercapai') {
+          pdf.setTextColor(200, 30, 30);
+        } else {
+          pdf.setTextColor(100, 100, 100);
+        }
+        pdf.text(statusText === 'Tidak Tercapai' ? 'Tdk Tercapai' : statusText, 187.5, currentY + 4.8, { align: "center" });
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont("times", "normal");
+
+        pdf.line(25, currentY, 25, currentY + rowHeight);
+        pdf.line(45, currentY, 45, currentY + rowHeight);
+        pdf.line(130, currentY, 130, currentY + rowHeight);
+        pdf.line(145, currentY, 145, currentY + rowHeight);
+        pdf.line(165, currentY, 165, currentY + rowHeight);
+        pdf.line(180, currentY, 180, currentY + rowHeight);
+
+        currentY += rowHeight;
+      });
+    }
+
+    if (mappings.length > 0) {
+      if (currentY + 70 > 248) {
+        pdf.addPage();
+        currentY = 20;
+      }
+
+      // Draw Chart Header
+      pdf.setFont("times", "bold");
+      pdf.setFontSize(10);
+      pdf.text("Grafik Ketercapaian CPL Mata Kuliah", 15, currentY + 6);
+      pdf.line(15, currentY + 8, 195, currentY + 8);
+      currentY += 12;
+
+      const N = mappings.length;
+      if (N >= 3) {
+        const cx = 105;
+        const cy = currentY + 28;
+        const radius = 22;
+
+        const angles = Array.from({ length: N }, (_, i) => (2 * Math.PI * i) / N - Math.PI / 2);
+        const getPt = (r: number, angle: number) => {
+          const x = cx + r * Math.cos(angle);
+          const y = cy + r * Math.sin(angle);
+          return { x, y };
+        };
+
+        // Grid concentric polygons
+        const gridScales = [0.25, 0.5, 0.75, 1];
+        gridScales.forEach((scale) => {
+          const r = radius * scale;
+          for (let i = 0; i < N; i++) {
+            const pt1 = getPt(r, angles[i]);
+            const pt2 = getPt(r, angles[(i + 1) % N]);
+            pdf.setLineWidth(0.1);
+            pdf.setDrawColor(200, 200, 200);
+            pdf.line(pt1.x, pt1.y, pt2.x, pt2.y);
+          }
+        });
+
+        // Axis lines
+        for (let i = 0; i < N; i++) {
+          const outer = getPt(radius, angles[i]);
+          pdf.setLineWidth(0.1);
+          pdf.setDrawColor(180, 180, 180);
+          pdf.line(cx, cy, outer.x, outer.y);
+        }
+
+        // Target shape (Cyan line)
+        pdf.setLineWidth(0.25);
+        pdf.setDrawColor(6, 182, 212);
+        for (let i = 0; i < N; i++) {
+          const t1 = mappings[i].cpl_target || cplFormTarget;
+          const t2 = mappings[(i + 1) % N].cpl_target || cplFormTarget;
+          const pt1 = getPt(radius * (t1 / 100), angles[i]);
+          const pt2 = getPt(radius * (t2 / 100), angles[(i + 1) % N]);
+          pdf.line(pt1.x, pt1.y, pt2.x, pt2.y);
+        }
+
+        // Realisation shape (Indigo line)
+        pdf.setLineWidth(0.5);
+        pdf.setDrawColor(99, 102, 241);
+        for (let i = 0; i < N; i++) {
+          const a1 = mappings[i].cpl_average || 0;
+          const a2 = mappings[(i + 1) % N].cpl_average || 0;
+          const pt1 = getPt(radius * (a1 / 100), angles[i]);
+          const pt2 = getPt(radius * (a2 / 100), angles[(i + 1) % N]);
+          pdf.line(pt1.x, pt1.y, pt2.x, pt2.y);
+        }
+
+        pdf.setDrawColor(0, 0, 0); // reset
+
+        // Draw dots at achievement points
+        for (let i = 0; i < N; i++) {
+          const a = mappings[i].cpl_average || 0;
+          const pt = getPt(radius * (a / 100), angles[i]);
+          pdf.setFillColor(99, 102, 241);
+          pdf.circle(pt.x, pt.y, 0.7, 'F');
+        }
+
+        // Draw Labels text around the radar chart
+        pdf.setFont("times", "bold");
+        pdf.setFontSize(7.5);
+        for (let i = 0; i < N; i++) {
+          const outer = getPt(radius + 5, angles[i]);
+          const code = mappings[i].cpl_code || '-';
+          const val = mappings[i].cpl_average || 0;
+          const labelText = `${code} (${val}%)`;
+
+          const cos = Math.cos(angles[i]);
+          let alignOpt = "center";
+          if (cos > 0.15) {
+            alignOpt = "left";
+          } else if (cos < -0.15) {
+            alignOpt = "right";
+          }
+          pdf.text(labelText, outer.x, outer.y + 1, { align: alignOpt as any });
+        }
+
+        // Draw legend
+        pdf.setFont("times", "normal");
+        pdf.setFontSize(7.5);
+        pdf.setDrawColor(6, 182, 212);
+        pdf.setLineWidth(0.4);
+        pdf.line(15, cy + 26, 22, cy + 26);
+        pdf.text("Target CPL", 24, cy + 27);
+
+        pdf.setDrawColor(99, 102, 241);
+        pdf.setLineWidth(0.8);
+        pdf.line(55, cy + 26, 62, cy + 26);
+        pdf.text("Capaian Rata-rata MK", 64, cy + 27);
+
+        pdf.setDrawColor(0, 0, 0); // reset
+
+        currentY = cy + 32;
+      } else {
+        // Draw horizontal progress bars
+        pdf.setFont("times", "bold");
+        pdf.setFontSize(8.5);
+
+        mappings.forEach((map: any, i: number) => {
+          const barY = currentY + 3 + (i * 12);
+          pdf.text(`${map.cpl_code}: ${map.cpl_average}% / Target ${map.cpl_target || cplFormTarget}%`, 15, barY);
+          
+          pdf.setFillColor(235, 235, 235);
+          pdf.rect(15, barY + 1.5, 120, 3.5, 'F');
+          
+          pdf.setFillColor(99, 102, 241);
+          pdf.rect(15, barY + 1.5, 120 * (map.cpl_average / 100), 3.5, 'F');
+
+          pdf.setDrawColor(6, 182, 212);
+          pdf.setLineWidth(0.4);
+          const tx = 15 + 120 * ((map.cpl_target || cplFormTarget) / 100);
+          pdf.line(tx, barY + 0.5, tx, barY + 5.5);
+        });
+
+        // Draw legend
+        const legendY = currentY + 5 + (N * 12);
+        pdf.setFont("times", "normal");
+        pdf.setFontSize(7.5);
+        pdf.setFillColor(99, 102, 241);
+        pdf.rect(15, legendY, 5, 2.5, 'F');
+        pdf.text("Capaian Rata-rata MK", 22, legendY + 2);
+
+        pdf.setDrawColor(6, 182, 212);
+        pdf.setLineWidth(0.4);
+        pdf.line(65, legendY, 65, legendY + 2.5);
+        pdf.text("Target CPL", 68, legendY + 2);
+
+        pdf.setDrawColor(0, 0, 0); // reset
+
+        currentY = legendY + 8;
+      }
+    }
+
+    // Signature Box
+    const signY = 252;
+    pdf.setFontSize(9.5);
+    pdf.text("Jimbaran, " + formatIndonesianDate(), 142, signY);
+    pdf.text("Koordinator Program Studi,", 142, signY + 5);
+    
+    pdf.line(142, signY + 23, 188, signY + 23);
+    pdf.text("NIP. ", 142, signY + 27);
+  };
+
+  const handleDownloadSingleCourseCplReport = (course: any) => {
+    showToast(`Mempersiapkan Laporan CPL Mata Kuliah ${course.name}...`);
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      drawCourseCplPage(pdf, course, courseReportAngkatan, courseReportKelas);
+      pdf.save(`Laporan_CPL_MK_${course.code}_${course.name.replace(/\s+/g, '_')}.pdf`);
+      showToast('Unduhan laporan CPL Mata Kuliah berhasil!');
+    } catch (e: any) {
+      console.error(e);
+      showToast('Gagal memproses laporan CPL Mata Kuliah.');
+    }
+  };
+
+  const handleDownloadAllCourseCplReports = async () => {
+    const searchVal = courseReportSearch.trim().toLowerCase();
+    const filteredCourses = courseSummaries.filter(c => {
+      if (!searchVal) return true;
+      return c.code.toLowerCase().includes(searchVal) || c.name.toLowerCase().includes(searchVal);
+    });
+
+    if (!filteredCourses || filteredCourses.length === 0) {
+      showToast('Tidak ada data mata kuliah untuk dicetak.');
+      return;
+    }
+
+    if (!window.confirm(`Apakah Anda yakin ingin mengunduh laporan CPL untuk ${filteredCourses.length} mata kuliah dalam satu file PDF?`)) {
+      return;
+    }
+
+    setBulkDownloadTotal(filteredCourses.length);
+    setBulkDownloadProgress(0);
+    setBulkDownloadLoading(true);
+
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let isFirst = true;
+
+      for (let i = 0; i < filteredCourses.length; i++) {
+        const course = filteredCourses[i];
+        setBulkDownloadProgress(i + 1);
+
+        if (!isFirst) {
+          pdf.addPage();
+        }
+        isFirst = false;
+
+        drawCourseCplPage(pdf, course, courseReportAngkatan, courseReportKelas);
+      }
+
+      const fileLabel = (courseReportAngkatan || 'Semua') + '_' + (courseReportKelas || 'Semua');
+      pdf.save(`Laporan_CPL_Semua_Mata_Kuliah_${fileLabel}.pdf`);
+      showToast('Berhasil mengunduh semua laporan CPL Mata Kuliah!');
     } catch (e: any) {
       console.error(e);
       showToast('Gagal memproses laporan CPL massal.');
@@ -3828,6 +4253,13 @@ export default function App() {
                   </button>
                 )}
                 <button 
+                  className="flex items-center gap-sm bg-secondary text-on-secondary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-secondary hover:scale-105 transition-all duration-200 cursor-pointer"
+                  onClick={() => setIsCourseReportModalOpen(true)}
+                >
+                  <span className="material-symbols-outlined text-[20px]">analytics</span>
+                  Laporan Capaian MK
+                </button>
+                <button 
                   className="flex items-center gap-sm bg-primary text-on-primary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-primary"
                   onClick={() => openAddModal('course')}
                 >
@@ -5408,6 +5840,304 @@ export default function App() {
                 onClick={() => setSelectedCplForDetail(null)}
               >
                 Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COURSE CPL ACHIEVEMENTS REPORT MODAL */}
+      {isCourseReportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-gutter bg-black/60 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-[1100px] max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col bg-white">
+            {/* Modal Header */}
+            <div className="px-xl py-lg border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
+              <div>
+                <h3 className="font-headline-xl text-headline-xl text-slate-900 font-bold flex items-center gap-sm">
+                  <span className="material-symbols-outlined text-primary text-[28px]">analytics</span>
+                  Laporan Capaian CPL per Mata Kuliah
+                </h3>
+                <p className="font-label-xs text-label-xs text-slate-500">
+                  Analisis pemetaan CPL dan rata-rata ketercapaian per Mata Kuliah untuk Kelas/Angkatan.
+                </p>
+              </div>
+              <div className="flex items-center gap-md">
+                <button 
+                  className="flex items-center gap-sm bg-primary text-on-primary px-lg py-sm rounded-xl font-label-xs text-label-xs font-bold glow-primary hover:scale-105 transition-transform duration-200 cursor-pointer"
+                  onClick={handleDownloadAllCourseCplReports}
+                >
+                  <span className="material-symbols-outlined text-[16px]">download</span>
+                  Cetak Semua Laporan
+                </button>
+                <button className="text-slate-400 hover:text-slate-600 transition-colors p-xs cursor-pointer" onClick={() => setIsCourseReportModalOpen(false)}>
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Filters & Search */}
+            <div className="p-lg bg-slate-50 border-b border-slate-200 flex flex-wrap gap-md items-center shrink-0">
+              <div className="flex-1 min-w-[240px] relative rounded-lg">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  search
+                </span>
+                <input 
+                  className="w-full bg-white border border-slate-300 rounded-lg pl-[36px] pr-md py-sm font-body-sm text-body-sm text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary transition-all outline-none" 
+                  placeholder="Cari Mata Kuliah..." 
+                  type="text"
+                  value={courseReportSearch}
+                  onChange={(e) => setCourseReportSearch(e.target.value)}
+                />
+              </div>
+
+              <div className="w-[180px]">
+                <select 
+                  className="w-full bg-white border border-slate-300 rounded-lg px-md py-sm font-label-sm text-slate-800 focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer"
+                  value={courseReportAngkatan}
+                  onChange={(e) => setCourseReportAngkatan(e.target.value)}
+                >
+                  <option value="">Semua Angkatan</option>
+                  {uniqueAngkatanList.map(angkatan => (
+                    <option key={angkatan} value={angkatan}>{angkatan}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="w-[180px]">
+                <select 
+                  className="w-full bg-white border border-slate-300 rounded-lg px-md py-sm font-label-sm text-slate-800 focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer"
+                  value={courseReportKelas}
+                  onChange={(e) => setCourseReportKelas(e.target.value)}
+                >
+                  <option value="">Semua Kelas</option>
+                  {uniqueKelasList.map(kelas => (
+                    <option key={kelas} value={kelas}>{kelas}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Modal Body / Table */}
+            <div className="p-xl overflow-y-auto flex-1 bg-slate-50">
+              {courseReportLoading ? (
+                <div className="flex flex-col items-center justify-center py-2xl text-slate-500 font-body-base gap-md">
+                  <span className="material-symbols-outlined animate-spin text-primary text-[36px]">progress_activity</span>
+                  Memuat analisis mata kuliah...
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider w-[60px]">No</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider w-[120px]">Kode MK</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider">Nama Mata Kuliah</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider text-center w-[80px]">SKS</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider text-center w-[160px]">Rata-rata Nilai</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider w-[240px]">CPL Penyusun</th>
+                        <th className="px-lg py-md font-label-xs text-label-xs text-slate-600 font-bold uppercase tracking-wider text-center w-[180px]">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(() => {
+                        const searchVal = courseReportSearch.trim().toLowerCase();
+                        const filtered = courseSummaries.filter(c => {
+                          if (!searchVal) return true;
+                          return c.code.toLowerCase().includes(searchVal) || c.name.toLowerCase().includes(searchVal);
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={7} className="px-lg py-xl text-center text-slate-400 font-body-sm">
+                                Tidak ada data mata kuliah.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return filtered.map((course, idx) => {
+                          const isExpanded = expandedSummaryCourseId === course.id;
+                          return (
+                            <React.Fragment key={course.id}>
+                              <tr 
+                                className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                                onClick={() => setExpandedSummaryCourseId(isExpanded ? null : course.id)}
+                              >
+                                <td className="px-lg py-lg font-body-sm text-slate-500">{idx + 1}</td>
+                                <td className="px-lg py-lg font-body-sm text-primary font-bold">{course.code}</td>
+                                <td className="px-lg py-lg font-body-sm text-slate-800 font-semibold">{course.name}</td>
+                                <td className="px-lg py-lg font-body-sm text-slate-600 text-center">{course.sks}</td>
+                                <td className="px-lg py-lg text-center font-bold text-slate-800">
+                                  {course.average_grade ? Number(course.average_grade).toFixed(2) : '0.00'}
+                                  <span className="block text-[10px] text-slate-400 font-normal">
+                                    {course.grades_count} mhs dinilai
+                                  </span>
+                                </td>
+                                <td className="px-lg py-lg">
+                                  <div className="flex flex-wrap gap-xs">
+                                    {course.mappings && course.mappings.length > 0 ? (
+                                      course.mappings.map((m: any) => (
+                                        <span 
+                                          key={m.cpl_id} 
+                                          title={m.cpl_desc}
+                                          className={`inline-flex items-center px-sm py-[2px] rounded text-[10px] font-bold ${
+                                            m.cpl_status === 'Tercapai' ? 'bg-tertiary/10 text-tertiary' :
+                                            m.cpl_status === 'Tidak Tercapai' ? 'bg-error/10 text-error' :
+                                            'bg-slate-100 text-slate-600'
+                                          }`}
+                                        >
+                                          {m.cpl_code}
+                                        </span>
+                                      ))
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400">-</span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-lg py-lg text-center" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center justify-center gap-sm">
+                                    <button 
+                                      className="flex items-center gap-xs text-primary hover:text-primary-dark font-label-xs text-label-xs font-bold cursor-pointer"
+                                      onClick={() => setExpandedSummaryCourseId(isExpanded ? null : course.id)}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">
+                                        {isExpanded ? 'expand_less' : 'expand_more'}
+                                      </span>
+                                      {isExpanded ? 'Tutup' : 'Detail'}
+                                    </button>
+                                    <button 
+                                      className="flex items-center gap-xs text-secondary hover:text-secondary-dark font-label-xs text-label-xs font-bold cursor-pointer"
+                                      onClick={() => handleDownloadSingleCourseCplReport(course)}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">download</span>
+                                      PDF
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+
+                              {/* Expanding Row Detail */}
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={7} className="p-lg bg-slate-50/50">
+                                    <div className="bg-white border border-slate-200 rounded-xl p-lg shadow-sm flex flex-col md:flex-row gap-lg animate-fade-in">
+                                      {/* Left side: Constituent CPL Table */}
+                                      <div className="flex-1 space-y-md">
+                                        <h4 className="font-headline-sm text-headline-sm font-bold text-slate-800">
+                                          Pemetaan dan Capaian CPL Penyusun
+                                        </h4>
+                                        <div className="overflow-x-auto rounded-lg border border-slate-100">
+                                          <table className="w-full text-left border-collapse">
+                                            <thead>
+                                              <tr className="bg-slate-50 border-b border-slate-100">
+                                                <th className="px-md py-sm font-label-xs text-label-xs text-slate-500 font-bold uppercase w-[60px]">CPL</th>
+                                                <th className="px-md py-sm font-label-xs text-label-xs text-slate-500 font-bold uppercase">Deskripsi</th>
+                                                <th className="px-md py-sm font-label-xs text-label-xs text-slate-500 font-bold uppercase text-center w-[70px]">Bobot</th>
+                                                <th className="px-md py-sm font-label-xs text-label-xs text-slate-500 font-bold uppercase text-center w-[90px]">Capaian Kelas</th>
+                                                <th className="px-md py-sm font-label-xs text-label-xs text-slate-500 font-bold uppercase text-center w-[90px]">Status</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                              {course.mappings && course.mappings.length > 0 ? (
+                                                course.mappings.map((m: any) => (
+                                                  <tr key={m.cpl_id} className="hover:bg-slate-50/40">
+                                                    <td className="px-md py-md font-body-sm text-primary font-bold">{m.cpl_code}</td>
+                                                    <td className="px-md py-md font-body-sm text-slate-600 leading-relaxed">{m.cpl_desc}</td>
+                                                    <td className="px-md py-md font-body-sm text-slate-700 text-center font-medium">{m.weight}</td>
+                                                    <td className="px-md py-md font-body-sm text-slate-900 text-center font-bold">{m.cpl_average}%</td>
+                                                    <td className="px-md py-md text-center">
+                                                      <span className={`inline-flex items-center px-sm py-[2px] rounded text-label-xs font-bold ${
+                                                        m.cpl_status === 'Tercapai' ? 'bg-tertiary/10 text-tertiary' :
+                                                        m.cpl_status === 'Tidak Tercapai' ? 'bg-error/10 text-error' :
+                                                        'bg-slate-100 text-slate-500'
+                                                      }`}>
+                                                        {m.cpl_status}
+                                                      </span>
+                                                    </td>
+                                                  </tr>
+                                                ))
+                                              ) : (
+                                                <tr>
+                                                  <td colSpan={5} className="px-md py-lg text-center text-slate-400 font-body-sm">
+                                                    Belum ada CPL yang terpetakan untuk mata kuliah ini.
+                                                  </td>
+                                                </tr>
+                                              )}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+
+                                      {/* Right side: SVG Chart */}
+                                      <div className="w-full md:w-[380px] shrink-0 border-t md:border-t-0 md:border-l border-slate-100 pt-md md:pt-0 md:pl-lg flex flex-col items-center justify-center">
+                                        <h4 className="font-label-sm text-label-sm font-bold text-slate-500 uppercase tracking-wider mb-sm">
+                                          Visualisasi Capaian
+                                        </h4>
+                                        {course.mappings && course.mappings.length >= 3 ? (
+                                          <div className="w-full">
+                                            <CourseRadarChart mappings={course.mappings} />
+                                          </div>
+                                        ) : course.mappings && course.mappings.length > 0 ? (
+                                          <div className="w-full space-y-md py-sm">
+                                            {course.mappings.map((m: any) => (
+                                              <div key={m.cpl_id} className="space-y-xs">
+                                                <div className="flex justify-between font-label-xs text-label-xs font-bold text-slate-600">
+                                                  <span>{m.cpl_code}</span>
+                                                  <span>{m.cpl_average}% / Target {m.cpl_target || cplFormTarget}%</span>
+                                                </div>
+                                                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200">
+                                                  <div 
+                                                    className="h-full bg-primary rounded-full transition-all duration-500" 
+                                                    style={{ width: `${m.cpl_average}%` }}
+                                                  />
+                                                  <div 
+                                                    className="absolute top-0 bottom-0 w-[2px] bg-cyan-500"
+                                                    style={{ left: `${m.cpl_target || cplFormTarget}%` }}
+                                                    title={`Target: ${m.cpl_target || cplFormTarget}%`}
+                                                  />
+                                                </div>
+                                              </div>
+                                            ))}
+                                            <div className="flex justify-start gap-md pt-sm border-t border-slate-100 text-[10px] text-slate-400">
+                                              <div className="flex items-center gap-xs">
+                                                <span className="w-2.5 h-2.5 bg-primary rounded" />
+                                                <span>Capaian</span>
+                                              </div>
+                                              <div className="flex items-center gap-xs">
+                                                <span className="w-[2px] h-2.5 bg-cyan-500" />
+                                                <span>Target</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="text-center text-slate-400 font-body-sm py-xl flex flex-col items-center gap-sm">
+                                            <span className="material-symbols-outlined text-[32px]">warning</span>
+                                            Tidak ada grafik (Belum ada CPL terpetakan)
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-xl py-lg border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
+              <button 
+                className="bg-primary text-on-primary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold btn-glow transition-all cursor-pointer"
+                onClick={() => setIsCourseReportModalOpen(false)}
+              >
+                Tutup Laporan
               </button>
             </div>
           </div>
