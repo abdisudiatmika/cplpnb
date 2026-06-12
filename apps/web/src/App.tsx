@@ -1937,19 +1937,17 @@ export default function App() {
     pdf.setFontSize(8.5);
     pdf.text("No", 19, currentY + 5.5, { align: "center" });
     pdf.text("CPL", 30, currentY + 5.5, { align: "center" });
-    pdf.text("Kategori", 49, currentY + 5.5);
-    pdf.text("Deskripsi Kompetensi", 80, currentY + 5.5);
-    pdf.text("Target", 152, currentY + 5.5, { align: "center" });
-    pdf.text("Nilai", 167, currentY + 5.5, { align: "center" });
-    pdf.text("Status", 184, currentY + 5.5, { align: "center" });
+    pdf.text("Kategori", 39, currentY + 5.5);
+    pdf.text("Deskripsi Kompetensi", 74, currentY + 5.5);
+    pdf.text("Nilai", 139.5, currentY + 5.5, { align: "center" });
+    pdf.text("Kategori Ketercapaian CPL", 171, currentY + 5.5, { align: "center" });
 
     // Column lines
     pdf.line(23, currentY, 23, currentY + 8);
     pdf.line(37, currentY, 37, currentY + 8);
-    pdf.line(78, currentY, 78, currentY + 8);
-    pdf.line(145, currentY, 145, currentY + 8);
-    pdf.line(160, currentY, 160, currentY + 8);
-    pdf.line(174, currentY, 174, currentY + 8);
+    pdf.line(72, currentY, 72, currentY + 8);
+    pdf.line(132, currentY, 132, currentY + 8);
+    pdf.line(147, currentY, 147, currentY + 8);
 
     currentY += 8;
 
@@ -1964,7 +1962,7 @@ export default function App() {
       currentY += 10;
     } else {
       sortedAchs.forEach((cpl, index) => {
-        const descLines = pdf.splitTextToSize(cpl.description, 64);
+        const descLines = pdf.splitTextToSize(cpl.description, 58);
         const rowHeight = Math.max(7, 3.8 * descLines.length + 3);
         
         if (currentY + rowHeight > 248) {
@@ -1979,18 +1977,16 @@ export default function App() {
           pdf.setFont("times", "bold");
           pdf.text("No", 19, currentY + 5.5, { align: "center" });
           pdf.text("CPL", 30, currentY + 5.5, { align: "center" });
-          pdf.text("Kategori", 49, currentY + 5.5);
-          pdf.text("Deskripsi Kompetensi", 80, currentY + 5.5);
-          pdf.text("Target", 152, currentY + 5.5, { align: "center" });
-          pdf.text("Nilai", 167, currentY + 5.5, { align: "center" });
-          pdf.text("Status", 184, currentY + 5.5, { align: "center" });
+          pdf.text("Kategori", 39, currentY + 5.5);
+          pdf.text("Deskripsi Kompetensi", 74, currentY + 5.5);
+          pdf.text("Nilai", 139.5, currentY + 5.5, { align: "center" });
+          pdf.text("Kategori Ketercapaian CPL", 171, currentY + 5.5, { align: "center" });
           
           pdf.line(23, currentY, 23, currentY + 8);
           pdf.line(37, currentY, 37, currentY + 8);
-          pdf.line(78, currentY, 78, currentY + 8);
-          pdf.line(145, currentY, 145, currentY + 8);
-          pdf.line(160, currentY, 160, currentY + 8);
-          pdf.line(174, currentY, 174, currentY + 8);
+          pdf.line(72, currentY, 72, currentY + 8);
+          pdf.line(132, currentY, 132, currentY + 8);
+          pdf.line(147, currentY, 147, currentY + 8);
           
           currentY += 8;
           pdf.setFont("times", "normal");
@@ -2006,33 +2002,45 @@ export default function App() {
         pdf.text(cpl.category || '-', 39, currentY + 4.8);
         
         descLines.forEach((line: string, lineIdx: number) => {
-          pdf.text(line, 80, currentY + 4.8 + (lineIdx * 3.8));
+          pdf.text(line, 74, currentY + 4.8 + (lineIdx * 3.8));
         });
         
-        pdf.text(String(cpl.target || cplFormTarget), 152, currentY + 4.8, { align: "center" });
         pdf.setFont("times", "bold");
-        pdf.text(cpl.value === 0 ? '-' : String(cpl.value), 167, currentY + 4.8, { align: "center" });
+        pdf.text(cpl.value === 0 ? '-' : String(cpl.value), 139.5, currentY + 4.8, { align: "center" });
         pdf.setFont("times", "normal");
         
-        const statusText = cpl.value === 0 ? 'Belum Diukur' : (cpl.value >= (cpl.target || cplFormTarget) ? 'Tercapai' : 'Belum Tercapai');
+        let statusText = 'Belum Diukur';
+        if (cpl.value > 0) {
+          if (cpl.value >= 85) {
+            statusText = 'Sangat kompeten (Exemplary)';
+          } else if (cpl.value >= 75) {
+            statusText = 'Kompeten (Competent)';
+          } else if (cpl.value >= 60) {
+            statusText = 'Berkembang (Developing)';
+          } else {
+            statusText = 'Tidak memuaskan (Unsatisfactory)';
+          }
+        }
+        
         pdf.setFont("times", "bold");
-        if (statusText === 'Tercapai') {
+        if (statusText.includes('Sangat kompeten') || statusText.includes('Kompeten')) {
           pdf.setTextColor(20, 120, 60);
-        } else if (statusText === 'Belum Tercapai') {
+        } else if (statusText.includes('Berkembang')) {
+          pdf.setTextColor(230, 120, 0);
+        } else if (statusText.includes('Tidak memuaskan')) {
           pdf.setTextColor(200, 30, 30);
         } else {
           pdf.setTextColor(100, 100, 100);
         }
-        pdf.text(statusText === 'Belum Tercapai' ? 'Tdk Tercapai' : statusText, 184, currentY + 4.8, { align: "center" });
+        pdf.text(statusText, 171, currentY + 4.8, { align: "center" });
         pdf.setTextColor(0, 0, 0);
         pdf.setFont("times", "normal");
 
         pdf.line(23, currentY, 23, currentY + rowHeight);
         pdf.line(37, currentY, 37, currentY + rowHeight);
-        pdf.line(78, currentY, 78, currentY + rowHeight);
-        pdf.line(145, currentY, 145, currentY + rowHeight);
-        pdf.line(160, currentY, 160, currentY + rowHeight);
-        pdf.line(174, currentY, 174, currentY + rowHeight);
+        pdf.line(72, currentY, 72, currentY + rowHeight);
+        pdf.line(132, currentY, 132, currentY + rowHeight);
+        pdf.line(147, currentY, 147, currentY + rowHeight);
 
         currentY += rowHeight;
       });
@@ -2178,21 +2186,19 @@ export default function App() {
     
     pdf.setFont("times", "bold");
     pdf.setFontSize(8.5);
-    pdf.text("No", 20, currentY + 5.5, { align: "center" });
-    pdf.text("CPL", 35, currentY + 5.5, { align: "center" });
-    pdf.text("Deskripsi Kompetensi CPL", 48, currentY + 5.5);
-    pdf.text("Bobot", 137.5, currentY + 5.5, { align: "center" });
-    pdf.text("Rerata (%)", 155, currentY + 5.5, { align: "center" });
-    pdf.text("Target (%)", 172.5, currentY + 5.5, { align: "center" });
-    pdf.text("Status", 187.5, currentY + 5.5, { align: "center" });
+    pdf.text("No", 19, currentY + 5.5, { align: "center" });
+    pdf.text("CPL", 30.5, currentY + 5.5, { align: "center" });
+    pdf.text("Deskripsi Kompetensi CPL", 40, currentY + 5.5);
+    pdf.text("Bobot", 124, currentY + 5.5, { align: "center" });
+    pdf.text("Rerata (%)", 137.5, currentY + 5.5, { align: "center" });
+    pdf.text("Kategori Ketercapaian CPL", 170, currentY + 5.5, { align: "center" });
 
     // Column borders
-    pdf.line(25, currentY, 25, currentY + 8);
-    pdf.line(45, currentY, 45, currentY + 8);
+    pdf.line(23, currentY, 23, currentY + 8);
+    pdf.line(38, currentY, 38, currentY + 8);
+    pdf.line(118, currentY, 118, currentY + 8);
     pdf.line(130, currentY, 130, currentY + 8);
     pdf.line(145, currentY, 145, currentY + 8);
-    pdf.line(165, currentY, 165, currentY + 8);
-    pdf.line(180, currentY, 180, currentY + 8);
 
     currentY += 8;
     pdf.setFont("times", "normal");
@@ -2204,7 +2210,7 @@ export default function App() {
       currentY += 10;
     } else {
       mappings.forEach((map: any, index: number) => {
-        const descLines = pdf.splitTextToSize(map.cpl_desc || '-', 80);
+        const descLines = pdf.splitTextToSize(map.cpl_desc || '-', 76);
         const rowHeight = Math.max(7, 3.8 * descLines.length + 3);
 
         if (currentY + rowHeight > 248) {
@@ -2217,60 +2223,58 @@ export default function App() {
           pdf.rect(15, currentY, 180, 8);
           
           pdf.setFont("times", "bold");
-          pdf.text("No", 20, currentY + 5.5, { align: "center" });
-          pdf.text("CPL", 35, currentY + 5.5, { align: "center" });
-          pdf.text("Deskripsi Kompetensi CPL", 48, currentY + 5.5);
-          pdf.text("Bobot", 137.5, currentY + 5.5, { align: "center" });
-          pdf.text("Rerata (%)", 155, currentY + 5.5, { align: "center" });
-          pdf.text("Target (%)", 172.5, currentY + 5.5, { align: "center" });
-          pdf.text("Status", 187.5, currentY + 5.5, { align: "center" });
+          pdf.text("No", 19, currentY + 5.5, { align: "center" });
+          pdf.text("CPL", 30.5, currentY + 5.5, { align: "center" });
+          pdf.text("Deskripsi Kompetensi CPL", 40, currentY + 5.5);
+          pdf.text("Bobot", 124, currentY + 5.5, { align: "center" });
+          pdf.text("Rerata (%)", 137.5, currentY + 5.5, { align: "center" });
+          pdf.text("Kategori Ketercapaian CPL", 170, currentY + 5.5, { align: "center" });
 
-          pdf.line(25, currentY, 25, currentY + 8);
-          pdf.line(45, currentY, 45, currentY + 8);
+          pdf.line(23, currentY, 23, currentY + 8);
+          pdf.line(38, currentY, 38, currentY + 8);
+          pdf.line(118, currentY, 118, currentY + 8);
           pdf.line(130, currentY, 130, currentY + 8);
           pdf.line(145, currentY, 145, currentY + 8);
-          pdf.line(165, currentY, 165, currentY + 8);
-          pdf.line(180, currentY, 180, currentY + 8);
 
           currentY += 8;
           pdf.setFont("times", "normal");
         }
 
         pdf.rect(15, currentY, 180, rowHeight);
-        pdf.text(String(index + 1), 20, currentY + 4.8, { align: "center" });
+        pdf.text(String(index + 1), 19, currentY + 4.8, { align: "center" });
         pdf.setFont("times", "bold");
-        pdf.text(map.cpl_code || '-', 35, currentY + 4.8, { align: "center" });
+        pdf.text(map.cpl_code || '-', 30.5, currentY + 4.8, { align: "center" });
         pdf.setFont("times", "normal");
 
         descLines.forEach((line: string, lineIdx: number) => {
-          pdf.text(line, 48, currentY + 4.8 + (lineIdx * 3.8));
+          pdf.text(line, 40, currentY + 4.8 + (lineIdx * 3.8));
         });
 
-        pdf.text(String(map.weight || '-'), 137.5, currentY + 4.8, { align: "center" });
+        pdf.text(String(map.weight || '-'), 124, currentY + 4.8, { align: "center" });
         pdf.setFont("times", "bold");
-        pdf.text(String(map.cpl_average || '0'), 155, currentY + 4.8, { align: "center" });
+        pdf.text(String(map.cpl_average || '0'), 137.5, currentY + 4.8, { align: "center" });
         pdf.setFont("times", "normal");
-        pdf.text(String(map.cpl_target || cplFormTarget), 172.5, currentY + 4.8, { align: "center" });
 
         const statusText = map.cpl_status || 'Belum Terukur';
         pdf.setFont("times", "bold");
-        if (statusText === 'Tercapai') {
+        if (statusText.includes('Sangat kompeten') || statusText.includes('Kompeten')) {
           pdf.setTextColor(20, 120, 60);
-        } else if (statusText === 'Tidak Tercapai') {
+        } else if (statusText.includes('Berkembang')) {
+          pdf.setTextColor(230, 120, 0);
+        } else if (statusText.includes('Tidak memuaskan')) {
           pdf.setTextColor(200, 30, 30);
         } else {
           pdf.setTextColor(100, 100, 100);
         }
-        pdf.text(statusText === 'Tidak Tercapai' ? 'Tdk Tercapai' : statusText, 187.5, currentY + 4.8, { align: "center" });
+        pdf.text(statusText, 170, currentY + 4.8, { align: "center" });
         pdf.setTextColor(0, 0, 0);
         pdf.setFont("times", "normal");
 
-        pdf.line(25, currentY, 25, currentY + rowHeight);
-        pdf.line(45, currentY, 45, currentY + rowHeight);
+        pdf.line(23, currentY, 23, currentY + rowHeight);
+        pdf.line(38, currentY, 38, currentY + rowHeight);
+        pdf.line(118, currentY, 118, currentY + rowHeight);
         pdf.line(130, currentY, 130, currentY + rowHeight);
         pdf.line(145, currentY, 145, currentY + rowHeight);
-        pdf.line(165, currentY, 165, currentY + rowHeight);
-        pdf.line(180, currentY, 180, currentY + rowHeight);
 
         currentY += rowHeight;
       });
@@ -2323,17 +2327,6 @@ export default function App() {
           pdf.line(cx, cy, outer.x, outer.y);
         }
 
-        // Target shape (Cyan line)
-        pdf.setLineWidth(0.25);
-        pdf.setDrawColor(6, 182, 212);
-        for (let i = 0; i < N; i++) {
-          const t1 = mappings[i].cpl_target || cplFormTarget;
-          const t2 = mappings[(i + 1) % N].cpl_target || cplFormTarget;
-          const pt1 = getPt(radius * (t1 / 100), angles[i]);
-          const pt2 = getPt(radius * (t2 / 100), angles[(i + 1) % N]);
-          pdf.line(pt1.x, pt1.y, pt2.x, pt2.y);
-        }
-
         // Realisation shape (Indigo line)
         pdf.setLineWidth(0.5);
         pdf.setDrawColor(99, 102, 241);
@@ -2377,15 +2370,10 @@ export default function App() {
         // Draw legend
         pdf.setFont("times", "normal");
         pdf.setFontSize(7.5);
-        pdf.setDrawColor(6, 182, 212);
-        pdf.setLineWidth(0.4);
-        pdf.line(15, cy + 26, 22, cy + 26);
-        pdf.text("Target CPL", 24, cy + 27);
-
         pdf.setDrawColor(99, 102, 241);
         pdf.setLineWidth(0.8);
-        pdf.line(55, cy + 26, 62, cy + 26);
-        pdf.text("Capaian Rata-rata MK", 64, cy + 27);
+        pdf.line(15, cy + 26, 22, cy + 26);
+        pdf.text("Capaian Rata-rata MK", 24, cy + 27);
 
         pdf.setDrawColor(0, 0, 0); // reset
 
@@ -2397,18 +2385,13 @@ export default function App() {
 
         mappings.forEach((map: any, i: number) => {
           const barY = currentY + 3 + (i * 12);
-          pdf.text(`${map.cpl_code}: ${map.cpl_average}% / Target ${map.cpl_target || cplFormTarget}%`, 15, barY);
+          pdf.text(`${map.cpl_code}: ${map.cpl_average}%`, 15, barY);
           
           pdf.setFillColor(235, 235, 235);
           pdf.rect(15, barY + 1.5, 120, 3.5, 'F');
           
           pdf.setFillColor(99, 102, 241);
-          pdf.rect(15, barY + 1.5, 120 * (map.cpl_average / 100), 3.5, 'F');
-
-          pdf.setDrawColor(6, 182, 212);
-          pdf.setLineWidth(0.4);
-          const tx = 15 + 120 * ((map.cpl_target || cplFormTarget) / 100);
-          pdf.line(tx, barY + 0.5, tx, barY + 5.5);
+          pdf.rect(15, barY + 1.5, 120 * ((map.cpl_average || 0) / 100), 3.5, 'F');
         });
 
         // Draw legend
@@ -2418,11 +2401,6 @@ export default function App() {
         pdf.setFillColor(99, 102, 241);
         pdf.rect(15, legendY, 5, 2.5, 'F');
         pdf.text("Capaian Rata-rata MK", 22, legendY + 2);
-
-        pdf.setDrawColor(6, 182, 212);
-        pdf.setLineWidth(0.4);
-        pdf.line(65, legendY, 65, legendY + 2.5);
-        pdf.text("Target CPL", 68, legendY + 2);
 
         pdf.setDrawColor(0, 0, 0); // reset
 
@@ -2601,7 +2579,7 @@ export default function App() {
         const list = await apiCall('/courses');
         setCourses(list);
       } else if (modalType === 'cpl') {
-        if (!cplFormCode.trim() || !cplFormDesc.trim() || !cplFormCat || cplFormTarget === undefined) {
+        if (!cplFormCode.trim() || !cplFormDesc.trim() || !cplFormCat) {
           setModalError('Harap isi semua kolom.');
           return;
         }
@@ -2610,7 +2588,7 @@ export default function App() {
             code: cplFormCode,
             description: cplFormDesc,
             category: cplFormCat,
-            targetValue: cplFormTarget,
+            targetValue: 75,
           });
           showToast('CPL berhasil ditambahkan.');
         } else {
@@ -2618,7 +2596,7 @@ export default function App() {
             code: cplFormCode,
             description: cplFormDesc,
             category: cplFormCat,
-            targetValue: cplFormTarget,
+            targetValue: 75,
           });
           showToast('CPL berhasil diperbarui.');
         }
@@ -2944,7 +2922,7 @@ export default function App() {
     const measured = cplAverages.filter(c => c.status !== 'Belum Diukur');
     return measured.length > 0 ? measured : cplAverages;
   }, [cplAverages]);
-  const achievedCpls = measuredCpls.filter(c => c.status === 'Tercapai');
+  const achievedCpls = measuredCpls.filter(c => c.value >= 75);
   const cplTerpenuhiPct = measuredCpls.length > 0 ? Math.round((achievedCpls.length / measuredCpls.length) * 100) : 0;
   const averageCplValue = measuredCpls.length > 0 ? (measuredCpls.reduce((acc, curr) => acc + curr.value, 0) / measuredCpls.length).toFixed(1) : '0.0';
 
@@ -3549,7 +3527,7 @@ export default function App() {
                   <span className="material-symbols-outlined text-3xl">verified_user</span>
                 </div>
                 <div>
-                  <p className="font-label-sm text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">CPL Terpenuhi</p>
+                  <p className="font-label-sm text-label-sm text-on-surface-variant mb-1 uppercase tracking-wider">CPL Kompeten</p>
                   <p className="font-display-2xl text-display-2xl font-bold text-on-surface">{cplTerpenuhiPct}%</p>
                 </div>
               </div>
@@ -3568,8 +3546,8 @@ export default function App() {
             {/* Status Kelulusan Donut Chart (Moved to top) */}
             <section className="glass-panel p-lg rounded-3xl flex flex-col md:flex-row items-center justify-between gap-xl shadow-md">
               <div className="w-full md:w-auto text-left">
-                <h4 className="font-headline-lg text-headline-lg font-bold text-on-surface mb-xs">Status Kelulusan CPL</h4>
-                <p className="text-on-surface-variant text-body-sm">Persentase capaian CPL yang memenuhi target kurikulum.</p>
+                <h4 className="font-headline-lg text-headline-lg font-bold text-on-surface mb-xs">Ketercapaian CPL (Skor &gt;= 75)</h4>
+                <p className="text-on-surface-variant text-body-sm">Persentase capaian CPL dengan predikat Kompeten atau Sangat Kompeten.</p>
               </div>
               
               <div className="flex flex-col sm:flex-row items-center gap-xl w-full md:w-auto justify-end">
@@ -3591,7 +3569,7 @@ export default function App() {
                   </svg>
                   <div className="absolute flex flex-col items-center">
                     <span className="font-display-xl text-display-xl font-bold text-on-surface">{cplTerpenuhiPct}%</span>
-                    <span className="font-label-2xs text-label-2xs text-on-surface-variant">Tercapai</span>
+                    <span className="font-label-2xs text-label-2xs text-on-surface-variant">Kompeten</span>
                   </div>
                 </div>
 
@@ -3599,14 +3577,14 @@ export default function App() {
                   <div className="flex justify-between items-center p-md bg-white/5 rounded-xl">
                     <div className="flex items-center gap-md">
                       <span className="w-3 h-3 rounded-full bg-primary"></span>
-                      <span className="font-label-sm text-label-sm text-on-surface">Tercapai</span>
+                      <span className="font-label-sm text-label-sm text-on-surface">Kompeten</span>
                     </div>
                     <span className="font-label-sm font-bold text-tertiary">{achievedCpls.length} CPL</span>
                   </div>
                   <div className="flex justify-between items-center p-md bg-white/5 rounded-xl">
                     <div className="flex items-center gap-md">
                       <span className="w-3 h-3 rounded-full bg-error"></span>
-                      <span className="font-label-sm text-label-sm text-on-surface">Tidak Tercapai</span>
+                      <span className="font-label-sm text-label-sm text-on-surface">Belum Kompeten</span>
                     </div>
                     <span className="font-label-sm font-bold text-error">{measuredCpls.length - achievedCpls.length} CPL</span>
                   </div>
@@ -4193,10 +4171,12 @@ export default function App() {
                                   <td className="px-lg py-lg text-body-sm text-on-surface-variant max-w-md">{cpl.description}</td>
                                   <td className="px-lg py-lg text-center font-bold text-headline-lg">{cpl.value === 0 ? '—' : cpl.value}</td>
                                   <td className="px-lg py-lg">
-                                    <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold ${
-                                      cpl.status === 'Tercapai' ? 'bg-tertiary/20 text-tertiary' :
-                                      cpl.status === 'Tidak Tercapai' ? 'bg-error/20 text-error' :
-                                      'bg-slate-100 text-slate-600 border border-slate-200'
+                                    <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold border ${
+                                      cpl.status.includes('Sangat kompeten') ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                      cpl.status.includes('Kompeten') ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                                      cpl.status.includes('Berkembang') ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                                      cpl.status.includes('Tidak memuaskan') ? 'bg-error/20 text-error border-error/30' :
+                                      'bg-slate-500/20 text-slate-400 border-slate-500/30'
                                     }`}>
                                       {cpl.status}
                                     </span>
@@ -4601,7 +4581,7 @@ export default function App() {
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Data Capaian Pembelajaran Lulusan (CPL)</h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">Kelola standar CPL dan nilai target kelulusan.</p>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">Kelola standar CPL.</p>
               </div>
               <div className="flex items-center gap-md">
                 <button 
@@ -4647,7 +4627,6 @@ export default function App() {
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kode CPL</th>
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kategori</th>
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Deskripsi</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Target Nilai</th>
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                       </tr>
                     </thead>
@@ -4663,7 +4642,6 @@ export default function App() {
                               </span>
                             </td>
                             <td className="px-lg py-md font-body-sm text-on-surface-variant max-w-sm">{cpl.description}</td>
-                            <td className="px-lg py-md font-body-sm text-center font-bold text-tertiary">{cpl.targetValue}</td>
                             <td className="px-lg py-md">
                               <div className="flex items-center justify-center gap-sm">
                                 <button 
@@ -4684,7 +4662,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data CPL.</td>
+                          <td colSpan={5} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data CPL.</td>
                         </tr>
                       )}
                     </tbody>
@@ -5143,7 +5121,7 @@ export default function App() {
                 {/* Charts */}
                 <div className="col-span-12 flex flex-col gap-lg">
                   {/* Bar Chart (Top) */}
-                  <BarChart measuredCpls={measuredCpls} cplFormTarget={cplFormTarget} />
+                  <BarChart measuredCpls={measuredCpls} />
 
                   {/* Radar Chart (Bottom) */}
                   <div className="glass-panel rounded-xl p-lg flex flex-col justify-between shadow-md">
@@ -5181,7 +5159,7 @@ export default function App() {
                       <tbody className="divide-y divide-white/5">
                         {cplAverages.length > 0 ? (
                           cplAverages.map((cpl) => {
-                            const status = cpl.value === 0 ? 'Belum Diukur' : (cpl.value >= cplFormTarget ? 'Tercapai' : 'Tidak Tercapai');
+                            const status = cpl.status || 'Belum Diukur';
                             const isExpanded = expandedAvgCplId === cpl.id;
                             return (
                               <React.Fragment key={cpl.id}>
@@ -5220,10 +5198,12 @@ export default function App() {
                                   <td className="px-lg py-lg text-body-sm text-on-surface-variant max-w-md">{cpl.description}</td>
                                   <td className="px-lg py-lg text-center font-bold text-headline-lg">{cpl.value === 0 ? '—' : cpl.value}</td>
                                   <td className="px-lg py-lg text-center">
-                                    <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold ${
-                                      status === 'Tercapai' ? 'bg-tertiary/20 text-tertiary' :
-                                      status === 'Tidak Tercapai' ? 'bg-error/20 text-error' :
-                                      'bg-slate-100 text-slate-600 border border-slate-200'
+                                    <span className={`inline-flex items-center gap-1.5 px-sm py-1 rounded-md text-label-xs font-bold border ${
+                                      status.includes('Sangat kompeten') ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                      status.includes('Kompeten') ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                                      status.includes('Berkembang') ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                                      status.includes('Tidak memuaskan') ? 'bg-error/20 text-error border-error/30' :
+                                      'bg-slate-500/20 text-slate-400 border-slate-500/30'
                                     }`}>
                                       {status}
                                     </span>
@@ -5302,21 +5282,31 @@ export default function App() {
                 </section>
 
                 {/* Kesimpulan Ketercapaian */}
-                <section className="col-span-12 grid grid-cols-1 sm:grid-cols-3 gap-md">
-                  <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-tertiary">
-                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">CPL Tercapai</p>
-                    <p className="font-display-3xl font-bold text-tertiary">{cplAverages.filter(c => c.value >= cplFormTarget).length}</p>
-                    <p className="font-body-sm text-on-surface-variant mt-sm">Memenuhi target ≥ {cplFormTarget}%</p>
+                <section className="col-span-12 grid grid-cols-2 lg:grid-cols-5 gap-md">
+                  <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-emerald-500">
+                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Sangat Kompeten</p>
+                    <p className="font-display-3xl font-bold text-emerald-500">{cplAverages.filter(c => c.value >= 85).length}</p>
+                    <p className="font-body-sm text-on-surface-variant mt-sm">Skor 85 - 100 (Exemplary)</p>
                   </div>
-                  <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-error">
-                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Belum Tercapai</p>
-                    <p className="font-display-3xl font-bold text-error">{cplAverages.filter(c => c.value > 0 && c.value < cplFormTarget).length}</p>
-                    <p className="font-body-sm text-on-surface-variant mt-sm">Dibawah target {cplFormTarget}%</p>
+                  <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-blue-500">
+                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Kompeten</p>
+                    <p className="font-display-3xl font-bold text-blue-500">{cplAverages.filter(c => c.value >= 75 && c.value < 85).length}</p>
+                    <p className="font-body-sm text-on-surface-variant mt-sm">Skor 75 - 84.99 (Competent)</p>
+                  </div>
+                  <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-orange-500">
+                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Berkembang</p>
+                    <p className="font-display-3xl font-bold text-orange-500">{cplAverages.filter(c => c.value >= 60 && c.value < 75).length}</p>
+                    <p className="font-body-sm text-on-surface-variant mt-sm">Skor 60 - 74.99 (Developing)</p>
+                  </div>
+                  <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-red-500">
+                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Tidak Memuaskan</p>
+                    <p className="font-display-3xl font-bold text-red-500">{cplAverages.filter(c => c.value > 0 && c.value < 60).length}</p>
+                    <p className="font-body-sm text-on-surface-variant mt-sm">Skor 0 - 59.99 (Unsatisfactory)</p>
                   </div>
                   <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-outline-variant">
-                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Belum Terukur</p>
+                    <p className="font-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Belum Diukur</p>
                     <p className="font-display-3xl font-bold text-outline">{cplAverages.filter(c => c.value === 0).length}</p>
-                    <p className="font-body-sm text-on-surface-variant mt-sm">Nilai masih 0%</p>
+                    <p className="font-body-sm text-on-surface-variant mt-sm">Belum ada nilai</p>
                   </div>
                 </section>
               </div>
@@ -5331,7 +5321,6 @@ export default function App() {
             <CplPrintTemplate
               cplMatrixAngkatan={cplMatrixAngkatan}
               cplMatrixKelas={cplMatrixKelas}
-              cplFormTarget={cplFormTarget}
               cplAverages={cplAverages}
               cplMatrixAverageIpk={cplMatrixAverageIpk}
             />
@@ -5623,15 +5612,6 @@ export default function App() {
                       placeholder="Deskripsi Capaian Kompetensi..."
                       value={cplFormDesc}
                       onChange={(e) => setCplFormDesc(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-sm">
-                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Target Nilai Kelulusan</label>
-                    <input 
-                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
-                      type="number"
-                      value={cplFormTarget}
-                      onChange={(e) => setCplFormTarget(Number(e.target.value))}
                     />
                   </div>
                 </>
@@ -5980,10 +5960,12 @@ export default function App() {
                                       course.mappings.map((m: any) => (
                                         <span 
                                           key={m.cpl_id} 
-                                          title={m.cpl_desc}
+                                          title={`${m.cpl_code}: ${m.cpl_status}`}
                                           className={`inline-flex items-center px-sm py-[2px] rounded text-[10px] font-bold ${
-                                            m.cpl_status === 'Tercapai' ? 'bg-tertiary/10 text-tertiary' :
-                                            m.cpl_status === 'Tidak Tercapai' ? 'bg-error/10 text-error' :
+                                            (m.cpl_status || '').includes('Sangat kompeten') ? 'bg-emerald-500/10 text-emerald-600' :
+                                            (m.cpl_status || '').includes('Kompeten') ? 'bg-blue-500/10 text-blue-600' :
+                                            (m.cpl_status || '').includes('Berkembang') ? 'bg-amber-500/10 text-amber-600' :
+                                            (m.cpl_status || '').includes('Tidak memuaskan') ? 'bg-error/10 text-error' :
                                             'bg-slate-100 text-slate-600'
                                           }`}
                                         >
@@ -6048,8 +6030,10 @@ export default function App() {
                                                     <td className="px-md py-md font-body-sm text-slate-900 text-center font-bold">{m.cpl_average}%</td>
                                                     <td className="px-md py-md text-center">
                                                       <span className={`inline-flex items-center px-sm py-[2px] rounded text-label-xs font-bold ${
-                                                        m.cpl_status === 'Tercapai' ? 'bg-tertiary/10 text-tertiary' :
-                                                        m.cpl_status === 'Tidak Tercapai' ? 'bg-error/10 text-error' :
+                                                        (m.cpl_status || '').includes('Sangat kompeten') ? 'bg-emerald-500/10 text-emerald-600' :
+                                                        (m.cpl_status || '').includes('Kompeten') ? 'bg-blue-500/10 text-blue-600' :
+                                                        (m.cpl_status || '').includes('Berkembang') ? 'bg-amber-500/10 text-amber-600' :
+                                                        (m.cpl_status || '').includes('Tidak memuaskan') ? 'bg-error/10 text-error' :
                                                         'bg-slate-100 text-slate-500'
                                                       }`}>
                                                         {m.cpl_status}

@@ -36,9 +36,13 @@ class CplController extends Controller
             'code' => 'required|string|max:50',
             'description' => 'required|string',
             'category' => 'required|in:Sikap,Pengetahuan,Keterampilan Umum,Keterampilan Khusus',
-            'target_value' => 'required|integer|min:0|max:100',
+            'target_value' => 'nullable|integer|min:0|max:100',
             'department_id' => 'required|exists:departments,id',
         ]);
+
+        if (!isset($validated['target_value']) || $validated['target_value'] === null) {
+            $validated['target_value'] = 75;
+        }
 
         $validated['id'] = (string) Str::uuid();
 
@@ -66,9 +70,13 @@ class CplController extends Controller
             'code' => 'sometimes|required|string|max:50',
             'description' => 'sometimes|required|string',
             'category' => 'sometimes|required|in:Sikap,Pengetahuan,Keterampilan Umum,Keterampilan Khusus',
-            'target_value' => 'sometimes|required|integer|min:0|max:100',
+            'target_value' => 'sometimes|nullable|integer|min:0|max:100',
             'department_id' => 'sometimes|required|exists:departments,id',
         ]);
+
+        if (array_key_exists('target_value', $validated) && ($validated['target_value'] === null)) {
+            $validated['target_value'] = 75;
+        }
 
         $cpl->update($validated);
         return response()->json($cpl->load('department'));
@@ -302,12 +310,21 @@ class CplController extends Controller
                     'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
-                    'target' => $cpl->target_value ?? 70,
+                    'target' => $cpl->target_value ?? 75,
                 ];
             } else {
                 $value = round($totalCplSum / $studentsMeasured);
-                $target = $cpl->target_value ?? 70;
-                $status = $value >= $target ? 'Tercapai' : 'Tidak Tercapai';
+                $target = $cpl->target_value ?? 75;
+                
+                if ($value >= 85) {
+                    $status = 'Sangat kompeten (Exemplary)';
+                } else if ($value >= 75) {
+                    $status = 'Kompeten (Competent)';
+                } else if ($value >= 60) {
+                    $status = 'Berkembang (Developing)';
+                } else {
+                    $status = 'Tidak memuaskan (Unsatisfactory)';
+                }
                 
                 $averages[] = [
                     'id' => $cpl->id,
@@ -450,7 +467,7 @@ class CplController extends Controller
                     'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
-                    'target' => $cpl->target_value ?? 70,
+                    'target' => $cpl->target_value ?? 75,
                 ];
                 continue;
             }
@@ -486,12 +503,21 @@ class CplController extends Controller
                     'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
-                    'target' => $cpl->target_value ?? 70,
+                    'target' => $cpl->target_value ?? 75,
                 ];
             } else {
                 $value = round($totalScoreWeight / $totalWeight);
-                $target = $cpl->target_value ?? 70;
-                $status = $value >= $target ? 'Tercapai' : 'Tidak Tercapai';
+                $target = $cpl->target_value ?? 75;
+                
+                if ($value >= 85) {
+                    $status = 'Sangat kompeten (Exemplary)';
+                } else if ($value >= 75) {
+                    $status = 'Kompeten (Competent)';
+                } else if ($value >= 60) {
+                    $status = 'Berkembang (Developing)';
+                } else {
+                    $status = 'Tidak memuaskan (Unsatisfactory)';
+                }
 
                 $achievements[] = [
                     'id' => $cpl->id,

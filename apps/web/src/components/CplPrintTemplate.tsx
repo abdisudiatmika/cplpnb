@@ -3,7 +3,6 @@ import React from 'react';
 interface CplPrintTemplateProps {
   cplMatrixAngkatan: string;
   cplMatrixKelas: string;
-  cplFormTarget: number;
   cplAverages: Array<{
     id: string;
     code: string;
@@ -17,7 +16,6 @@ interface CplPrintTemplateProps {
 export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   cplMatrixAngkatan,
   cplMatrixKelas,
-  cplFormTarget,
   cplAverages,
   cplMatrixAverageIpk,
 }) => {
@@ -42,12 +40,12 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
           TABEL KETERCAPAIAN CAPAIAN PEMBELAJARAN LULUSAN (CPL)
         </h1>
         <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', color: '#000000' }}>
-          Angkatan {cplMatrixAngkatan || 'Semua'} | {cplMatrixKelas || 'Semua Kelas'} | Target Ketercapaian &gt;= {cplFormTarget}%
+          Angkatan {cplMatrixAngkatan || 'Semua'} | {cplMatrixKelas || 'Semua Kelas'}
         </h2>
       </div>
 
       <p style={{ fontSize: '12px', margin: '0 0 25px 0', textAlign: 'justify', color: '#111111' }}>
-        Dokumen ini disusun berdasarkan tampilan dashboard Matriks Capaian CPL Kelas. Status "Tercapai" diberikan untuk CPL dengan nilai rata-rata minimal {cplFormTarget}. Apabila nilai belum tersedia pada dashboard, status dicatat sebagai "Belum Terukur".
+        Dokumen ini disusun berdasarkan tampilan dashboard Matriks Capaian CPL Kelas. Ketercapaian CPL dikelompokkan ke dalam kategori: Sangat kompeten (Exemplary: 85 - 100), Kompeten (Competent: 75 - 84.99), Berkembang (Developing: 60 - 74.99), dan Tidak memuaskan (Unsatisfactory: 0 - 59.99). Apabila nilai belum tersedia pada dashboard, status dicatat sebagai "Belum Diukur".
       </p>
 
       {/* Ringkasan Ketercapaian */}
@@ -58,8 +56,8 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', color: '#000000' }}>
           <thead>
             <tr style={{ backgroundColor: '#f2f2f2' }}>
-              <th style={{ border: '1px solid #000000', padding: '8px 12px', textAlign: 'left', fontWeight: 'bold', width: '50%' }}>Indikator</th>
-              <th style={{ border: '1px solid #000000', padding: '8px 12px', textAlign: 'left', fontWeight: 'bold', width: '50%' }}>Nilai/Keterangan</th>
+              <th style={{ border: '1px solid #000000', padding: '8px 12px', textAlign: 'left', fontWeight: 'bold', width: '50%' }}>Kategori Ketercapaian</th>
+              <th style={{ border: '1px solid #000000', padding: '8px 12px', textAlign: 'left', fontWeight: 'bold', width: '50%' }}>Jumlah CPL / Nilai</th>
             </tr>
           </thead>
           <tbody>
@@ -68,27 +66,33 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
               <td style={{ border: '1px solid #000000', padding: '8px 12px', fontWeight: 'bold' }}>{cplAverages.length}</td>
             </tr>
             <tr>
-              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>CPL Tercapai</td>
-              <td style={{ border: '1px solid #000000', padding: '8px 12px', fontWeight: 'bold' }}>
-                {cplAverages.filter(c => c.value >= cplFormTarget).length}
+              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>Sangat kompeten (Exemplary)</td>
+              <td style={{ border: '1px solid #000000', padding: '8px 12px', fontWeight: 'bold', color: '#047857' }}>
+                {cplAverages.filter(c => c.value >= 85).length}
               </td>
             </tr>
             <tr>
-              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>CPL Belum Tercapai</td>
-              <td style={{ border: '1px solid #000000', padding: '8px 12px', fontWeight: 'bold' }}>
-                {cplAverages.filter(c => c.value > 0 && c.value < cplFormTarget).length}
+              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>Kompeten (Competent)</td>
+              <td style={{ border: '1px solid #000000', padding: '8px 12px', fontWeight: 'bold', color: '#1d4ed8' }}>
+                {cplAverages.filter(c => c.value >= 75 && c.value < 85).length}
               </td>
             </tr>
             <tr>
-              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>CPL Belum Terukur</td>
+              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>Berkembang (Developing)</td>
+              <td style={{ border: '1px solid #000000', padding: '8px 12px', fontWeight: 'bold', color: '#b45309' }}>
+                {cplAverages.filter(c => c.value >= 60 && c.value < 75).length}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>Tidak memuaskan (Unsatisfactory)</td>
+              <td style={{ border: '1px solid #000000', padding: '8px 12px', fontWeight: 'bold', color: '#b91c1c' }}>
+                {cplAverages.filter(c => c.value > 0 && c.value < 60).length}
+              </td>
+            </tr>
+            <tr>
+              <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>Belum Diukur</td>
               <td style={{ border: '1px solid #000000', padding: '8px 12px' }}>
-                {(() => {
-                  const unmeasured = [...cplAverages]
-                    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }))
-                    .filter(c => c.value === 0)
-                    .map(c => c.code);
-                  return unmeasured.length > 0 ? `${unmeasured.length} (${unmeasured.join(', ')})` : '0';
-                })()}
+                {cplAverages.filter(c => c.value === 0).length}
               </td>
             </tr>
             <tr>
@@ -110,12 +114,11 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
           <thead>
             <tr style={{ backgroundColor: '#f2f2f2' }}>
               <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '5%' }}>No.</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'left', fontWeight: 'bold', width: '20%' }}>Kategori</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'left', fontWeight: 'bold', width: '20%' }}>Kategori CPL</th>
               <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>CPL</th>
               <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '42%' }}>Deskripsi Kompetensi</th>
               <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>Rata-rata Nilai</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Status</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'left', fontWeight: 'bold', width: '7%' }}>Keterangan</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'center', fontWeight: 'bold', width: '17%' }}>Kategori Ketercapaian CPL</th>
             </tr>
           </thead>
           <tbody>
@@ -124,7 +127,23 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
                 a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
               );
               return sorted.map((cpl, index) => {
-                const status = cpl.value === 0 ? 'Belum Terukur' : (cpl.value >= cplFormTarget ? 'Tercapai' : 'Belum Tercapai');
+                let status = 'Belum Diukur';
+                let keterangan = 'Nilai belum tersedia';
+                if (cpl.value > 0) {
+                  if (cpl.value >= 85) {
+                    status = 'Sangat kompeten (Exemplary)';
+                    keterangan = 'Skor 85 - 100';
+                  } else if (cpl.value >= 75) {
+                    status = 'Kompeten (Competent)';
+                    keterangan = 'Skor 75 - 84.99';
+                  } else if (cpl.value >= 60) {
+                    status = 'Berkembang (Developing)';
+                    keterangan = 'Skor 60 - 74.99';
+                  } else {
+                    status = 'Tidak memuaskan (Unsatisfactory)';
+                    keterangan = 'Skor 0 - 59.99';
+                  }
+                }
                 const rowBg = index % 2 === 1 ? '#fafafa' : '#ffffff';
                 return (
                   <tr key={cpl.id} style={{ backgroundColor: rowBg }}>
@@ -137,11 +156,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
                     </td>
                     <td style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'center', fontWeight: 'bold' }}>
                       {status}
-                    </td>
-                    <td style={{ border: '1px solid #000000', padding: '6px 6px', fontSize: '9px' }}>
-                      {status === 'Tercapai' ? `Memenuhi target >= ${cplFormTarget}%` : 
-                       status === 'Belum Tercapai' ? `Di bawah target < ${cplFormTarget}%` : 
-                       'Nilai belum tersedia/belum diukur pada dashboard'}
+                      <span style={{ display: 'block', fontSize: '9px', fontWeight: 'normal', color: '#666666' }}>{keterangan}</span>
                     </td>
                   </tr>
                 );
@@ -163,42 +178,26 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
               a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
             );
             
-            // 1. CPL status examples
-            const tercapaiCpls = sorted.filter(c => c.value >= cplFormTarget);
-            const s1Cpl = sorted.find(c => c.code === 'S1');
-            if (s1Cpl) {
-              const s1Status = s1Cpl.value === 0 ? 'Belum Terukur' : (s1Cpl.value >= cplFormTarget ? 'Tercapai' : 'Belum Tercapai');
-              bullets.push(`CPL S1 memiliki nilai rata-rata ${s1Cpl.value === 0 ? '-' : s1Cpl.value} dan berstatus ${s1Status}.`);
-            } else if (tercapaiCpls.length > 0) {
-              bullets.push(`CPL ${tercapaiCpls[0].code} memiliki nilai rata-rata ${tercapaiCpls[0].value} dan berstatus Tercapai.`);
-            }
-
-            // 2. Unmeasured CPLs
+            const exemplaryCount = sorted.filter(c => c.value >= 85).length;
+            const competentCount = sorted.filter(c => c.value >= 75 && c.value < 85).length;
+            const developingCount = sorted.filter(c => c.value >= 60 && c.value < 75).length;
+            const unsatisfactoryCount = sorted.filter(c => c.value > 0 && c.value < 60).length;
             const unmeasured = sorted.filter(c => c.value === 0).map(c => c.code);
+
+            bullets.push(`Terdapat ${exemplaryCount} CPL berstatus Sangat kompeten (Exemplary) dan ${competentCount} CPL berstatus Kompeten (Competent).`);
+            
+            if (developingCount > 0) {
+              bullets.push(`Terdapat ${developingCount} CPL berstatus Berkembang (Developing) yang memerlukan perhatian untuk peningkatan proses pembelajaran.`);
+            }
+            if (unsatisfactoryCount > 0) {
+              bullets.push(`Terdapat ${unsatisfactoryCount} CPL berstatus Tidak memuaskan (Unsatisfactory) yang memerlukan evaluasi kurikulum dan metode asesmen secara mendalam.`);
+            }
             if (unmeasured.length > 0) {
-              bullets.push(
-                `CPL ${unmeasured.join(', ')} belum memiliki nilai pada dashboard sehingga dinyatakan Belum Terukur.`
-              );
+              bullets.push(`CPL ${unmeasured.join(', ')} belum memiliki nilai rata-rata pada periode ini sehingga berstatus Belum Diukur.`);
             } else {
-              bullets.push(`Seluruh CPL telah memiliki nilai pada dashboard (tidak ada yang Belum Terukur).`);
+              bullets.push(`Seluruh CPL telah memiliki nilai pada dashboard (tidak ada CPL yang Belum Diukur).`);
             }
-
-            // 3. Under target CPLs
-            const underTarget = sorted.filter(c => c.value > 0 && c.value < cplFormTarget).map(c => c.code);
-            if (underTarget.length > 0) {
-              bullets.push(
-                `CPL ${underTarget.join(', ')} belum mencapai target minimal ${cplFormTarget}% sehingga berstatus Belum Tercapai.`
-              );
-            } else {
-              bullets.push(
-                `Seluruh CPL yang telah memiliki nilai berada di atas target minimal ${cplFormTarget}%, sehingga tidak ada CPL yang berstatus Belum Tercapai.`
-              );
-            }
-
-            // 4. Recommendation
-            bullets.push(
-              `CPL yang belum terukur perlu ditindaklanjuti melalui pemetaan mata kuliah, instrumen asesmen, rubrik, atau input nilai yang relevan agar capaian dapat dihitung pada periode berikutnya.`
-            );
+            bullets.push(`Hasil evaluasi ini direkomendasikan sebagai bahan tinjauan kurikulum program studi secara berkala untuk menjaga dan meningkatkan kualitas lulusan.`);
 
             return bullets.map((text, idx) => (
               <li key={idx} style={{ marginBottom: '6px', textAlign: 'justify' }}>{text}</li>

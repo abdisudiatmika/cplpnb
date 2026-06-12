@@ -6,10 +6,9 @@ interface BarChartProps {
     code: string;
     value: number;
   }>;
-  cplFormTarget: number;
 }
 
-export const BarChart: React.FC<BarChartProps> = ({ measuredCpls, cplFormTarget }) => {
+export const BarChart: React.FC<BarChartProps> = ({ measuredCpls }) => {
   return (
     <div className="glass-panel rounded-xl p-lg flex flex-col justify-between shadow-md">
       <div className="flex items-center justify-between mb-lg">
@@ -37,9 +36,11 @@ export const BarChart: React.FC<BarChartProps> = ({ measuredCpls, cplFormTarget 
             const barHeight = (cpl.value / 100) * 240;
             const barY = 260 - barHeight;
             
-            let fillCol = '#4edea3'; // Tercapai (green)
-            if (cpl.value === 0) fillCol = '#464554'; // Belum Diukur (grey)
-            else if (cpl.value < cplFormTarget) fillCol = '#ffb4ab'; // Tidak Tercapai (red)
+            let fillCol = '#10b981'; // Sangat kompeten (Exemplary)
+            if (cpl.value === 0) fillCol = '#64748b'; // Belum Diukur (slate)
+            else if (cpl.value >= 75) fillCol = '#3b82f6'; // Kompeten (Competent) (blue)
+            else if (cpl.value >= 60) fillCol = '#f59e0b'; // Berkembang (Developing) (amber)
+            else fillCol = '#ef4444'; // Tidak memuaskan (Unsatisfactory) (red)
 
             return (
               <g key={cpl.id} className="group cursor-pointer">
