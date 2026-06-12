@@ -281,6 +281,11 @@ export default function App() {
   const [inlineMapCplId, setInlineMapCplId] = useState('');
   const [inlineMapWeight, setInlineMapWeight] = useState(1);
 
+  // Bulk CPL PDF download state
+  const [bulkDownloadLoading, setBulkDownloadLoading] = useState(false);
+  const [bulkDownloadProgress, setBulkDownloadProgress] = useState(0);
+  const [bulkDownloadTotal, setBulkDownloadTotal] = useState(0);
+
   // Grade form
   const [gradeFormCourseId, setGradeFormCourseId] = useState('');
   const [gradeFormLetter, setGradeFormLetter] = useState('AB');
@@ -1815,6 +1820,261 @@ export default function App() {
     }
   };
 
+  const formatIndonesianDate = () => {
+    const months = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const date = new Date();
+    const day = date.getDate();
+    const monthIdx = date.getMonth();
+    const year = date.getFullYear();
+    return `${day} ${months[monthIdx]} ${year}`;
+  };
+
+  const drawStudentCplPage = (pdf: any, student: any, achievements: any[]) => {
+    // Kop Surat
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(10);
+    pdf.text("KEMENTERIAN PENDIDIKAN, KEBUDAYAAN, RISET, DAN TEKNOLOGI", 105, 15, { align: "center" });
+    pdf.setFontSize(13);
+    pdf.text("POLITEKNIK NEGERI BALI", 105, 21, { align: "center" });
+    pdf.setFontSize(11);
+    pdf.text(`JURUSAN AKUNTANSI / ${currentUser?.departmentName?.toUpperCase() || 'D3 AKUNTANSI'}`, 105, 27, { align: "center" });
+    pdf.setFont("times", "normal");
+    pdf.setFontSize(8.5);
+    pdf.text("Jalan Raya Uluwatu, Jimbaran, Badung, Bali. Telp: (0361) 701981", 105, 31, { align: "center" });
+    
+    // Lines under Kop
+    pdf.setLineWidth(0.6);
+    pdf.line(15, 34, 195, 34);
+    pdf.setLineWidth(0.2);
+    pdf.line(15, 35.5, 195, 35.5);
+
+    // Title
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(11);
+    pdf.text("LAPORAN CAPAIAN PEMBELAJARAN LULUSAN (CPL) MAHASISWA", 105, 44, { align: "center" });
+
+    // Student Info Block
+    pdf.setLineWidth(0.2);
+    pdf.rect(15, 49, 180, 24);
+    
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(9);
+    pdf.text("Nama Mahasiswa", 18, 54);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${student.name}`, 48, 54);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("NIM", 18, 60);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${student.nim}`, 48, 60);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("Program Studi", 18, 66);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${currentUser?.departmentName || 'D3 Akuntansi'}`, 48, 66);
+
+    pdf.setFont("times", "bold");
+    pdf.text("Angkatan", 110, 54);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${student.angkatan}`, 138, 54);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("Kelas", 110, 60);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${student.kelas}`, 138, 60);
+    
+    pdf.setFont("times", "bold");
+    pdf.text("Status Akademik", 110, 66);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${student.status}`, 138, 66);
+
+    let currentY = 80;
+    
+    // Table Header
+    pdf.setFillColor(240, 240, 240);
+    pdf.rect(15, currentY, 180, 8, 'F');
+    pdf.rect(15, currentY, 180, 8);
+    
+    pdf.setFont("times", "bold");
+    pdf.setFontSize(8.5);
+    pdf.text("No", 19, currentY + 5.5, { align: "center" });
+    pdf.text("CPL", 30, currentY + 5.5, { align: "center" });
+    pdf.text("Kategori", 49, currentY + 5.5);
+    pdf.text("Deskripsi Kompetensi", 80, currentY + 5.5);
+    pdf.text("Target", 152, currentY + 5.5, { align: "center" });
+    pdf.text("Nilai", 167, currentY + 5.5, { align: "center" });
+    pdf.text("Status", 184, currentY + 5.5, { align: "center" });
+
+    // Column lines
+    pdf.line(23, currentY, 23, currentY + 8);
+    pdf.line(37, currentY, 37, currentY + 8);
+    pdf.line(78, currentY, 78, currentY + 8);
+    pdf.line(145, currentY, 145, currentY + 8);
+    pdf.line(160, currentY, 160, currentY + 8);
+    pdf.line(174, currentY, 174, currentY + 8);
+
+    currentY += 8;
+
+    pdf.setFont("times", "normal");
+    const sortedAchs = [...achievements].sort((a, b) => 
+      a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    if (sortedAchs.length === 0) {
+      pdf.rect(15, currentY, 180, 10);
+      pdf.text("Belum ada data capaian CPL atau nilai mahasiswa.", 105, currentY + 6.5, { align: "center" });
+      currentY += 10;
+    } else {
+      sortedAchs.forEach((cpl, index) => {
+        const descLines = pdf.splitTextToSize(cpl.description, 64);
+        const rowHeight = Math.max(7, 3.8 * descLines.length + 3);
+        
+        if (currentY + rowHeight > 248) {
+          pdf.line(15, currentY, 195, currentY);
+          pdf.addPage();
+          currentY = 20;
+          
+          pdf.setFillColor(240, 240, 240);
+          pdf.rect(15, currentY, 180, 8, 'F');
+          pdf.rect(15, currentY, 180, 8);
+          
+          pdf.setFont("times", "bold");
+          pdf.text("No", 19, currentY + 5.5, { align: "center" });
+          pdf.text("CPL", 30, currentY + 5.5, { align: "center" });
+          pdf.text("Kategori", 49, currentY + 5.5);
+          pdf.text("Deskripsi Kompetensi", 80, currentY + 5.5);
+          pdf.text("Target", 152, currentY + 5.5, { align: "center" });
+          pdf.text("Nilai", 167, currentY + 5.5, { align: "center" });
+          pdf.text("Status", 184, currentY + 5.5, { align: "center" });
+          
+          pdf.line(23, currentY, 23, currentY + 8);
+          pdf.line(37, currentY, 37, currentY + 8);
+          pdf.line(78, currentY, 78, currentY + 8);
+          pdf.line(145, currentY, 145, currentY + 8);
+          pdf.line(160, currentY, 160, currentY + 8);
+          pdf.line(174, currentY, 174, currentY + 8);
+          
+          currentY += 8;
+          pdf.setFont("times", "normal");
+        }
+
+        // Draw border
+        pdf.rect(15, currentY, 180, rowHeight);
+        
+        pdf.text(String(index + 1), 19, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "bold");
+        pdf.text(cpl.code, 30, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "normal");
+        pdf.text(cpl.category || '-', 39, currentY + 4.8);
+        
+        descLines.forEach((line: string, lineIdx: number) => {
+          pdf.text(line, 80, currentY + 4.8 + (lineIdx * 3.8));
+        });
+        
+        pdf.text(String(cpl.target || cplFormTarget), 152, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "bold");
+        pdf.text(cpl.value === 0 ? '-' : String(cpl.value), 167, currentY + 4.8, { align: "center" });
+        pdf.setFont("times", "normal");
+        
+        const statusText = cpl.value === 0 ? 'Belum Diukur' : (cpl.value >= (cpl.target || cplFormTarget) ? 'Tercapai' : 'Belum Tercapai');
+        pdf.setFont("times", "bold");
+        if (statusText === 'Tercapai') {
+          pdf.setTextColor(20, 120, 60);
+        } else if (statusText === 'Belum Tercapai') {
+          pdf.setTextColor(200, 30, 30);
+        } else {
+          pdf.setTextColor(100, 100, 100);
+        }
+        pdf.text(statusText === 'Belum Tercapai' ? 'Tdk Tercapai' : statusText, 184, currentY + 4.8, { align: "center" });
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont("times", "normal");
+
+        pdf.line(23, currentY, 23, currentY + rowHeight);
+        pdf.line(37, currentY, 37, currentY + rowHeight);
+        pdf.line(78, currentY, 78, currentY + rowHeight);
+        pdf.line(145, currentY, 145, currentY + rowHeight);
+        pdf.line(160, currentY, 160, currentY + rowHeight);
+        pdf.line(174, currentY, 174, currentY + rowHeight);
+
+        currentY += rowHeight;
+      });
+    }
+
+    // Signature Box
+    const signY = 252;
+    pdf.setFontSize(9.5);
+    pdf.text("Jimbaran, " + formatIndonesianDate(), 142, signY);
+    pdf.text("Koordinator Program Studi,", 142, signY + 5);
+    
+    pdf.line(142, signY + 23, 188, signY + 23);
+    pdf.text("NIP. ", 142, signY + 27);
+  };
+
+  const handleDownloadSingleStudentCplReport = async (student: any) => {
+    showToast(`Mempersiapkan Laporan CPL untuk ${student.name}...`);
+    try {
+      const achs = await apiCall(`/cpl/achievements/${student.id}`);
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      drawStudentCplPage(pdf, student, achs);
+      pdf.save(`Laporan_CPL_${student.nim}_${student.name.replace(/\s+/g, '_')}.pdf`);
+      showToast('Unduhan laporan CPL berhasil!');
+    } catch (e: any) {
+      console.error(e);
+      showToast('Gagal memproses laporan CPL.');
+    }
+  };
+
+  const handleDownloadAllCplReports = async () => {
+    if (!filteredStudents || filteredStudents.length === 0) {
+      showToast('Tidak ada data mahasiswa untuk dicetak.');
+      return;
+    }
+
+    if (!window.confirm(`Apakah Anda yakin ingin mengunduh laporan CPL untuk ${filteredStudents.length} mahasiswa dalam satu file PDF?`)) {
+      return;
+    }
+
+    setBulkDownloadTotal(filteredStudents.length);
+    setBulkDownloadProgress(0);
+    setBulkDownloadLoading(true);
+
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      let isFirst = true;
+
+      for (let i = 0; i < filteredStudents.length; i++) {
+        const student = filteredStudents[i];
+        setBulkDownloadProgress(i + 1);
+
+        let achievements = [];
+        try {
+          achievements = await apiCall(`/cpl/achievements/${student.id}`);
+        } catch (err) {
+          console.error(`Gagal mengambil data CPL untuk mahasiswa ${student.name}:`, err);
+        }
+
+        if (!isFirst) {
+          pdf.addPage();
+        }
+        isFirst = false;
+
+        drawStudentCplPage(pdf, student, achievements);
+      }
+
+      const fileLabel = (studentFilterAngkatan || 'Semua') + '_' + (studentFilterKelas || 'Semua');
+      pdf.save(`Laporan_CPL_Mahasiswa_${fileLabel}.pdf`);
+      showToast('Berhasil mengunduh semua laporan CPL!');
+    } catch (e: any) {
+      console.error(e);
+      showToast('Gagal memproses laporan CPL massal.');
+    } finally {
+      setBulkDownloadLoading(false);
+    }
+  };
+
   // CRUD Save helper
   const handleSaveData = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3056,6 +3316,13 @@ export default function App() {
                   <span className="material-symbols-outlined text-[20px]">upload</span>
                   Impor Excel
                 </button>
+                <button 
+                  className="flex items-center gap-sm bg-tertiary text-on-tertiary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-tertiary transition-all cursor-pointer"
+                  onClick={handleDownloadAllCplReports}
+                >
+                  <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+                  Cetak Semua CPL
+                </button>
                 <input 
                   type="file" 
                   ref={studentFileInputRef} 
@@ -3286,13 +3553,25 @@ export default function App() {
               </div>
             ) : (
               <div className="animate-fade-in flex flex-col gap-lg flex-1">
-                <button 
-                  className="self-start flex items-center gap-xs text-on-surface-variant hover:text-primary font-label-sm font-bold transition-colors"
-                  onClick={() => setSelectedStudentForCpl(null)}
-                >
-                  <span className="material-symbols-outlined">arrow_back</span>
-                  Kembali ke Daftar Mahasiswa
-                </button>
+                <div className="flex justify-between items-center gap-md flex-wrap">
+                  <button 
+                    className="self-start flex items-center gap-xs text-on-surface-variant hover:text-primary font-label-sm font-bold transition-colors"
+                    onClick={() => setSelectedStudentForCpl(null)}
+                  >
+                    <span className="material-symbols-outlined">arrow_back</span>
+                    Kembali ke Daftar Mahasiswa
+                  </button>
+                  <button 
+                    className="flex items-center gap-sm bg-primary text-on-primary px-lg py-sm rounded-xl font-label-sm text-label-sm font-bold glow-primary hover:scale-105 transition-transform duration-200"
+                    onClick={() => {
+                      const student = students.find(s => s.id === selectedStudentForCpl);
+                      if (student) handleDownloadSingleStudentCplReport(student);
+                    }}
+                  >
+                    <span className="material-symbols-outlined">download</span>
+                    Cetak Laporan CPL
+                  </button>
+                </div>
                 
                 {selectedStudentAchievements.length > 0 ? (
                   <div className="grid grid-cols-12 gap-lg">
@@ -4638,6 +4917,31 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {/* ================= BULK DOWNLOAD LOADING MODAL ================= */}
+      {bulkDownloadLoading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-gutter bg-black/60 backdrop-blur-sm transition-opacity">
+          <div className="glass-panel w-full max-w-[400px] rounded-2xl shadow-2xl overflow-hidden flex flex-col p-xl items-center text-center gap-lg">
+            <span className="material-symbols-outlined text-[48px] text-primary animate-spin">progress_activity</span>
+            <div>
+              <h3 className="font-headline-lg text-headline-lg text-white font-bold mb-xs">Mempersiapkan Laporan CPL</h3>
+              <p className="text-body-sm text-on-surface-variant">
+                Sedang memproses data mahasiswa...
+              </p>
+            </div>
+            {/* Progress Bar Container */}
+            <div className="w-full bg-surface-container rounded-full h-3 overflow-hidden border border-outline-variant/30">
+              <div 
+                className="bg-primary h-full transition-all duration-300 rounded-full"
+                style={{ width: `${(bulkDownloadProgress / bulkDownloadTotal) * 100}%` }}
+              ></div>
+            </div>
+            <p className="font-bold text-primary text-label-md">
+              {bulkDownloadProgress} dari {bulkDownloadTotal} Mahasiswa
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ================= CRUD MODALS ================= */}
       {isModalOpen && (
