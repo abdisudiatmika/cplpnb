@@ -2086,18 +2086,30 @@ export default function App() {
 
     try {
       const pdf = new jsPDF('p', 'mm', 'a4');
-      let isFirst = true;
+      const concurrency = 15;
+      const allResults: any[] = new Array(filteredStudents.length);
 
+      // Fetch student achievements in parallel batches
+      for (let i = 0; i < filteredStudents.length; i += concurrency) {
+        const batch = filteredStudents.slice(i, i + concurrency);
+        await Promise.all(batch.map(async (student, batchIdx) => {
+          const index = i + batchIdx;
+          try {
+            const achievements = await apiCall(`/cpl/achievements/${student.id}`);
+            allResults[index] = achievements;
+          } catch (err) {
+            console.error(`Gagal mengambil data CPL untuk mahasiswa ${student.name}:`, err);
+            allResults[index] = [];
+          }
+          setBulkDownloadProgress(prev => Math.min(filteredStudents.length, prev + 1));
+        }));
+      }
+
+      // Generate the PDF pages sequentially
+      let isFirst = true;
       for (let i = 0; i < filteredStudents.length; i++) {
         const student = filteredStudents[i];
-        setBulkDownloadProgress(i + 1);
-
-        let achievements = [];
-        try {
-          achievements = await apiCall(`/cpl/achievements/${student.id}`);
-        } catch (err) {
-          console.error(`Gagal mengambil data CPL untuk mahasiswa ${student.name}:`, err);
-        }
+        const achievements = allResults[i] || [];
 
         if (!isFirst) {
           pdf.addPage();
