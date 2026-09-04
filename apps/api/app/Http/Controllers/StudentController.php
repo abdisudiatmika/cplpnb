@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Student;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class StudentController extends Controller
@@ -76,6 +77,73 @@ class StudentController extends Controller
         $student = Student::findOrFail($id);
         $student->delete();
         return response()->json(null, 204);
+    }
+
+    public function bulk(Request $request)
+    {
+        $departmentId = $request->user()?->department_id;
+
+        if ($departmentId === null) {
+            return response()->json(['error' => 'User does not belong to a department.'], 400);
+        }
+
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.nim' => 'required|string|max:50|distinct|unique:students,nim',
+            'items.*.name' => 'required|string|max:255',
+            'items.*.angkatan' => 'required|string|max:50',
+            'items.*.kelas' => 'required|string|max:50',
+            'items.*.status' => 'nullable|in:Aktif,Lulus,Cuti',
+        ]);
+
+        $now = now();
+        $students = collect($validated['items'])->map(function ($item) use ($departmentId, $now) {
+            return [
+                'id' => (string) Str::uuid(),
+                'nim' => $item['nim'],
+                'name' => $item['name'],
+                'angkatan' => $item['angkatan'],
+                'kelas' => $item['kelas'],
+                'status' => $item['status'] ?? 'Aktif',
+                'department_id' => $departmentId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        });
+
+        DB::table('students')->insert($students->all());
+
+        return response()->json(
+            Student::with('department')->whereIn('id', $students->pluck('id'))->get(),
+            201
+        );
+    }
+
+    public function bulkDelete(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|string',
+        ]);
+
+        $query = Student::whereIn('id', $validated['ids']);
+
+        if ($request->user()?->role === 'admin_jurusan') {
+            $query->where('department_id', $request->user()->department_id);
+        }
+
+        $idsToDelete = $query->pluck('id');
+
+        if ($idsToDelete->isEmpty()) {
+            return response()->json(['message' => 'Tidak ada mahasiswa yang cocok untuk dihapus.', 'count' => 0]);
+        }
+
+        Student::whereIn('id', $idsToDelete)->delete();
+
+        return response()->json([
+            'message' => 'Mahasiswa berhasil dihapus secara massal',
+            'count' => $idsToDelete->count(),
+        ]);
     }
 
     public function stats(Request $request)

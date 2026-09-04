@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Course;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class CourseController extends Controller
@@ -72,6 +73,69 @@ class CourseController extends Controller
         $course = Course::findOrFail($id);
         $course->delete();
         return response()->json(null, 204);
+    }
+
+    public function bulk(Request $request)
+    {
+        $departmentId = $request->user()?->department_id;
+
+        if ($departmentId === null) {
+            return response()->json(['error' => 'User does not belong to a department.'], 400);
+        }
+
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.code' => 'required|string|max:50',
+            'items.*.name' => 'required|string|max:255',
+            'items.*.sks' => 'required|integer|min:1',
+        ]);
+
+        $now = now();
+        $courses = collect($validated['items'])->map(function ($item) use ($departmentId, $now) {
+            return [
+                'id' => (string) Str::uuid(),
+                'code' => $item['code'],
+                'name' => $item['name'],
+                'sks' => $item['sks'],
+                'department_id' => $departmentId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        });
+
+        DB::table('courses')->insert($courses->all());
+
+        return response()->json(
+            Course::with('department')->whereIn('id', $courses->pluck('id'))->get(),
+            201
+        );
+    }
+
+    public function bulkDelete(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|string',
+        ]);
+
+        $query = Course::whereIn('id', $validated['ids']);
+
+        if ($request->user()?->role === 'admin_jurusan') {
+            $query->where('department_id', $request->user()->department_id);
+        }
+
+        $idsToDelete = $query->pluck('id');
+
+        if ($idsToDelete->isEmpty()) {
+            return response()->json(['message' => 'Tidak ada mata kuliah yang cocok untuk dihapus.', 'count' => 0]);
+        }
+
+        Course::whereIn('id', $idsToDelete)->delete();
+
+        return response()->json([
+            'message' => 'Mata kuliah berhasil dihapus secara massal',
+            'count' => $idsToDelete->count(),
+        ]);
     }
 
     public function mapping(Request $request, string $cplCode)
