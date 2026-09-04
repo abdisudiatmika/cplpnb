@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 // Removed unused branding
 import * as XLSX from 'xlsx';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { RadarChart } from './components/RadarChart';
@@ -13,6 +15,8 @@ import { LandingPage } from './components/LandingPage';
 const API_BASE = import.meta.env.PROD 
   ? '/api' 
   : (import.meta.env.VITE_API_URL || `http://${window.location.hostname}:4000/api`);
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 async function apiCall(path: string, method: string = 'GET', body: any = null) {
   const options: RequestInit = {
@@ -1446,10 +1450,157 @@ export default function App() {
     return 'E';
   };
 
-  // Import Grade from Excel
+  const extractPdfText = async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    const pageTexts: string[] = [];
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const items = content.items as Array<{ str?: string; transform?: number[] }>;
+      const lines = new Map<number, Array<{ x: number; text: string }>>();
+
+      items.forEach((item) => {
+        const text = item.str?.trim();
+        if (!text || !item.transform) return;
+
+        const x = item.transform[4] || 0;
+        const y = Math.round((item.transform[5] || 0) * 10) / 10;
+        const line = lines.get(y) || [];
+        line.push({ x, text });
+        lines.set(y, line);
+      });
+
+      const pageText = Array.from(lines.entries())
+        .sort((a, b) => b[0] - a[0])
+        .map(([, line]) => line.sort((a, b) => a.x - b.x).map(item => item.text).join(' '))
+        .join('\n');
+
+      pageTexts.push(pageText);
+    }
+
+    return pageTexts.join('\n');
+  };
+
+  const parseYudisiumPdfGrades = (text: string) => {
+    const normalized = text
+      .replace(/\r/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{2,}/g, '\n')
+      .trim();
+
+    const courseCodes = Array.from(new Set(normalized.match(/\b[A-Z]{3}\d{10}\b/g) || []));
+    if (courseCodes.length === 0) {
+      throw new Error('Kode mata kuliah tidak ditemukan di PDF.');
+    }
+
+    const studentRows = normalized.match(/(?:^|\n)\s*\d+\s+\d{10}\s+.+?(?=\n\s*\d+\s+\d{10}\s+|$)/gs) || [];
+    if (studentRows.length === 0) {
+      throw new Error('Baris data mahasiswa tidak ditemukan di PDF.');
+    }
+
+    const gradeLetters = new Set(['A', 'AB', 'B', 'BC', 'C', 'D', 'E']);
+    const parsedItems: Array<{ nim: string; courseCode: string; score: number }> = [];
+    const errors: string[] = [];
+
+    studentRows.forEach((row, rowIndex) => {
+      const tokens = row.trim().split(/\s+/);
+      const nim = tokens[1];
+      const firstGradeIdx = tokens.findIndex((token, idx) => (
+        idx > 1 &&
+        !Number.isNaN(Number(token)) &&
+        gradeLetters.has(tokens[idx + 1]) &&
+        !Number.isNaN(Number(tokens[idx + 2]))
+      ));
+
+      if (!nim || firstGradeIdx === -1) {
+        errors.push(`Baris PDF ${rowIndex + 1}: data nilai tidak terbaca.`);
+        return;
+      }
+
+      let tokenIdx = firstGradeIdx;
+      for (const courseCode of courseCodes) {
+        const rawScore = tokens[tokenIdx];
+        const rawGrade = tokens[tokenIdx + 1];
+        const rawWeight = tokens[tokenIdx + 2];
+        const score = Number(rawScore);
+
+        if (rawScore === undefined || rawGrade === undefined || rawWeight === undefined) break;
+        if (Number.isNaN(score) || !gradeLetters.has(rawGrade) || Number.isNaN(Number(rawWeight))) break;
+
+        parsedItems.push({ nim, courseCode, score });
+        tokenIdx += 3;
+      }
+    });
+
+    return { courseCodes, parsedItems, errors };
+  };
+
+  const importGradeItems = async (itemsToImport: any[]) => {
+    setDataLoading(true);
+    const result = await apiCall('/grades/bulk', 'POST', { items: itemsToImport });
+    showToast(`${result.length} Nilai berhasil diimpor.`);
+
+    if (selectedStudentId) {
+      handleSelectStudentForGrades(selectedStudentId);
+    }
+  };
+
+  const handleImportGradePdf = async (file: File) => {
+    try {
+      const text = await extractPdfText(file);
+      const { courseCodes, parsedItems, errors } = parseYudisiumPdfGrades(text);
+      const itemsToImport: any[] = [];
+
+      parsedItems.forEach((item) => {
+        const student = students.find(s => s.nim === item.nim);
+        if (!student) {
+          errors.push(`Mahasiswa NIM ${item.nim} tidak ditemukan.`);
+          return;
+        }
+
+        const course = courses.find(c => c.code.toLowerCase() === item.courseCode.toLowerCase());
+        if (!course) {
+          errors.push(`Mata Kuliah ${item.courseCode} tidak ditemukan.`);
+          return;
+        }
+
+        itemsToImport.push({
+          studentId: student.id,
+          courseId: course.id,
+          score: item.score,
+          grade: getGradeLetter(item.score)
+        });
+      });
+
+      if (errors.length > 0) {
+        alert(`Ditemukan kesalahan:\n${errors.slice(0, 8).join('\n')}${errors.length > 8 ? `\n...dan ${errors.length - 8} kesalahan lainnya` : ''}\n\nNilai yang valid tetap akan diimpor.`);
+      }
+
+      if (itemsToImport.length === 0) {
+        showToast(`Tidak ada nilai valid untuk diimpor. Pastikan ${courseCodes.length} kode MK di PDF sudah ada di sistem.`);
+        return;
+      }
+
+      await importGradeItems(itemsToImport);
+    } catch (err: any) {
+      showToast(err.message || 'Gagal membaca file PDF.');
+    } finally {
+      setDataLoading(false);
+      if (gradeFileInputRef.current) gradeFileInputRef.current.value = '';
+    }
+  };
+
+  // Import Grade from Excel or yudisium PDF
   const handleImportGradeExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      handleImportGradePdf(file);
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -1529,13 +1680,7 @@ export default function App() {
         }
 
         setDataLoading(true);
-        const result = await apiCall('/grades/bulk', 'POST', { items: itemsToImport });
-        showToast(`${result.length} Nilai berhasil diimpor.`);
-
-        // Reload Grades if a student is currently selected
-        if (selectedStudentId) {
-          handleSelectStudentForGrades(selectedStudentId);
-        }
+        await importGradeItems(itemsToImport);
       } catch (err: any) {
         showToast(err.message || 'Gagal membaca file Excel.');
       } finally {
@@ -4761,7 +4906,7 @@ export default function App() {
               <div className="flex flex-col md:flex-row items-center gap-md">
                 <input 
                   type="file" 
-                  accept=".xlsx, .xls" 
+                  accept=".xlsx, .xls, .pdf, application/pdf"
                   className="hidden" 
                   onChange={handleImportGradeExcel} 
                   ref={gradeFileInputRef} 
