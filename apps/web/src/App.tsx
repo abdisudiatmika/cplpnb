@@ -1975,6 +1975,18 @@ export default function App() {
         const blocks = Array.from(input.querySelectorAll<HTMLElement>('[data-pdf-block]'));
         let currentY = margin;
 
+        await Promise.all(Array.from(input.querySelectorAll<HTMLImageElement>('img')).map(async (img) => {
+          if (img.complete) return;
+          if (typeof img.decode === 'function') {
+            await img.decode().catch(() => undefined);
+            return;
+          }
+          await new Promise(resolve => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        }));
+
         const addCanvasToPdf = (canvas: HTMLCanvasElement) => {
           const imgData = canvas.toDataURL('image/png');
           const imgHeight = (canvas.height * contentWidth) / canvas.width;
@@ -2033,6 +2045,7 @@ export default function App() {
           const canvas = await html2canvas(block, {
             scale: 2,
             backgroundColor: '#FFFFFF',
+            useCORS: true,
             logging: false,
           });
 
@@ -2047,6 +2060,7 @@ export default function App() {
       const canvas = await html2canvas(input, {
         scale: 2, 
         backgroundColor: '#FFFFFF', 
+        useCORS: true,
         logging: false,
       });
 

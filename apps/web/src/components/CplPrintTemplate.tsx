@@ -116,6 +116,17 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
           marginBottom: '30px',
         }}
       >
+        <img
+          crossOrigin="anonymous"
+          src="https://upload.wikimedia.org/wikipedia/id/e/ed/Logo_Politeknik_Negeri_Bali.png"
+          alt="Logo Politeknik Negeri Bali"
+          style={{
+            width: '110px',
+            height: '110px',
+            objectFit: 'contain',
+            marginBottom: '34px',
+          }}
+        />
         <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: '0 0 18px 0', textTransform: 'uppercase', lineHeight: '1.35' }}>
           Laporan Evaluasi
         </h1>
