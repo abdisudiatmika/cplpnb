@@ -85,7 +85,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
       }}
     >
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '25px', borderBottom: '2px solid #000000', paddingBottom: '15px' }}>
+      <div data-pdf-block style={{ textAlign: 'center', marginBottom: '25px', borderBottom: '2px solid #000000', paddingBottom: '15px' }}>
         <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 5px 0', textTransform: 'uppercase', color: '#000000', letterSpacing: '0.5px' }}>
           TABEL KETERCAPAIAN CAPAIAN PEMBELAJARAN LULUSAN (CPL)
         </h1>
@@ -94,12 +94,12 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         </h2>
       </div>
 
-      <p style={{ fontSize: '12px', margin: '0 0 25px 0', textAlign: 'justify', color: '#111111' }}>
+      <p data-pdf-block style={{ fontSize: '12px', margin: '0 0 25px 0', textAlign: 'justify', color: '#111111' }}>
         Dokumen ini disusun berdasarkan tampilan dashboard Matriks Capaian CPL Kelas. Ketercapaian CPL dikelompokkan ke dalam kategori: Sangat kompeten (Exemplary: 85 - 100), Kompeten (Competent: 75 - 84.99), Berkembang (Developing: 60 - 74.99), dan Tidak memuaskan (Unsatisfactory: 0 - 59.99). Apabila nilai belum tersedia pada dashboard, status dicatat sebagai "Belum Diukur".
       </p>
 
       {/* Kriteria Ketercapaian CPL */}
-      <div style={{ marginBottom: '30px', pageBreakInside: 'avoid' }}>
+      <div data-pdf-block data-pdf-page-break="before" style={{ marginBottom: '30px', pageBreakInside: 'avoid' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
           Kriteria Ketercapaian CPL
         </h3>
@@ -127,7 +127,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
       </div>
 
       {/* Ringkasan Ketercapaian */}
-      <div style={{ marginBottom: '30px' }}>
+      <div data-pdf-block data-pdf-page-break="before" style={{ marginBottom: '30px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
           Ringkasan Ketercapaian
         </h3>
@@ -184,7 +184,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
       </div>
 
       {/* Grafik Ketercapaian */}
-      <div style={{ marginBottom: '30px', pageBreakInside: 'avoid' }}>
+      <div data-pdf-block data-pdf-page-break="before" style={{ marginBottom: '30px', pageBreakInside: 'avoid' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
           Grafik Ketercapaian CPL
         </h3>
@@ -249,7 +249,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
       </div>
 
       {/* Rincian Rata-rata Capaian CPL */}
-      <div style={{ marginBottom: '30px' }}>
+      <div data-pdf-block data-pdf-page-break="before" style={{ marginBottom: '30px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
           Rincian Rata-rata Capaian CPL
         </h3>
@@ -307,7 +307,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
       </div>
 
       {/* Catatan Interpretasi */}
-      <div style={{ pageBreakInside: 'avoid' }}>
+      <div data-pdf-block data-pdf-page-break="before" style={{ pageBreakInside: 'avoid' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
           Catatan Interpretasi
         </h3>

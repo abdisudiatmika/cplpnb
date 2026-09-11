@@ -1965,6 +1965,84 @@ export default function App() {
       // Small delay to ensure the toast renders before freezing the main thread
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      if (_isPrintTemplate) {
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 12;
+        const contentWidth = pdfWidth - margin * 2;
+        const contentHeight = pageHeight - margin * 2;
+        const blocks = Array.from(input.querySelectorAll<HTMLElement>('[data-pdf-block]'));
+        let currentY = margin;
+
+        const addCanvasToPdf = (canvas: HTMLCanvasElement) => {
+          const imgData = canvas.toDataURL('image/png');
+          const imgHeight = (canvas.height * contentWidth) / canvas.width;
+
+          if (currentY > margin && currentY + imgHeight > pageHeight - margin) {
+            pdf.addPage();
+            currentY = margin;
+          }
+
+          if (imgHeight <= contentHeight) {
+            pdf.addImage(imgData, 'PNG', margin, currentY, contentWidth, imgHeight);
+            currentY += imgHeight + 5;
+            return;
+          }
+
+          let sourceY = 0;
+          const pageCanvas = document.createElement('canvas');
+          const pageCtx = pageCanvas.getContext('2d');
+          const sourcePageHeight = Math.floor((contentHeight * canvas.width) / contentWidth);
+
+          pageCanvas.width = canvas.width;
+          pageCanvas.height = sourcePageHeight;
+
+          while (sourceY < canvas.height && pageCtx) {
+            if (currentY !== margin) {
+              pdf.addPage();
+              currentY = margin;
+            }
+
+            const sliceHeight = Math.min(sourcePageHeight, canvas.height - sourceY);
+            pageCanvas.height = sliceHeight;
+            pageCtx.clearRect(0, 0, pageCanvas.width, pageCanvas.height);
+            pageCtx.drawImage(canvas, 0, sourceY, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+
+            const sliceImgData = pageCanvas.toDataURL('image/png');
+            const slicePdfHeight = (sliceHeight * contentWidth) / canvas.width;
+            pdf.addImage(sliceImgData, 'PNG', margin, margin, contentWidth, slicePdfHeight);
+
+            sourceY += sliceHeight;
+            if (sourceY < canvas.height) {
+              pdf.addPage();
+            }
+          }
+
+          currentY = margin;
+        };
+
+        for (const block of blocks) {
+          const shouldStartNewPage = block.dataset.pdfPageBreak === 'before' && currentY > margin;
+          if (shouldStartNewPage) {
+            pdf.addPage();
+            currentY = margin;
+          }
+
+          const canvas = await html2canvas(block, {
+            scale: 2,
+            backgroundColor: '#FFFFFF',
+            logging: false,
+          });
+
+          addCanvasToPdf(canvas);
+        }
+
+        pdf.save(`${filename}.pdf`);
+        showToast('Unduhan PDF berhasil!');
+        return;
+      }
+
       const canvas = await html2canvas(input, {
         scale: 2, 
         backgroundColor: '#FFFFFF', 
