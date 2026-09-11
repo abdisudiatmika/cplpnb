@@ -3,6 +3,8 @@ import React from 'react';
 interface CplPrintTemplateProps {
   cplMatrixAngkatan: string;
   cplMatrixKelas: string;
+  departmentName?: string | null;
+  departmentCode?: string | null;
   cplAverages: Array<{
     id: string;
     code: string;
@@ -16,6 +18,8 @@ interface CplPrintTemplateProps {
 export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   cplMatrixAngkatan,
   cplMatrixKelas,
+  departmentName,
+  departmentCode,
   cplAverages,
   cplMatrixAverageIpk,
 }) => {
@@ -68,6 +72,19 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
 
   const chartCpls = sortedCpls.filter(cpl => cpl.value > 0);
   const maxChartValue = Math.max(100, ...chartCpls.map(cpl => cpl.value));
+  const groupedCpls = sortedCpls.reduce<Record<string, typeof sortedCpls>>((groups, cpl) => {
+    const category = cpl.category || 'Lainnya';
+    groups[category] = groups[category] || [];
+    groups[category].push(cpl);
+    return groups;
+  }, {});
+  const categoryOrder = ['Sikap', 'Pengetahuan', 'Keterampilan Umum', 'Keterampilan Khusus'];
+  const orderedCategories = [
+    ...categoryOrder.filter(category => groupedCpls[category]?.length),
+    ...Object.keys(groupedCpls).filter(category => !categoryOrder.includes(category)),
+  ];
+  const reportDepartmentName = departmentName || 'Program Studi';
+  const reportDepartmentCode = departmentCode ? ` (${departmentCode})` : '';
 
   return (
     <div 
@@ -84,8 +101,82 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         lineHeight: '1.6'
       }}
     >
+      {/* Cover */}
+      <div
+        data-pdf-block
+        style={{
+          minHeight: '900px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          textAlign: 'center',
+          border: '2px solid #000000',
+          padding: '42px',
+          marginBottom: '30px',
+        }}
+      >
+        <h1 style={{ fontSize: '28px', fontWeight: 'bold', margin: '0 0 18px 0', textTransform: 'uppercase', lineHeight: '1.35' }}>
+          Laporan Evaluasi
+        </h1>
+        <h2 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 34px 0', textTransform: 'uppercase', lineHeight: '1.35' }}>
+          Capaian Pembelajaran Lulusan (CPL)
+        </h2>
+        <div style={{ width: '120px', height: '3px', backgroundColor: '#000000', marginBottom: '34px' }} />
+        <p style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase' }}>
+          {reportDepartmentName}{reportDepartmentCode}
+        </p>
+        <p style={{ fontSize: '14px', margin: '0 0 8px 0' }}>
+          Angkatan {cplMatrixAngkatan || 'Semua'} | {cplMatrixKelas || 'Semua Kelas'}
+        </p>
+        <p style={{ fontSize: '14px', margin: '0 0 70px 0' }}>
+          Politeknik Negeri Bali
+        </p>
+        <p style={{ fontSize: '12px', margin: '0', color: '#333333' }}>
+          Dokumen ini disusun berdasarkan data CPL, mata kuliah, dan nilai mahasiswa yang tersimpan pada sistem.
+        </p>
+      </div>
+
+      {/* Standar CPL */}
+      <div data-pdf-block data-pdf-page-break="before" style={{ marginBottom: '30px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 8px 0', color: '#000000' }}>
+          1. CPL - Standar Kompetensi Lulusan
+        </h3>
+        <p style={{ fontSize: '12px', margin: '0 0 16px 0', textAlign: 'justify', color: '#111111' }}>
+          Daftar Capaian Pembelajaran Lulusan berikut diambil dari database untuk {reportDepartmentName}{reportDepartmentCode}. Setiap jurusan atau program studi dapat memiliki daftar CPL yang berbeda sesuai data yang dikelola pada sistem.
+        </p>
+
+        {orderedCategories.length > 0 ? orderedCategories.map((category) => (
+          <div key={category} style={{ marginBottom: '16px', pageBreakInside: 'avoid' }}>
+            <h4 style={{ fontSize: '12px', fontWeight: 'bold', margin: '0 0 6px 0', textTransform: 'uppercase', color: '#000000' }}>
+              {category}
+            </h4>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', color: '#000000' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f2f2f2' }}>
+                  <th style={{ border: '1px solid #000000', padding: '5px 6px', textAlign: 'center', fontWeight: 'bold', width: '12%' }}>Kode</th>
+                  <th style={{ border: '1px solid #000000', padding: '5px 8px', textAlign: 'left', fontWeight: 'bold', width: '88%' }}>Capaian Pembelajaran Lulusan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedCpls[category].map((cpl, index) => (
+                  <tr key={cpl.id} style={{ backgroundColor: index % 2 === 1 ? '#fafafa' : '#ffffff' }}>
+                    <td style={{ border: '1px solid #000000', padding: '5px 6px', textAlign: 'center', fontWeight: 'bold' }}>{cpl.code}</td>
+                    <td style={{ border: '1px solid #000000', padding: '5px 8px', textAlign: 'justify' }}>{cpl.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )) : (
+          <div style={{ border: '1px solid #000000', padding: '12px', fontSize: '12px', textAlign: 'center' }}>
+            Belum ada data CPL pada database untuk jurusan ini.
+          </div>
+        )}
+      </div>
+
       {/* Header */}
-      <div data-pdf-block style={{ textAlign: 'center', marginBottom: '25px', borderBottom: '2px solid #000000', paddingBottom: '15px' }}>
+      <div data-pdf-block data-pdf-page-break="before" style={{ textAlign: 'center', marginBottom: '25px', borderBottom: '2px solid #000000', paddingBottom: '15px' }}>
         <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 5px 0', textTransform: 'uppercase', color: '#000000', letterSpacing: '0.5px' }}>
           TABEL KETERCAPAIAN CAPAIAN PEMBELAJARAN LULUSAN (CPL)
         </h1>

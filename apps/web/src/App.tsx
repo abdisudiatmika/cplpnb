@@ -5556,6 +5556,8 @@ export default function App() {
             <CplPrintTemplate
               cplMatrixAngkatan={cplMatrixAngkatan}
               cplMatrixKelas={cplMatrixKelas}
+              departmentName={currentUser?.departmentName}
+              departmentCode={currentUser?.departmentCode}
               cplAverages={cplAverages}
               cplMatrixAverageIpk={cplMatrixAverageIpk}
             />
