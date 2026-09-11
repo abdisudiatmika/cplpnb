@@ -138,16 +138,18 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
       </div>
 
       {/* Standar CPL */}
-      <div data-pdf-block data-pdf-page-break="before" style={{ marginBottom: '30px' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 8px 0', color: '#000000' }}>
-          1. CPL - Standar Kompetensi Lulusan
-        </h3>
-        <p style={{ fontSize: '12px', margin: '0 0 16px 0', textAlign: 'justify', color: '#111111' }}>
-          Daftar Capaian Pembelajaran Lulusan berikut diambil dari database untuk {reportDepartmentName}{reportDepartmentCode}. Setiap jurusan atau program studi dapat memiliki daftar CPL yang berbeda sesuai data yang dikelola pada sistem.
-        </p>
+      <div style={{ marginBottom: '30px' }}>
+        <div data-pdf-block data-pdf-page-break="before">
+          <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 8px 0', color: '#000000' }}>
+            1. CPL - Standar Kompetensi Lulusan
+          </h3>
+          <p style={{ fontSize: '12px', margin: '0 0 16px 0', textAlign: 'justify', color: '#111111' }}>
+            Daftar Capaian Pembelajaran Lulusan berikut diambil dari database untuk {reportDepartmentName}{reportDepartmentCode}. Setiap jurusan atau program studi dapat memiliki daftar CPL yang berbeda sesuai data yang dikelola pada sistem.
+          </p>
+        </div>
 
         {orderedCategories.length > 0 ? orderedCategories.map((category) => (
-          <div key={category} style={{ marginBottom: '16px', pageBreakInside: 'avoid' }}>
+          <div key={category} data-pdf-block style={{ marginBottom: '16px', pageBreakInside: 'avoid' }}>
             <h4 style={{ fontSize: '12px', fontWeight: 'bold', margin: '0 0 6px 0', textTransform: 'uppercase', color: '#000000' }}>
               {category}
             </h4>

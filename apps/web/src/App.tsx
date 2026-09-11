@@ -1969,7 +1969,7 @@ export default function App() {
         const pdf = new jsPDF('p', 'mm', 'a4');
         const pdfWidth = pdf.internal.pageSize.getWidth();
         const pageHeight = pdf.internal.pageSize.getHeight();
-        const margin = 12;
+        const margin = 15;
         const contentWidth = pdfWidth - margin * 2;
         const contentHeight = pageHeight - margin * 2;
         const blocks = Array.from(input.querySelectorAll<HTMLElement>('[data-pdf-block]'));
@@ -2016,10 +2016,11 @@ export default function App() {
             sourceY += sliceHeight;
             if (sourceY < canvas.height) {
               pdf.addPage();
+              currentY = margin;
+            } else {
+              currentY = margin + slicePdfHeight + 5;
             }
           }
-
-          currentY = margin;
         };
 
         for (const block of blocks) {
