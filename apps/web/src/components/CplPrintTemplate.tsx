@@ -19,6 +19,56 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   cplAverages,
   cplMatrixAverageIpk,
 }) => {
+  const criteria = [
+    {
+      label: 'Sangat kompeten',
+      english: 'Exemplary',
+      range: '85 - 100',
+      description: 'CPL tercapai sangat baik dan melampaui standar kompetensi minimum.',
+      color: '#047857',
+      backgroundColor: '#ecfdf5',
+    },
+    {
+      label: 'Kompeten',
+      english: 'Competent',
+      range: '75 - 84.99',
+      description: 'CPL tercapai sesuai standar kompetensi yang diharapkan.',
+      color: '#1d4ed8',
+      backgroundColor: '#eff6ff',
+    },
+    {
+      label: 'Berkembang',
+      english: 'Developing',
+      range: '60 - 74.99',
+      description: 'CPL mulai tercapai, namun masih membutuhkan penguatan pembelajaran.',
+      color: '#b45309',
+      backgroundColor: '#fffbeb',
+    },
+    {
+      label: 'Tidak memuaskan',
+      english: 'Unsatisfactory',
+      range: '0 - 59.99',
+      description: 'CPL belum tercapai dan membutuhkan evaluasi pembelajaran lebih lanjut.',
+      color: '#b91c1c',
+      backgroundColor: '#fef2f2',
+    },
+    {
+      label: 'Belum Diukur',
+      english: '-',
+      range: '-',
+      description: 'Belum terdapat nilai yang dapat digunakan untuk menghitung CPL.',
+      color: '#475569',
+      backgroundColor: '#f8fafc',
+    },
+  ];
+
+  const sortedCpls = [...cplAverages].sort((a, b) =>
+    a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
+  );
+
+  const chartCpls = sortedCpls.filter(cpl => cpl.value > 0);
+  const maxChartValue = Math.max(100, ...chartCpls.map(cpl => cpl.value));
+
   return (
     <div 
       id="laporan-hasil-cpl-print-template" 
@@ -47,6 +97,34 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
       <p style={{ fontSize: '12px', margin: '0 0 25px 0', textAlign: 'justify', color: '#111111' }}>
         Dokumen ini disusun berdasarkan tampilan dashboard Matriks Capaian CPL Kelas. Ketercapaian CPL dikelompokkan ke dalam kategori: Sangat kompeten (Exemplary: 85 - 100), Kompeten (Competent: 75 - 84.99), Berkembang (Developing: 60 - 74.99), dan Tidak memuaskan (Unsatisfactory: 0 - 59.99). Apabila nilai belum tersedia pada dashboard, status dicatat sebagai "Belum Diukur".
       </p>
+
+      {/* Kriteria Ketercapaian CPL */}
+      <div style={{ marginBottom: '30px', pageBreakInside: 'avoid' }}>
+        <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
+          Kriteria Ketercapaian CPL
+        </h3>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', color: '#000000' }}>
+          <thead>
+            <tr style={{ backgroundColor: '#f2f2f2' }}>
+              <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '27%' }}>Kategori</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold', width: '18%' }}>Rentang Nilai</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '55%' }}>Interpretasi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {criteria.map((item) => (
+              <tr key={item.label} style={{ backgroundColor: item.backgroundColor }}>
+                <td style={{ border: '1px solid #000000', padding: '6px 8px', fontWeight: 'bold', color: item.color }}>
+                  {item.label}
+                  {item.english !== '-' && <span style={{ display: 'block', fontSize: '9px', fontWeight: 'normal', color: '#444444' }}>{item.english}</span>}
+                </td>
+                <td style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'center', fontWeight: 'bold' }}>{item.range}</td>
+                <td style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'justify' }}>{item.description}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* Ringkasan Ketercapaian */}
       <div style={{ marginBottom: '30px' }}>
@@ -105,6 +183,71 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         </table>
       </div>
 
+      {/* Grafik Ketercapaian */}
+      <div style={{ marginBottom: '30px', pageBreakInside: 'avoid' }}>
+        <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
+          Grafik Ketercapaian CPL
+        </h3>
+        {chartCpls.length > 0 ? (
+          <div style={{ border: '1px solid #000000', padding: '14px 12px 10px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', height: '220px' }}>
+              <div style={{ width: '34px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingBottom: '24px', fontSize: '9px', color: '#333333', textAlign: 'right', paddingRight: '6px' }}>
+                <span>100</span>
+                <span>75</span>
+                <span>50</span>
+                <span>25</span>
+                <span>0</span>
+              </div>
+              <div style={{ position: 'relative', flex: 1, borderLeft: '1px solid #000000', borderBottom: '1px solid #000000', padding: '0 8px 24px 8px', display: 'flex', alignItems: 'flex-end', gap: chartCpls.length > 12 ? '5px' : '10px' }}>
+                {[0, 25, 50, 75, 100].map((value) => (
+                  <div
+                    key={value}
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      bottom: `${24 + (value / maxChartValue) * 196}px`,
+                      borderTop: value === 0 ? 'none' : '1px solid #d9d9d9',
+                      height: 0,
+                    }}
+                  />
+                ))}
+                {chartCpls.map((cpl) => {
+                  const matchedCriteria = criteria.find((item) => {
+                    if (item.label === 'Sangat kompeten') return cpl.value >= 85;
+                    if (item.label === 'Kompeten') return cpl.value >= 75 && cpl.value < 85;
+                    if (item.label === 'Berkembang') return cpl.value >= 60 && cpl.value < 75;
+                    if (item.label === 'Tidak memuaskan') return cpl.value > 0 && cpl.value < 60;
+                    return false;
+                  });
+                  const barHeight = Math.max(4, (cpl.value / maxChartValue) * 196);
+
+                  return (
+                    <div key={cpl.id} style={{ flex: '1 1 0', minWidth: '18px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative', zIndex: 1 }}>
+                      <div style={{ fontSize: '8px', lineHeight: '10px', marginBottom: '3px', color: '#111111', fontWeight: 'bold' }}>{cpl.value}</div>
+                      <div style={{ width: '100%', maxWidth: '26px', height: `${barHeight}px`, backgroundColor: matchedCriteria?.color || '#475569', border: '1px solid rgba(0,0,0,0.18)' }} />
+                      <div style={{ position: 'absolute', bottom: '-22px', fontSize: '8px', fontWeight: 'bold', color: '#111111', whiteSpace: 'nowrap' }}>{cpl.code}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ marginTop: '18px', display: 'flex', flexWrap: 'wrap', gap: '8px 14px', fontSize: '9px' }}>
+              {criteria.filter(item => item.label !== 'Belum Diukur').map((item) => (
+                <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: item.color, border: '1px solid #000000' }} />
+                  <span>{item.label} ({item.range})</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div style={{ border: '1px solid #000000', padding: '12px', fontSize: '12px', textAlign: 'center' }}>
+            Belum ada nilai CPL yang dapat divisualisasikan.
+          </div>
+        )}
+      </div>
+
       {/* Rincian Rata-rata Capaian CPL */}
       <div style={{ marginBottom: '30px' }}>
         <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
@@ -123,10 +266,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
           </thead>
           <tbody>
             {(() => {
-              const sorted = [...cplAverages].sort((a, b) => 
-                a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
-              );
-              return sorted.map((cpl, index) => {
+              return sortedCpls.map((cpl, index) => {
                 let status = 'Belum Diukur';
                 let keterangan = 'Nilai belum tersedia';
                 if (cpl.value > 0) {
@@ -174,15 +314,12 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         <ul style={{ fontSize: '12px', margin: '0', paddingLeft: '20px', color: '#000000' }}>
           {(() => {
             const bullets = [];
-            const sorted = [...cplAverages].sort((a, b) => 
-              a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })
-            );
             
-            const exemplaryCount = sorted.filter(c => c.value >= 85).length;
-            const competentCount = sorted.filter(c => c.value >= 75 && c.value < 85).length;
-            const developingCount = sorted.filter(c => c.value >= 60 && c.value < 75).length;
-            const unsatisfactoryCount = sorted.filter(c => c.value > 0 && c.value < 60).length;
-            const unmeasured = sorted.filter(c => c.value === 0).map(c => c.code);
+            const exemplaryCount = sortedCpls.filter(c => c.value >= 85).length;
+            const competentCount = sortedCpls.filter(c => c.value >= 75 && c.value < 85).length;
+            const developingCount = sortedCpls.filter(c => c.value >= 60 && c.value < 75).length;
+            const unsatisfactoryCount = sortedCpls.filter(c => c.value > 0 && c.value < 60).length;
+            const unmeasured = sortedCpls.filter(c => c.value === 0).map(c => c.code);
 
             bullets.push(`Terdapat ${exemplaryCount} CPL berstatus Sangat kompeten (Exemplary) dan ${competentCount} CPL berstatus Kompeten (Competent).`);
             
