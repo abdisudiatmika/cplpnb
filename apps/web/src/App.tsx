@@ -1,3 +1,4 @@
+import './polyfills';
 import React, { useState, useEffect, useRef } from 'react';
 // Removed unused branding
 import * as XLSX from 'xlsx';
@@ -1485,8 +1486,24 @@ export default function App() {
     return 'E';
   };
 
+  const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result instanceof ArrayBuffer) {
+          resolve(reader.result);
+          return;
+        }
+
+        reject(new Error('Gagal membaca file PDF.'));
+      };
+      reader.onerror = () => reject(new Error('Gagal membaca file PDF.'));
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   const extractPdfText = async (file: File) => {
-    const buffer = await file.arrayBuffer();
+    const buffer = await readFileAsArrayBuffer(file);
     const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
     const pageTexts: string[] = [];
 
