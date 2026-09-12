@@ -187,6 +187,8 @@ class StudentController extends Controller
         $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
         $angkatan = $request->query('angkatan');
         $kelas = $request->query('kelas');
+        $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
+        $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
         $studentQuery = Student::query();
         if ($departmentId) {
@@ -211,6 +213,19 @@ class StudentController extends Controller
             })
             ->when($kelas, function($q) use ($kelas) {
                 return $q->where('students.kelas', $kelas);
+            })
+            ->when($academicYear, function($q) use ($academicYear) {
+                return $q->where('student_grades.academic_year', $academicYear);
+            })
+            ->when($semesterType, function($q) use ($semesterType) {
+                $normalized = strtolower(trim((string) $semesterType));
+                if ($normalized === 'ganjil') {
+                    return $q->whereIn('student_grades.semester', ['1', '3', '5', '7', 'I', 'III', 'V', 'VII', 'i', 'iii', 'v', 'vii']);
+                }
+                if ($normalized === 'genap') {
+                    return $q->whereIn('student_grades.semester', ['2', '4', '6', '8', 'II', 'IV', 'VI', 'VIII', 'ii', 'iv', 'vi', 'viii']);
+                }
+                return $q;
             })
             ->get();
 

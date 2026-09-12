@@ -3,6 +3,8 @@ import React from 'react';
 interface CplPrintTemplateProps {
   cplMatrixAngkatan: string;
   cplMatrixKelas: string;
+  cplMatrixSemesterLabel: string;
+  cplMatrixAcademicYear: string;
   departmentName?: string | null;
   departmentCode?: string | null;
   cplAverages: Array<{
@@ -18,6 +20,8 @@ interface CplPrintTemplateProps {
 export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   cplMatrixAngkatan,
   cplMatrixKelas,
+  cplMatrixSemesterLabel,
+  cplMatrixAcademicYear,
   departmentName,
   departmentCode,
   cplAverages,
@@ -85,6 +89,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   ];
   const reportDepartmentName = departmentName || 'Program Studi';
   const reportDepartmentCode = departmentCode ? ` (${departmentCode})` : '';
+  const reportAcademicYear = cplMatrixAcademicYear || 'Semua Tahun Ajaran';
 
   return (
     <div 
@@ -140,7 +145,10 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         <p style={{ fontSize: '14px', margin: '0 0 8px 0' }}>
           Angkatan {cplMatrixAngkatan || 'Semua'} | {cplMatrixKelas || 'Semua Kelas'}
         </p>
-        <p style={{ fontSize: '14px', margin: '0 0 70px 0' }}>
+        <p style={{ fontSize: '14px', margin: '0 0 8px 0' }}>
+          Periode AMI {cplMatrixSemesterLabel} | Tahun Ajaran {reportAcademicYear}
+        </p>
+        <p style={{ fontSize: '14px', margin: '0 0 62px 0' }}>
           Politeknik Negeri Bali
         </p>
         <p style={{ fontSize: '12px', margin: '0', color: '#333333' }}>
@@ -196,10 +204,13 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', color: '#000000' }}>
           Angkatan {cplMatrixAngkatan || 'Semua'} | {cplMatrixKelas || 'Semua Kelas'}
         </h2>
+        <p style={{ fontSize: '12px', fontWeight: 'bold', margin: '6px 0 0 0', color: '#000000' }}>
+          Periode AMI {cplMatrixSemesterLabel} | Tahun Ajaran {reportAcademicYear}
+        </p>
       </div>
 
       <p data-pdf-block style={{ fontSize: '12px', margin: '0 0 25px 0', textAlign: 'justify', color: '#111111' }}>
-        Dokumen ini disusun berdasarkan tampilan dashboard Matriks Capaian CPL Kelas. Ketercapaian CPL dikelompokkan ke dalam kategori: Sangat kompeten (Exemplary: 85 - 100), Kompeten (Competent: 75 - 84.99), Berkembang (Developing: 60 - 74.99), dan Tidak memuaskan (Unsatisfactory: 0 - 59.99). Apabila nilai belum tersedia pada dashboard, status dicatat sebagai "Belum Diukur".
+        Dokumen ini disusun berdasarkan tampilan dashboard Matriks Capaian CPL Kelas dengan filter periode AMI dan tahun ajaran yang dipilih. Ketercapaian CPL dikelompokkan ke dalam kategori: Sangat kompeten (Exemplary: 85 - 100), Kompeten (Competent: 75 - 84.99), Berkembang (Developing: 60 - 74.99), dan Tidak memuaskan (Unsatisfactory: 0 - 59.99). Apabila nilai belum tersedia pada dashboard, status dicatat sebagai "Belum Diukur".
       </p>
 
       {/* Kriteria Ketercapaian CPL */}

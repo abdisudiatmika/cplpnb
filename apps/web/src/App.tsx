@@ -228,6 +228,9 @@ export default function App() {
   // Removed unused cpl search/filter states
   const [cplMatrixAngkatan, setCplMatrixAngkatan] = useState('');
   const [cplMatrixKelas, setCplMatrixKelas] = useState('');
+  const [cplMatrixSemesterType, setCplMatrixSemesterType] = useState('');
+  const [cplMatrixAcademicYear, setCplMatrixAcademicYear] = useState('');
+  const [cplMatrixAcademicYears, setCplMatrixAcademicYears] = useState<string[]>([]);
   const [cplMatrixAverageIpk, setCplMatrixAverageIpk] = useState<number | null>(null);
   const [selectedStudentForCpl, setSelectedStudentForCpl] = useState<string | null>(null);
 
@@ -1764,20 +1767,24 @@ export default function App() {
             const params = new URLSearchParams();
             if (cplMatrixAngkatan) params.append('angkatan', cplMatrixAngkatan);
             if (cplMatrixKelas) params.append('kelas', cplMatrixKelas);
+            if (cplMatrixSemesterType) params.append('semesterType', cplMatrixSemesterType);
+            if (cplMatrixAcademicYear) params.append('academicYear', cplMatrixAcademicYear);
             if (params.toString()) url += `?${params.toString()}`;
 
             let ipkUrl = '/students/ipk-average';
             if (params.toString()) ipkUrl += `?${params.toString()}`;
 
-            const [studentList, averages, ipkData] = await Promise.all([
+            const [studentList, averages, ipkData, periodData] = await Promise.all([
               apiCall('/students'),
               apiCall(url),
-              apiCall(ipkUrl)
+              apiCall(ipkUrl),
+              apiCall('/grades/periods')
             ]);
             
             setStudents(studentList);
             setCplAverages(averages);
             setCplMatrixAverageIpk(ipkData.averageIpk);
+            setCplMatrixAcademicYears(Array.isArray(periodData.academicYears) ? periodData.academicYears : []);
           }
           
           if (activeTab === 'mahasiswa' && selectedStudentForCpl) {
@@ -1793,7 +1800,7 @@ export default function App() {
     };
 
     loadData();
-  }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, selectedStudentForCpl, dashboardAngkatan, dashboardKelas]);
+  }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear, selectedStudentForCpl, dashboardAngkatan, dashboardKelas]);
 
   // Fetch course summary when course report modal is open
   useEffect(() => {
@@ -3050,6 +3057,22 @@ export default function App() {
     const list = students.map(s => s ? s.angkatan : '').filter(Boolean);
     return Array.from(new Set(list)).sort((a, b) => Number(b) - Number(a)); // Sort descending
   }, [students]);
+
+  const cplMatrixSemesterLabel = cplMatrixSemesterType
+    ? cplMatrixSemesterType.charAt(0).toUpperCase() + cplMatrixSemesterType.slice(1)
+    : 'Semua Periode';
+
+  const cplMatrixReportFileName = React.useMemo(() => {
+    const parts = [
+      'Laporan_Capaian_CPL',
+      cplMatrixAngkatan || 'Semua_Angkatan',
+      cplMatrixKelas || 'Semua_Kelas',
+      cplMatrixSemesterType || 'Semua_Periode',
+      cplMatrixAcademicYear || 'Semua_Tahun',
+    ];
+
+    return parts.join('_').replace(/[^\w-]+/g, '_');
+  }, [cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear]);
 
   // Live searching & dropdown filtering (Mahasiswa Screen)
   const filteredStudents = React.useMemo(() => {
@@ -5292,7 +5315,7 @@ export default function App() {
               <div className="flex gap-md flex-wrap items-center justify-end">
                 <button 
                   className="flex items-center gap-sm bg-primary text-on-primary px-lg py-sm rounded-xl font-label-sm glow-primary hover:scale-105 transition-transform duration-200"
-                  onClick={() => handlePrintReport('laporan-hasil-cpl-print-template', 'Laporan_Capaian_CPL_' + (cplMatrixAngkatan || 'Semua'), true)}
+                  onClick={() => handlePrintReport('laporan-hasil-cpl-print-template', cplMatrixReportFileName, true)}
                 >
                   <span className="material-symbols-outlined">download</span>
                   Cetak Laporan
@@ -5339,6 +5362,31 @@ export default function App() {
                   ))}
                 </select>
               </div>
+              <div className="flex-1 min-w-[200px]">
+                <label className="block font-label-xs text-label-xs text-on-surface-variant mb-xs ml-1 uppercase">Periode AMI</label>
+                <select
+                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm font-label-sm text-on-surface focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer"
+                  value={cplMatrixSemesterType}
+                  onChange={(e) => setCplMatrixSemesterType(e.target.value)}
+                >
+                  <option value="">Semua Periode</option>
+                  <option value="ganjil">Ganjil</option>
+                  <option value="genap">Genap</option>
+                </select>
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <label className="block font-label-xs text-label-xs text-on-surface-variant mb-xs ml-1 uppercase">Tahun Ajaran</label>
+                <select
+                  className="w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm font-label-sm text-on-surface focus:ring-2 focus:ring-primary focus:outline-none appearance-none cursor-pointer"
+                  value={cplMatrixAcademicYear}
+                  onChange={(e) => setCplMatrixAcademicYear(e.target.value)}
+                >
+                  <option value="">Semua Tahun Ajaran</option>
+                  {cplMatrixAcademicYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div id="laporan-hasil-cpl-content" className="space-y-lg p-md sm:p-0 rounded-2xl">
@@ -5362,6 +5410,14 @@ export default function App() {
                   <div>
                     <p className="font-label-xs text-outline uppercase mb-1">Kelas</p>
                     <p className="font-headline-lg text-on-surface font-semibold">{cplMatrixKelas || 'Semua Kelas'}</p>
+                  </div>
+                  <div>
+                    <p className="font-label-xs text-outline uppercase mb-1">Periode AMI</p>
+                    <p className="font-headline-lg text-on-surface font-semibold">{cplMatrixSemesterLabel}</p>
+                  </div>
+                  <div>
+                    <p className="font-label-xs text-outline uppercase mb-1">Tahun Ajaran</p>
+                    <p className="font-headline-lg text-on-surface font-semibold">{cplMatrixAcademicYear || 'Semua Tahun'}</p>
                   </div>
                 </div>
               </div>
@@ -5428,6 +5484,8 @@ export default function App() {
                                       const params = new URLSearchParams();
                                       if (cplMatrixAngkatan) params.append('angkatan', cplMatrixAngkatan);
                                       if (cplMatrixKelas) params.append('kelas', cplMatrixKelas);
+                                      if (cplMatrixSemesterType) params.append('semesterType', cplMatrixSemesterType);
+                                      if (cplMatrixAcademicYear) params.append('academicYear', cplMatrixAcademicYear);
                                       if (params.toString()) url += `?${params.toString()}`;
                                       const data = await apiCall(url);
                                       setExpandedAvgCplCourses(data);
@@ -5571,6 +5629,8 @@ export default function App() {
             <CplPrintTemplate
               cplMatrixAngkatan={cplMatrixAngkatan}
               cplMatrixKelas={cplMatrixKelas}
+              cplMatrixSemesterLabel={cplMatrixSemesterLabel}
+              cplMatrixAcademicYear={cplMatrixAcademicYear}
               departmentName={currentUser?.departmentName}
               departmentCode={currentUser?.departmentCode}
               cplAverages={cplAverages}

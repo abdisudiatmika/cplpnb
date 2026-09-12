@@ -104,6 +104,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/courses/bulk-delete', [CourseController::class, 'bulkDelete']);
     Route::get('/students/stats', [StudentController::class, 'stats']);
     Route::get('/students/ipk-average', [StudentController::class, 'ipkAverage']);
+    Route::get('/grades/periods', [GradeController::class, 'periods']);
     Route::get('/grades/export/all', [GradeController::class, 'exportAll']);
     Route::get('/grades/student/{studentId}', [GradeController::class, 'byStudent']);
     

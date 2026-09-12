@@ -99,6 +99,8 @@ class CplController extends Controller
         $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
         $angkatan = $request->query('angkatan');
         $kelas = $request->query('kelas');
+        $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
+        $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
         $cpl = Cpl::findOrFail($cplId);
 
@@ -139,8 +141,9 @@ class CplController extends Controller
         $courseIds = $mappings->pluck('course_id');
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
             ->whereIn('student_id', $students)
-            ->whereIn('course_id', $courseIds)
-            ->get();
+            ->whereIn('course_id', $courseIds);
+        $this->applyGradePeriodFilters($allGrades, $semesterType, $academicYear);
+        $allGrades = $allGrades->get();
 
         $gradesMap = [];
         foreach ($allGrades as $g) {
@@ -203,12 +206,14 @@ class CplController extends Controller
         $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
         $angkatan = $request->query('angkatan');
         $kelas = $request->query('kelas');
+        $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
+        $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
-        $averages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas);
+        $averages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType, $academicYear);
         return response()->json($averages);
     }
 
-    private function calculateAveragesInternal($departmentId, $angkatan, $kelas)
+    private function calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType = null, $academicYear = null)
     {
         $cplQuery = Cpl::query();
         if ($departmentId) $cplQuery->where('department_id', $departmentId);
@@ -239,7 +244,9 @@ class CplController extends Controller
             })
             ->when($kelas, function($q) use ($kelas) {
                 return $q->where('students.kelas', $kelas);
-            })->get();
+            });
+        $this->applyGradePeriodFilters($allGrades, $semesterType, $academicYear);
+        $allGrades = $allGrades->get();
 
         $gradesMap = [];
         foreach ($allGrades as $g) {
@@ -348,6 +355,8 @@ class CplController extends Controller
         $departmentId = ($user && $user->role === 'admin_jurusan') ? $user->department_id : $request->query('department_id', $request->query('departmentId'));
         $angkatan = $request->query('angkatan');
         $kelas = $request->query('kelas');
+        $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
+        $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
         $coursesQuery = \App\Models\Course::query();
         if ($departmentId) $coursesQuery->where('department_id', $departmentId);
@@ -365,15 +374,16 @@ class CplController extends Controller
             ->get();
 
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
-            ->whereIn('student_id', $studentIds)
-            ->get();
+            ->whereIn('student_id', $studentIds);
+        $this->applyGradePeriodFilters($allGrades, $semesterType, $academicYear);
+        $allGrades = $allGrades->get();
 
         $gradesByCourse = [];
         foreach ($allGrades as $g) {
             $gradesByCourse[$g->course_id][] = $g;
         }
 
-        $cplAverages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas);
+        $cplAverages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType, $academicYear);
 
         $result = [];
         foreach ($courses as $c) {
@@ -422,6 +432,35 @@ class CplController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    private function applyGradePeriodFilters($query, $semesterType = null, $academicYear = null)
+    {
+        if ($academicYear) {
+            $query->where('student_grades.academic_year', $academicYear);
+        }
+
+        $semesters = $this->semestersForPeriod($semesterType);
+        if (!empty($semesters)) {
+            $query->whereIn('student_grades.semester', $semesters);
+        }
+
+        return $query;
+    }
+
+    private function semestersForPeriod($semesterType)
+    {
+        $normalized = strtolower(trim((string) $semesterType));
+
+        if ($normalized === 'ganjil') {
+            return ['1', '3', '5', '7', 'I', 'III', 'V', 'VII', 'i', 'iii', 'v', 'vii'];
+        }
+
+        if ($normalized === 'genap') {
+            return ['2', '4', '6', '8', 'II', 'IV', 'VI', 'VIII', 'ii', 'iv', 'vi', 'viii'];
+        }
+
+        return [];
     }
 
     public function achievements(Request $request, string $studentId)

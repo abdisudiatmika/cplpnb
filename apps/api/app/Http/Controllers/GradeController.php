@@ -146,6 +146,30 @@ class GradeController extends Controller
         return response()->json($inserted);
     }
 
+    public function periods(Request $request)
+    {
+        $user = $request->user();
+        $query = StudentGrade::query()
+            ->join('students', 'student_grades.student_id', '=', 'students.id')
+            ->select('student_grades.academic_year')
+            ->whereNotNull('student_grades.academic_year')
+            ->where('student_grades.academic_year', '!=', '');
+
+        if ($user && $user->role === 'admin_jurusan') {
+            $query->where('students.department_id', $user->department_id);
+        }
+
+        $academicYears = $query
+            ->distinct()
+            ->orderByDesc('student_grades.academic_year')
+            ->pluck('student_grades.academic_year')
+            ->values();
+
+        return response()->json([
+            'academicYears' => $academicYears,
+        ]);
+    }
+
     public function exportAll(Request $request)
     {
         $user = $request->user();
