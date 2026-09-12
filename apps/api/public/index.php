@@ -16,7 +16,13 @@ define('LARAVEL_START', microtime(true));
 |
 */
 
-if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
+$appBasePath = dirname(__DIR__);
+
+if (! file_exists($appBasePath.'/vendor/autoload.php')) {
+    $appBasePath = dirname(__DIR__, 2).'/repositories/cplpnb/apps/api';
+}
+
+if (file_exists($maintenance = $appBasePath.'/storage/framework/maintenance.php')) {
     require $maintenance;
 }
 
@@ -31,13 +37,8 @@ if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php'))
 |
 */
 
-if (file_exists(__DIR__.'/../vendor/autoload.php')) {
-    require __DIR__.'/../vendor/autoload.php';
-    $app = require_once __DIR__.'/../bootstrap/app.php';
-} else {
-    require __DIR__.'/../../backend_cpl/vendor/autoload.php';
-    $app = require_once __DIR__.'/../../backend_cpl/bootstrap/app.php';
-}
+require $appBasePath.'/vendor/autoload.php';
+$app = require_once $appBasePath.'/bootstrap/app.php';
 
 $kernel = $app->make(Kernel::class);
 
