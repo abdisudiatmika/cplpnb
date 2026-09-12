@@ -1453,41 +1453,48 @@ export default function App() {
 
       const coursesForTemplate = selectedCourses.length > 0 ? selectedCourses : [...courses].sort((a, b) => a.code.localeCompare(b.code));
 
-      const infoRows: any[][] = [
-        ['Rekapitulasi Nilai Jurusan', currentUser?.departmentName || ''],
-        ['Tahun Ajaran', activePeriod.academicYear],
-        ['Periode', activePeriod.semesterType === 'ganjil' ? 'Ganjil' : 'Genap'],
-        ['Angkatan', gradeStudentAngkatan || 'Semua'],
-        ['Kelas', gradeStudentKelas || 'Semua'],
-        ['Catatan', 'Isi nilai angka hanya pada kolom NA. Kolom NH dan NB boleh dikosongkan.'],
-        [],
-      ];
-
-      const headerRow = ['No', 'Nim', 'NAMA MAHASISWA'];
-      const sksRow = ['', '', ''];
-      const subHeaderRow = ['', '', ''];
+      const headerRow = ['NIM', 'Nama'];
+      const subHeaderRow = ['', ''];
 
       coursesForTemplate.forEach(course => {
-        headerRow.push(course.code, '', '');
-        sksRow.push(`${course.sks} SKS`, '', '');
-        subHeaderRow.push('NA', 'NH', 'NB');
+        headerRow.push(course.code, '');
+        subHeaderRow.push('Nilai Angka', 'Nilai Huruf');
       });
 
       const dataRows: any[][] = [
-        ...infoRows,
         headerRow,
-        sksRow,
         subHeaderRow,
-        ...selectedStudents.map((student, index) => {
-          const row = [index + 1, student.nim, student.name];
-          coursesForTemplate.forEach(() => row.push('', '', ''));
+        ...selectedStudents.map((student) => {
+          const row = [student.nim, student.name];
+          coursesForTemplate.forEach(() => row.push('', ''));
           return row;
         }),
       ];
 
       const guideRows: any[][] = [
-        ['Format Panjang', 'NIM', 'KodeMK', 'Nilai_Angka'],
-        ['Contoh', selectedStudents[0]?.nim || '2515623001', coursesForTemplate[0]?.code || 'MBB2462401217', 88.5],
+        ['Panduan Pengisian'],
+        ['1', 'Jangan ubah NIM, Nama, atau kode mata kuliah pada header.'],
+        ['2', 'Isi hanya kolom Nilai Angka. Nilai Huruf hanya referensi dan akan dihitung ulang oleh sistem saat import.'],
+        ['3', 'Kosongkan kolom mata kuliah jika mahasiswa belum memiliki nilai pada mata kuliah tersebut.'],
+        ['4', 'Gunakan sheet Template_Nilai untuk import utama. Sheet Format_Panjang adalah alternatif jika ingin satu baris per nilai.'],
+        [],
+        ['Daftar Mata Kuliah'],
+        ['KodeMK', 'Nama_MK', 'SKS', 'Semester Kurikulum'],
+        ...coursesForTemplate.map(course => [course.code, course.name, course.sks, course.semester || '']),
+      ];
+
+      const configRows: any[][] = [
+        ['Field', 'Nilai'],
+        ['Jurusan', currentUser?.departmentName || ''],
+        ['Tahun Ajaran', activePeriod.academicYear],
+        ['Periode', activePeriod.semesterType === 'ganjil' ? 'Ganjil' : 'Genap'],
+        ['Angkatan', gradeStudentAngkatan || 'Semua'],
+        ['Kelas', gradeStudentKelas || 'Semua'],
+      ];
+
+      const longFormatRows: any[][] = [
+        ['NIM', 'KodeMK', 'Nilai_Angka'],
+        [selectedStudents[0]?.nim || '2515623001', coursesForTemplate[0]?.code || 'MBB2462401217', ''],
         [],
         ['Daftar Mata Kuliah'],
         ['KodeMK', 'Nama_MK', 'SKS', 'Semester Kurikulum'],
@@ -1498,22 +1505,22 @@ export default function App() {
       const workbook = XLSX.utils.book_new();
 
       coursesForTemplate.forEach((_, index) => {
-        const startCol = 3 + index * 3;
+        const startCol = 2 + index * 2;
         worksheet['!merges'] = [
           ...(worksheet['!merges'] || []),
-          { s: { r: infoRows.length, c: startCol }, e: { r: infoRows.length, c: startCol + 2 } },
-          { s: { r: infoRows.length + 1, c: startCol }, e: { r: infoRows.length + 1, c: startCol + 2 } },
+          { s: { r: 0, c: startCol }, e: { r: 0, c: startCol + 1 } },
         ];
       });
       worksheet['!cols'] = [
-        { wch: 6 },
         { wch: 16 },
         { wch: 34 },
-        ...coursesForTemplate.flatMap(() => [{ wch: 10 }, { wch: 8 }, { wch: 8 }]),
+        ...coursesForTemplate.flatMap(() => [{ wch: 13 }, { wch: 12 }]),
       ];
 
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Template_Rapor_Panjang");
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Template_Nilai");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(configRows), "Konfigurasi");
       XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(guideRows), "Panduan");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(longFormatRows), "Format_Panjang");
 
       const labelParts = [
         'Template_Nilai',
@@ -1691,10 +1698,13 @@ export default function App() {
     rowNumber: number,
     academicYear: string,
     errors: string[],
+    rawGrade?: any,
   ) => {
     const nim = getExcelCellText(rawNim);
     const mkCode = getExcelCellText(rawMkCode).replace(/\*$/, '');
     const score = Number(rawScore);
+    const gradeFromFile = getExcelCellText(rawGrade).toUpperCase();
+    const allowedGrades = new Set(['A', 'AB', 'B', 'BC', 'C', 'D', 'E']);
 
     if (!nim || !mkCode || rawScore === undefined || rawScore === null || rawScore === '') return null;
 
@@ -1715,11 +1725,16 @@ export default function App() {
       return null;
     }
 
+    const calculatedGrade = getGradeLetter(score);
+    if (gradeFromFile && allowedGrades.has(gradeFromFile) && gradeFromFile !== calculatedGrade) {
+      errors.push(`Baris ${rowNumber}: Nilai Huruf ${gradeFromFile} tidak sesuai Nilai Angka ${score}; sistem memakai ${calculatedGrade}.`);
+    }
+
     return {
       studentId: student.id,
       courseId: course.id,
       score,
-      grade: getGradeLetter(score),
+      grade: calculatedGrade,
       semester: course.semester || getCurrentStudentSemester(student.angkatan),
       academicYear,
     };
@@ -1751,7 +1766,7 @@ export default function App() {
   const parseWideGradeExcel = (parsedRows: any[][], academicYear: string) => {
     const courseCodePattern = /^[A-Z]{3}\d{10}\*?$/;
     let headerRowIndex = -1;
-    let courseColumns: Array<{ code: string; scoreColumn: number }> = [];
+    let courseColumns: Array<{ code: string; scoreColumn: number; gradeColumn?: number }> = [];
 
     parsedRows.slice(0, 12).forEach((row, rowIndex) => {
       const found = row
@@ -1773,15 +1788,22 @@ export default function App() {
 
     const subHeaderRows = parsedRows.slice(headerRowIndex + 1, Math.min(parsedRows.length, headerRowIndex + 5));
     courseColumns = courseColumns.map((course) => {
+      let scoreColumn = course.scoreColumn;
+      let gradeColumn: number | undefined;
+
       for (const subRow of subHeaderRows) {
         for (let offset = 0; offset < 3; offset++) {
-          if (getExcelCellText(subRow[course.scoreColumn + offset]).toLowerCase() === 'na') {
-            return { ...course, scoreColumn: course.scoreColumn + offset };
+          const subHeader = getExcelCellText(subRow[course.scoreColumn + offset]).toLowerCase();
+          if (subHeader === 'na' || subHeader.includes('nilai angka')) {
+            scoreColumn = course.scoreColumn + offset;
+          }
+          if (subHeader === 'nh' || subHeader.includes('nilai huruf')) {
+            gradeColumn = course.scoreColumn + offset;
           }
         }
       }
 
-      return course;
+      return { ...course, scoreColumn, gradeColumn };
     });
 
     const nimHeaderRowIndex = parsedRows
@@ -1818,7 +1840,15 @@ export default function App() {
       if (!/^\d{10}$/.test(rawNim)) continue;
 
       courseColumns.forEach((course) => {
-        const item = buildGradeImportItem(rawNim, course.code, row[course.scoreColumn], i + 1, academicYear, errors);
+        const item = buildGradeImportItem(
+          rawNim,
+          course.code,
+          row[course.scoreColumn],
+          i + 1,
+          academicYear,
+          errors,
+          course.gradeColumn !== undefined ? row[course.gradeColumn] : undefined,
+        );
         if (item) itemsToImport.push(item);
       });
     }
@@ -1890,20 +1920,33 @@ export default function App() {
         if (!data) return;
 
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const parsedRows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        const preferredSheetNames = [
+          ...workbook.SheetNames.filter(name => name.toLowerCase() === 'template_nilai'),
+          ...workbook.SheetNames.filter(name => name.toLowerCase() !== 'template_nilai'),
+        ];
+        const workbookRows = preferredSheetNames.map(name => ({
+          name,
+          rows: XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }) as any[][],
+        }));
+        const allRows: any[][] = workbook.SheetNames.flatMap((name) => (
+          XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 }) as any[][]
+        ));
 
-        if (parsedRows.length <= 1) {
+        if (!workbookRows.some(sheet => sheet.rows.length > 1)) {
           showToast('File Excel kosong atau tidak memiliki baris data.');
           return;
         }
 
-        const academicYear = extractAcademicYearFromRows(parsedRows);
-        const parsedImport = parseLongGradeExcel(parsedRows, academicYear) || parseWideGradeExcel(parsedRows, academicYear);
+        const academicYear = extractAcademicYearFromRows(allRows.length > 0 ? allRows : workbookRows[0]?.rows || []);
+        const parsedImport = workbookRows
+          .map(sheet => parseLongGradeExcel(sheet.rows, academicYear) || parseWideGradeExcel(sheet.rows, academicYear))
+          .find(result => result && result.itemsToImport.length > 0)
+          || workbookRows
+            .map(sheet => parseLongGradeExcel(sheet.rows, academicYear) || parseWideGradeExcel(sheet.rows, academicYear))
+            .find(Boolean);
 
         if (!parsedImport) {
-          showToast('Format Excel tidak dikenali. Gunakan format NIM-KodeMK-Nilai_Angka atau format rapor panjang.');
+          showToast('Format Excel tidak dikenali. Gunakan Template_Nilai atau format NIM-KodeMK-Nilai_Angka.');
           return;
         }
 
