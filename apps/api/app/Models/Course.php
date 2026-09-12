@@ -10,7 +10,7 @@ class Course extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = ['code', 'name', 'sks', 'department_id'];
+    protected $fillable = ['code', 'name', 'sks', 'semester', 'department_id'];
 
     public function department()
     {

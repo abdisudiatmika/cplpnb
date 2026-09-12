@@ -33,6 +33,7 @@ class CourseController extends Controller
             'code' => 'required|string|max:50',
             'name' => 'required|string|max:255',
             'sks' => 'required|integer|min:1',
+            'semester' => 'nullable|integer|min:1|max:14',
             'department_id' => 'required|exists:departments,id',
         ]);
 
@@ -61,6 +62,7 @@ class CourseController extends Controller
             'code' => 'sometimes|required|string|max:50',
             'name' => 'sometimes|required|string|max:255',
             'sks' => 'sometimes|required|integer|min:1',
+            'semester' => 'sometimes|nullable|integer|min:1|max:14',
             'department_id' => 'sometimes|required|exists:departments,id',
         ]);
 
@@ -88,6 +90,7 @@ class CourseController extends Controller
             'items.*.code' => 'required|string|max:50',
             'items.*.name' => 'required|string|max:255',
             'items.*.sks' => 'required|integer|min:1',
+            'items.*.semester' => 'nullable|integer|min:1|max:14',
         ]);
 
         $now = now();
@@ -97,6 +100,7 @@ class CourseController extends Controller
                 'code' => $item['code'],
                 'name' => $item['name'],
                 'sks' => $item['sks'],
+                'semester' => $item['semester'] ?? null,
                 'department_id' => $departmentId,
                 'created_at' => $now,
                 'updated_at' => $now,

@@ -98,7 +98,7 @@ class GradeController extends Controller
                 $g->courseCode = $g->course->code;
                 $g->courseName = $g->course->name;
                 $g->sks = $g->course->sks;
-                $g->semester = $g->course->semester; // Or $g->semester if stored on grade
+                $g->semester = $g->semester ?: $g->course->semester;
                 $g->academicYear = $g->academic_year;
             }
             return $g;
@@ -127,6 +127,12 @@ class GradeController extends Controller
                 $updateData = ['grade' => $item['grade']];
                 if (isset($item['score'])) {
                     $updateData['score'] = $item['score'];
+                }
+                if (isset($item['semester'])) {
+                    $updateData['semester'] = $item['semester'];
+                }
+                if (isset($item['academicYear']) || isset($item['academic_year'])) {
+                    $updateData['academic_year'] = $item['academicYear'] ?? $item['academic_year'];
                 }
                 $grade->update($updateData);
             } else {

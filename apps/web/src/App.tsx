@@ -62,6 +62,31 @@ async function apiCall(path: string, method: string = 'GET', body: any = null) {
   return null;
 }
 
+function getActiveAcademicPeriod(date = new Date()) {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const isOddSemesterPeriod = month >= 8 || month <= 1;
+  const academicStartYear = month >= 8 ? year : year - 1;
+
+  return {
+    academicYear: `${academicStartYear}/${academicStartYear + 1}`,
+    isOddSemesterPeriod,
+    academicStartYear,
+  };
+}
+
+function getCurrentStudentSemester(angkatan?: string) {
+  const cohortYear = Number(angkatan);
+  const period = getActiveAcademicPeriod();
+
+  if (!cohortYear || cohortYear > period.academicStartYear) {
+    return 1;
+  }
+
+  const semester = (period.academicStartYear - cohortYear) * 2 + (period.isOddSemesterPeriod ? 1 : 2);
+  return Math.max(1, semester);
+}
+
 // Interfaces
 interface Department {
   id: string;
@@ -95,6 +120,7 @@ interface Course {
   code: string;
   name: string;
   sks: number;
+  semester?: number | string | null;
 }
 
 interface Cpl {
@@ -284,6 +310,7 @@ export default function App() {
   const [courseFormCode, setCourseFormCode] = useState('');
   const [courseFormName, setCourseFormName] = useState('');
   const [courseFormSks, setCourseFormSks] = useState(3);
+  const [courseFormSemester, setCourseFormSemester] = useState(1);
 
   // CPL form
   const [cplFormCode, setCplFormCode] = useState('');
@@ -307,8 +334,8 @@ export default function App() {
   const [gradeFormCourseId, setGradeFormCourseId] = useState('');
   const [gradeFormLetter, setGradeFormLetter] = useState('AB');
   const [gradeFormScore, setGradeFormScore] = useState('80');
-  const [gradeFormSemester, setGradeFormSemester] = useState('IV');
-  const [gradeFormYear, setGradeFormYear] = useState('2024/2025');
+  const [gradeFormSemester, setGradeFormSemester] = useState('1');
+  const [gradeFormYear, setGradeFormYear] = useState(getActiveAcademicPeriod().academicYear);
 
   // Mouse tracking gradient effect ref
   const rightPanelRef = useRef<HTMLDivElement>(null);
@@ -915,12 +942,14 @@ export default function App() {
         let codeIdx = 0;
         let nameIdx = 1;
         let sksIdx = 2;
+        let semesterIdx = -1;
         let startRow = 0;
 
         if (isHeader) {
           codeIdx = firstRow.findIndex((h: string) => h.includes('kode') || h.includes('code'));
           nameIdx = firstRow.findIndex((h: string) => h.includes('nama') || h.includes('name') || h === 'mk' || h.includes('mata kuliah') || h.includes('matakuliah'));
           sksIdx = firstRow.findIndex((h: string) => h.includes('sks'));
+          semesterIdx = firstRow.findIndex((h: string) => h.includes('semester'));
           startRow = 1;
         }
 
@@ -939,6 +968,7 @@ export default function App() {
           const rawCode = String(row[codeIdx] || '').trim();
           const rawName = String(row[nameIdx] || '').trim();
           const rawSks = row[sksIdx] !== undefined ? String(row[sksIdx]).trim() : '';
+          const rawSemester = semesterIdx !== -1 && row[semesterIdx] !== undefined ? String(row[semesterIdx]).trim() : '';
 
           // Skip completely empty rows
           if (!rawCode && !rawName && !rawSks) continue;
@@ -959,7 +989,8 @@ export default function App() {
           itemsToImport.push({
             code: rawCode,
             name: rawName,
-            sks: Number(rawSks)
+            sks: Number(rawSks),
+            semester: rawSemester && !isNaN(Number(rawSemester)) ? Number(rawSemester) : null,
           });
         }
 
@@ -1009,7 +1040,7 @@ export default function App() {
     // Build data rows for each course
     const sortedCourses = [...courses].sort((a, b) => a.code.localeCompare(b.code));
     sortedCourses.forEach(course => {
-      const row: any[] = ['', course.code, course.name]; // We don't have semester so leave blank
+      const row: any[] = [course.semester || '', course.code, course.name];
       const courseMappings = mappings.filter(m => m.courseId === course.id);
       
       cplCodes.forEach(cplCode => {
@@ -1573,7 +1604,9 @@ export default function App() {
           studentId: student.id,
           courseId: course.id,
           score: item.score,
-          grade: getGradeLetter(item.score)
+          grade: getGradeLetter(item.score),
+          semester: course.semester || getCurrentStudentSemester(student.angkatan),
+          academicYear: getActiveAcademicPeriod().academicYear,
         });
       });
 
@@ -1669,7 +1702,9 @@ export default function App() {
             studentId: student.id,
             courseId: course.id,
             score: score,
-            grade: getGradeLetter(score)
+            grade: getGradeLetter(score),
+            semester: course.semester || getCurrentStudentSemester(student.angkatan),
+            academicYear: getActiveAcademicPeriod().academicYear,
           });
         }
 
@@ -2813,7 +2848,7 @@ export default function App() {
         const list = await apiCall('/students');
         setStudents(list);
       } else if (modalType === 'course') {
-        if (!courseFormCode.trim() || !courseFormName.trim() || !courseFormSks) {
+        if (!courseFormCode.trim() || !courseFormName.trim() || !courseFormSks || !courseFormSemester) {
           setModalError('Harap isi semua kolom.');
           return;
         }
@@ -2822,6 +2857,7 @@ export default function App() {
             code: courseFormCode,
             name: courseFormName,
             sks: courseFormSks,
+            semester: courseFormSemester,
           });
           showToast('Mata kuliah berhasil ditambahkan.');
         } else {
@@ -2829,6 +2865,7 @@ export default function App() {
             code: courseFormCode,
             name: courseFormName,
             sks: courseFormSks,
+            semester: courseFormSemester,
           });
           showToast('Mata kuliah berhasil diperbarui.');
         }
@@ -2983,17 +3020,19 @@ export default function App() {
       setCourseFormCode('');
       setCourseFormName('');
       setCourseFormSks(3);
+      setCourseFormSemester(1);
     } else if (type === 'cpl') {
       setCplFormCode('');
       setCplFormDesc('');
       setCplFormCat('Sikap');
       setCplFormTarget(75);
     } else if (type === 'grade') {
-      setGradeFormCourseId(courses[0]?.id || '');
+      const defaultCourseId = courses[0]?.id || '';
+      setGradeFormCourseId(defaultCourseId);
       setGradeFormScore('80');
       setGradeFormLetter('AB');
-      setGradeFormSemester('IV');
-      setGradeFormYear('2024/2025');
+      setGradeFormSemester(getDefaultGradeSemester(defaultCourseId));
+      setGradeFormYear(getActiveAcademicPeriod().academicYear);
     }
     setIsModalOpen(true);
   };
@@ -3023,6 +3062,7 @@ export default function App() {
       setCourseFormCode(item.code);
       setCourseFormName(item.name);
       setCourseFormSks(item.sks);
+      setCourseFormSemester(Number(item.semester || 1));
     } else if (type === 'cpl') {
       setCplFormCode(item.code);
       setCplFormDesc(item.description);
@@ -3057,6 +3097,16 @@ export default function App() {
     const list = students.map(s => s ? s.angkatan : '').filter(Boolean);
     return Array.from(new Set(list)).sort((a, b) => Number(b) - Number(a)); // Sort descending
   }, [students]);
+
+  const getDefaultGradeSemester = (courseId?: string) => {
+    const selectedCourse = courses.find(course => course.id === courseId);
+    if (selectedCourse?.semester) {
+      return String(selectedCourse.semester);
+    }
+
+    const selectedStudent = students.find(student => student.id === selectedStudentId);
+    return String(getCurrentStudentSemester(selectedStudent?.angkatan));
+  };
 
   const cplMatrixSemesterLabel = cplMatrixSemesterType
     ? cplMatrixSemesterType.charAt(0).toUpperCase() + cplMatrixSemesterType.slice(1)
@@ -4622,6 +4672,7 @@ export default function App() {
                           <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center cursor-pointer hover:text-on-surface select-none group" onClick={() => handleCourseSort('sks')}>
                             <div className="flex items-center justify-center gap-xs">SKS <span className={`material-symbols-outlined text-[16px] transition-opacity ${courseSortConfig?.key === 'sks' ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-50'}`}>{courseSortConfig?.key === 'sks' && courseSortConfig.direction === 'desc' ? 'arrow_downward' : 'arrow_upward'}</span></div>
                           </th>
+                          <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Semester</th>
                           <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">CPL Terpetakan</th>
                           <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                         </tr>
@@ -4649,6 +4700,7 @@ export default function App() {
                               <td className="px-lg py-md font-body-sm font-bold text-primary">{course.code}</td>
                               <td className="px-lg py-md font-body-sm font-medium text-on-surface">{course.name}</td>
                               <td className="px-lg py-md font-body-sm text-center font-semibold text-on-surface-variant">{course.sks}</td>
+                              <td className="px-lg py-md font-body-sm text-center font-semibold text-on-surface-variant">{course.semester || '-'}</td>
                               <td className="px-lg py-md">
                                 <div className="flex flex-wrap gap-xs items-center">
                                   {mappings.filter(m => m.courseId === course.id).length > 0 ? (
@@ -4686,7 +4738,7 @@ export default function App() {
                             </tr>
                             {expandedCourseId === course.id && (
                               <tr className="bg-surface-dim/30 slide-panel">
-                                <td colSpan={7} className="p-0 border-b border-outline-variant/10">
+                                <td colSpan={8} className="p-0 border-b border-outline-variant/10">
                                   <div className="p-xl slide-panel-overlay">
                                     <div className="flex justify-between items-center mb-md">
                                       <h4 className="font-label-lg font-bold text-on-surface">Detail CPL Terpetakan: {course.name}</h4>
@@ -4777,7 +4829,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={7} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data mata kuliah.</td>
+                            <td colSpan={8} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data mata kuliah.</td>
                           </tr>
                         )}
                       </tbody>
@@ -5072,6 +5124,7 @@ export default function App() {
                     <div className="flex flex-wrap gap-md font-body-md text-on-surface-variant">
                       <span className="flex items-center gap-xs"><span className="material-symbols-outlined text-[18px]">badge</span> {students.find(s => s.id === selectedStudentId)?.nim}</span>
                       <span className="flex items-center gap-xs"><span className="material-symbols-outlined text-[18px]">calendar_today</span> Angkatan {students.find(s => s.id === selectedStudentId)?.angkatan}</span>
+                      <span className="flex items-center gap-xs"><span className="material-symbols-outlined text-[18px]">school</span> Semester aktif {getCurrentStudentSemester(students.find(s => s.id === selectedStudentId)?.angkatan)}</span>
                       <span className="flex items-center gap-xs"><span className="material-symbols-outlined text-[18px]">class</span> Kelas {students.find(s => s.id === selectedStudentId)?.kelas}</span>
                     </div>
                   </div>
@@ -5888,6 +5941,18 @@ export default function App() {
                       <option value="6">6 SKS</option>
                     </select>
                   </div>
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Semester Kurikulum</label>
+                    <select
+                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
+                      value={courseFormSemester}
+                      onChange={(e) => setCourseFormSemester(Number(e.target.value))}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(semester => (
+                        <option key={semester} value={semester}>Semester {semester}</option>
+                      ))}
+                    </select>
+                  </div>
                 </>
               )}
 
@@ -5943,11 +6008,15 @@ export default function App() {
                         modalAction === 'edit' ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-surface-container'
                       }`}
                       value={gradeFormCourseId}
-                      onChange={(e) => setGradeFormCourseId(e.target.value)}
+                      onChange={(e) => {
+                        const courseId = e.target.value;
+                        setGradeFormCourseId(courseId);
+                        setGradeFormSemester(getDefaultGradeSemester(courseId));
+                      }}
                     >
                       <option value="">-- Pilih Mata Kuliah --</option>
                       {courses.map(c => (
-                        <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                        <option key={c.id} value={c.id}>{c.name} ({c.code}){c.semester ? ` - Semester ${c.semester}` : ''}</option>
                       ))}
                     </select>
                   </div>
