@@ -1437,37 +1437,95 @@ export default function App() {
   const downloadGradeTemplate = async () => {
     try {
       setDataLoading(true);
-      const allGrades = await apiCall('/grades/export/all');
-      
-      const headers = ['No', 'NIM', 'Nama', 'Kelas', 'KodeMK', 'Nama_MK', 'SKS', 'Wajib', 'Nilai_Angka'];
-      const dataRows: any[][] = [headers];
 
-      allGrades.forEach((g: any, index: number) => {
-        dataRows.push([
-          index + 1,
-          g.studentNim,
-          g.studentName,
-          g.studentClass,
-          g.courseCode,
-          g.courseName,
-          g.sks,
-          'Ya', // Default Wajib
-          g.score !== null ? (g.score > 10 ? g.score : g.score * 10) : ''
-        ]);
+      const selectedStudents = filteredGradeStudents.length > 0 ? filteredGradeStudents : students;
+      const activePeriod = getActiveAcademicPeriod();
+      const activeSemester = gradeStudentAngkatan
+        ? getCurrentStudentSemester(gradeStudentAngkatan)
+        : undefined;
+      const selectedCourses = [...courses]
+        .filter(course => !activeSemester || Number(course.semester) === activeSemester)
+        .sort((a, b) => {
+          const semesterCompare = Number(a.semester || 0) - Number(b.semester || 0);
+          if (semesterCompare !== 0) return semesterCompare;
+          return a.code.localeCompare(b.code);
+        });
+
+      const coursesForTemplate = selectedCourses.length > 0 ? selectedCourses : [...courses].sort((a, b) => a.code.localeCompare(b.code));
+
+      const infoRows: any[][] = [
+        ['Rekapitulasi Nilai Jurusan', currentUser?.departmentName || ''],
+        ['Tahun Ajaran', activePeriod.academicYear],
+        ['Periode', activePeriod.semesterType === 'ganjil' ? 'Ganjil' : 'Genap'],
+        ['Angkatan', gradeStudentAngkatan || 'Semua'],
+        ['Kelas', gradeStudentKelas || 'Semua'],
+        ['Catatan', 'Isi nilai angka hanya pada kolom NA. Kolom NH dan NB boleh dikosongkan.'],
+        [],
+      ];
+
+      const headerRow = ['No', 'Nim', 'NAMA MAHASISWA'];
+      const sksRow = ['', '', ''];
+      const subHeaderRow = ['', '', ''];
+
+      coursesForTemplate.forEach(course => {
+        headerRow.push(course.code, '', '');
+        sksRow.push(`${course.sks} SKS`, '', '');
+        subHeaderRow.push('NA', 'NH', 'NB');
       });
 
-      if (allGrades.length === 0) {
-        // If empty, just provide sample
-        dataRows.push([1, '2015613005', 'NI KOMANG INDAH', '1 A', 'MKK2462401102', 'HUKUM PAJAK', 2, 'Ya', 82.50]);
-      }
+      const dataRows: any[][] = [
+        ...infoRows,
+        headerRow,
+        sksRow,
+        subHeaderRow,
+        ...selectedStudents.map((student, index) => {
+          const row = [index + 1, student.nim, student.name];
+          coursesForTemplate.forEach(() => row.push('', '', ''));
+          return row;
+        }),
+      ];
+
+      const guideRows: any[][] = [
+        ['Format Panjang', 'NIM', 'KodeMK', 'Nilai_Angka'],
+        ['Contoh', selectedStudents[0]?.nim || '2515623001', coursesForTemplate[0]?.code || 'MBB2462401217', 88.5],
+        [],
+        ['Daftar Mata Kuliah'],
+        ['KodeMK', 'Nama_MK', 'SKS', 'Semester Kurikulum'],
+        ...coursesForTemplate.map(course => [course.code, course.name, course.sks, course.semester || '']),
+      ];
 
       const worksheet = XLSX.utils.aoa_to_sheet(dataRows);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Nilai_Mahasiswa");
-      XLSX.writeFile(workbook, "Export_Nilai_Mahasiswa.xlsx");
-      showToast('Berhasil mengunduh Export Nilai Mahasiswa.');
+
+      coursesForTemplate.forEach((_, index) => {
+        const startCol = 3 + index * 3;
+        worksheet['!merges'] = [
+          ...(worksheet['!merges'] || []),
+          { s: { r: infoRows.length, c: startCol }, e: { r: infoRows.length, c: startCol + 2 } },
+          { s: { r: infoRows.length + 1, c: startCol }, e: { r: infoRows.length + 1, c: startCol + 2 } },
+        ];
+      });
+      worksheet['!cols'] = [
+        { wch: 6 },
+        { wch: 16 },
+        { wch: 34 },
+        ...coursesForTemplate.flatMap(() => [{ wch: 10 }, { wch: 8 }, { wch: 8 }]),
+      ];
+
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Template_Rapor_Panjang");
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(guideRows), "Panduan");
+
+      const labelParts = [
+        'Template_Nilai',
+        gradeStudentAngkatan || 'Semua_Angkatan',
+        gradeStudentKelas || 'Semua_Kelas',
+        activePeriod.academicYear.replace('/', '-'),
+        activePeriod.semesterType,
+      ];
+      XLSX.writeFile(workbook, `${labelParts.join('_')}.xlsx`);
+      showToast('Berhasil mengunduh template Excel nilai.');
     } catch (err: any) {
-      showToast(err.message || 'Gagal mengunduh data nilai.');
+      showToast(err.message || 'Gagal mengunduh template nilai.');
     } finally {
       setDataLoading(false);
     }
@@ -1573,18 +1631,38 @@ export default function App() {
 
       let tokenIdx = firstGradeIdx;
       for (const courseCode of courseCodes) {
-        const rawScore = tokens[tokenIdx];
-        const rawGrade = tokens[tokenIdx + 1];
-        const rawWeight = tokens[tokenIdx + 2];
+        let rawScore = tokens[tokenIdx];
+        let rawGrade = tokens[tokenIdx + 1];
+        let rawWeight = tokens[tokenIdx + 2];
+        let step = 3;
+
+        if (
+          rawScore &&
+          /^\d+(?:\.\d+)?$/.test(rawScore) &&
+          /^\d+$/.test(rawGrade || '') &&
+          gradeLetters.has(tokens[tokenIdx + 2]) &&
+          !Number.isNaN(Number(tokens[tokenIdx + 3]))
+        ) {
+          rawScore = `${rawScore}${rawGrade}`;
+          rawGrade = tokens[tokenIdx + 2];
+          rawWeight = tokens[tokenIdx + 3];
+          step = 4;
+        }
+
         const score = Number(rawScore);
 
         if (rawScore === undefined || rawGrade === undefined || rawWeight === undefined) break;
         if (Number.isNaN(score) || !gradeLetters.has(rawGrade) || Number.isNaN(Number(rawWeight))) break;
 
         parsedItems.push({ nim, courseCode, score });
-        tokenIdx += 3;
+        tokenIdx += step;
       }
     });
+
+    const expectedItems = courseCodes.length * studentRows.length;
+    if (parsedItems.length > 0 && parsedItems.length < expectedItems) {
+      errors.push(`PDF terbaca sebagian: ${parsedItems.length} dari ${expectedItems} nilai. Periksa apakah semua nilai berhasil masuk.`);
+    }
 
     return { courseCodes, parsedItems, errors };
   };
@@ -1597,6 +1675,155 @@ export default function App() {
     if (selectedStudentId) {
       handleSelectStudentForGrades(selectedStudentId);
     }
+  };
+
+  const getExcelCellText = (value: any) => String(value ?? '').trim();
+
+  const extractAcademicYearFromRows = (rows: any[][]) => {
+    const preview = rows.slice(0, 12).flat().map(getExcelCellText).join(' ');
+    return preview.match(/\b20\d{2}\/20\d{2}\b/)?.[0] || getActiveAcademicPeriod().academicYear;
+  };
+
+  const buildGradeImportItem = (
+    rawNim: string,
+    rawMkCode: string,
+    rawScore: any,
+    rowNumber: number,
+    academicYear: string,
+    errors: string[],
+  ) => {
+    const nim = getExcelCellText(rawNim);
+    const mkCode = getExcelCellText(rawMkCode).replace(/\*$/, '');
+    const score = Number(rawScore);
+
+    if (!nim || !mkCode || rawScore === undefined || rawScore === null || rawScore === '') return null;
+
+    if (Number.isNaN(score)) {
+      errors.push(`Baris ${rowNumber}: Nilai Angka tidak valid untuk NIM ${nim}.`);
+      return null;
+    }
+
+    const student = students.find(s => s.nim === nim);
+    if (!student) {
+      errors.push(`Baris ${rowNumber}: Mahasiswa NIM ${nim} tidak ditemukan.`);
+      return null;
+    }
+
+    const course = courses.find(c => c.code.toLowerCase() === mkCode.toLowerCase());
+    if (!course) {
+      errors.push(`Baris ${rowNumber}: Mata Kuliah ${mkCode} tidak ditemukan.`);
+      return null;
+    }
+
+    return {
+      studentId: student.id,
+      courseId: course.id,
+      score,
+      grade: getGradeLetter(score),
+      semester: course.semester || getCurrentStudentSemester(student.angkatan),
+      academicYear,
+    };
+  };
+
+  const parseLongGradeExcel = (parsedRows: any[][], academicYear: string) => {
+    const headersRow = parsedRows[0].map((h: any) => getExcelCellText(h).toLowerCase());
+
+    const nimIdx = headersRow.findIndex((h: string) => h === 'nim');
+    const mkCodeIdx = headersRow.findIndex((h: string) => h === 'kodemk' || h === 'kode mk' || h === 'kode_mk');
+    const scoreIdx = headersRow.findIndex((h: string) => h.includes('nilai_angka') || h.includes('nilai angka') || h === 'nilai');
+
+    if (nimIdx === -1 || mkCodeIdx === -1 || scoreIdx === -1) return null;
+
+    const itemsToImport: any[] = [];
+    const errors: string[] = [];
+
+    for (let i = 1; i < parsedRows.length; i++) {
+      const row = parsedRows[i];
+      if (!row || row.length === 0) continue;
+
+      const item = buildGradeImportItem(row[nimIdx], row[mkCodeIdx], row[scoreIdx], i + 1, academicYear, errors);
+      if (item) itemsToImport.push(item);
+    }
+
+    return { itemsToImport, errors, format: 'panjang' };
+  };
+
+  const parseWideGradeExcel = (parsedRows: any[][], academicYear: string) => {
+    const courseCodePattern = /^[A-Z]{3}\d{10}\*?$/;
+    let headerRowIndex = -1;
+    let courseColumns: Array<{ code: string; scoreColumn: number }> = [];
+
+    parsedRows.slice(0, 12).forEach((row, rowIndex) => {
+      const found = row
+        .map((cell, colIndex) => ({ text: getExcelCellText(cell).toUpperCase(), colIndex }))
+        .filter(cell => courseCodePattern.test(cell.text));
+
+      if (found.length > courseColumns.length) {
+        headerRowIndex = rowIndex;
+        courseColumns = found.map(cell => ({
+          code: cell.text.replace(/\*$/, ''),
+          scoreColumn: cell.colIndex,
+        }));
+      }
+    });
+
+    if (headerRowIndex === -1 || courseColumns.length === 0) {
+      return null;
+    }
+
+    const subHeaderRows = parsedRows.slice(headerRowIndex + 1, Math.min(parsedRows.length, headerRowIndex + 5));
+    courseColumns = courseColumns.map((course) => {
+      for (const subRow of subHeaderRows) {
+        for (let offset = 0; offset < 3; offset++) {
+          if (getExcelCellText(subRow[course.scoreColumn + offset]).toLowerCase() === 'na') {
+            return { ...course, scoreColumn: course.scoreColumn + offset };
+          }
+        }
+      }
+
+      return course;
+    });
+
+    const nimHeaderRowIndex = parsedRows
+      .slice(0, Math.min(parsedRows.length, headerRowIndex + 5))
+      .findIndex(row => row.some(cell => getExcelCellText(cell).toLowerCase() === 'nim'));
+    const nimHeaderRow = nimHeaderRowIndex >= 0 ? parsedRows[nimHeaderRowIndex] : [];
+    let nimIdx = nimHeaderRow.findIndex(cell => getExcelCellText(cell).toLowerCase() === 'nim');
+
+    if (nimIdx === -1) {
+      const candidates = new Map<number, number>();
+      parsedRows.forEach(row => {
+        row.forEach((cell, colIndex) => {
+          if (/^\d{10}$/.test(getExcelCellText(cell))) {
+            candidates.set(colIndex, (candidates.get(colIndex) || 0) + 1);
+          }
+        });
+      });
+      nimIdx = Array.from(candidates.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
+    }
+
+    if (nimIdx === -1) return null;
+
+    const firstStudentRowIndex = parsedRows.findIndex((row, index) => (
+      index > headerRowIndex && /^\d{10}$/.test(getExcelCellText(row[nimIdx]))
+    ));
+    if (firstStudentRowIndex === -1) return null;
+
+    const itemsToImport: any[] = [];
+    const errors: string[] = [];
+
+    for (let i = firstStudentRowIndex; i < parsedRows.length; i++) {
+      const row = parsedRows[i];
+      const rawNim = getExcelCellText(row[nimIdx]);
+      if (!/^\d{10}$/.test(rawNim)) continue;
+
+      courseColumns.forEach((course) => {
+        const item = buildGradeImportItem(rawNim, course.code, row[course.scoreColumn], i + 1, academicYear, errors);
+        if (item) itemsToImport.push(item);
+      });
+    }
+
+    return { itemsToImport, errors, format: 'rapor panjang' };
   };
 
   const handleImportGradePdf = async (file: File) => {
@@ -1672,59 +1899,15 @@ export default function App() {
           return;
         }
 
-        const headersRow = parsedRows[0].map((h: any) => String(h || '').trim().toLowerCase());
-        
-        const nimIdx = headersRow.findIndex((h: string) => h === 'nim');
-        const mkCodeIdx = headersRow.findIndex((h: string) => h === 'kodemk' || h === 'kode mk');
-        const scoreIdx = headersRow.findIndex((h: string) => h.includes('nilai_angka') || h.includes('nilai angka') || h === 'nilai');
+        const academicYear = extractAcademicYearFromRows(parsedRows);
+        const parsedImport = parseLongGradeExcel(parsedRows, academicYear) || parseWideGradeExcel(parsedRows, academicYear);
 
-        if (nimIdx === -1 || mkCodeIdx === -1 || scoreIdx === -1) {
-          showToast('Kolom NIM, KodeMK, dan Nilai_Angka harus ada.');
+        if (!parsedImport) {
+          showToast('Format Excel tidak dikenali. Gunakan format NIM-KodeMK-Nilai_Angka atau format rapor panjang.');
           return;
         }
 
-        const itemsToImport: any[] = [];
-        const errors: string[] = [];
-
-        for (let i = 1; i < parsedRows.length; i++) {
-          const row = parsedRows[i];
-          if (!row || row.length === 0) continue;
-
-          const rawNim = String(row[nimIdx] || '').trim();
-          const rawMkCode = String(row[mkCodeIdx] || '').trim().toLowerCase();
-          const rawScore = row[scoreIdx];
-
-          if (!rawNim || !rawMkCode) continue;
-
-          if (rawScore === undefined || rawScore === null || rawScore === '') continue; // Skip empty grades
-
-          const score = Number(rawScore);
-          if (isNaN(score)) {
-            errors.push(`Baris ${i + 1}: Nilai Angka tidak valid untuk NIM ${rawNim}`);
-            continue;
-          }
-
-          const student = students.find(s => s.nim === rawNim);
-          if (!student) {
-            errors.push(`Baris ${i + 1}: Mahasiswa NIM ${rawNim} tidak ditemukan.`);
-            continue;
-          }
-
-          const course = courses.find(c => c.code.toLowerCase() === rawMkCode);
-          if (!course) {
-            errors.push(`Baris ${i + 1}: Mata Kuliah ${rawMkCode} tidak ditemukan.`);
-            continue;
-          }
-
-          itemsToImport.push({
-            studentId: student.id,
-            courseId: course.id,
-            score: score,
-            grade: getGradeLetter(score),
-            semester: course.semester || getCurrentStudentSemester(student.angkatan),
-            academicYear: getActiveAcademicPeriod().academicYear,
-          });
-        }
+        const { itemsToImport, errors, format } = parsedImport;
 
         if (errors.length > 0) {
           alert(`Ditemukan kesalahan:\n${errors.slice(0, 5).join('\n')}${errors.length > 5 ? `\n...dan ${errors.length - 5} baris lainnya` : ''}\n\nNilai yang valid tetap akan diimpor.`);
@@ -1737,6 +1920,7 @@ export default function App() {
 
         setDataLoading(true);
         await importGradeItems(itemsToImport);
+        showToast(`Import Excel format ${format} selesai.`);
       } catch (err: any) {
         showToast(err.message || 'Gagal membaca file Excel.');
       } finally {
