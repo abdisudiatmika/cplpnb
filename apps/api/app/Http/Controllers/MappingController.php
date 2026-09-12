@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\CourseCplMapping;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 class MappingController extends Controller
@@ -77,5 +79,74 @@ class MappingController extends Controller
         $mapping = CourseCplMapping::findOrFail($id);
         $mapping->delete();
         return response()->json(null, 204);
+    }
+
+    public function bulk(Request $request)
+    {
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+        ]);
+
+        $items = collect($validated['items'])
+            ->map(function ($item) {
+                return [
+                    'course_id' => $item['courseId'] ?? $item['course_id'],
+                    'cpl_id' => $item['cplId'] ?? $item['cpl_id'],
+                    'weight' => $item['weight'],
+                ];
+            })
+            ->unique(fn ($item) => $item['course_id'] . ':' . $item['cpl_id'])
+            ->values();
+
+        Validator::make(['items' => $items->all()], [
+            'items.*.course_id' => 'required|string|exists:courses,id',
+            'items.*.cpl_id' => 'required|string|exists:cpls,id',
+            'items.*.weight' => 'required|numeric|min:0',
+        ])->validate();
+
+        $user = $request->user();
+        if ($user && $user->role === 'admin_jurusan') {
+            $departmentId = $user->department_id;
+            $courseCount = DB::table('courses')
+                ->whereIn('id', $items->pluck('course_id'))
+                ->where('department_id', $departmentId)
+                ->count();
+            $cplCount = DB::table('cpls')
+                ->whereIn('id', $items->pluck('cpl_id'))
+                ->where('department_id', $departmentId)
+                ->count();
+
+            if ($courseCount !== $items->pluck('course_id')->unique()->count() ||
+                $cplCount !== $items->pluck('cpl_id')->unique()->count()) {
+                return response()->json([
+                    'message' => 'Sebagian mata kuliah atau CPL tidak berada pada jurusan Anda.',
+                ], 403);
+            }
+        }
+
+        $now = now();
+        $mappingIds = [];
+
+        DB::transaction(function () use ($items, $now, &$mappingIds) {
+            foreach ($items as $item) {
+                $mapping = CourseCplMapping::updateOrCreate(
+                    [
+                        'course_id' => $item['course_id'],
+                        'cpl_id' => $item['cpl_id'],
+                    ],
+                    [
+                        'weight' => $item['weight'],
+                        'updated_at' => $now,
+                    ]
+                );
+
+                $mappingIds[] = $mapping->id;
+            }
+        });
+
+        return response()->json(
+            CourseCplMapping::with(['course', 'cpl'])->whereIn('id', $mappingIds)->get(),
+            201
+        );
     }
 }
