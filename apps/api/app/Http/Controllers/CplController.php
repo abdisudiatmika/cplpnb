@@ -139,11 +139,13 @@ class CplController extends Controller
 
         // Get all grades for these students & courses
         $courseIds = $mappings->pluck('course_id');
+        $studentsById = $studentQuery->get()->keyBy('id');
+
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
             ->whereIn('student_id', $students)
-            ->whereIn('course_id', $courseIds);
-        $this->applyGradePeriodFilters($allGrades, $semesterType, $academicYear);
-        $allGrades = $allGrades->get();
+            ->whereIn('course_id', $courseIds)
+            ->get();
+        $allGrades = $this->filterGradesForAcademicPeriod($allGrades, $studentsById, $semesterType, $academicYear);
 
         $gradesMap = [];
         foreach ($allGrades as $g) {
@@ -233,9 +235,11 @@ class CplController extends Controller
                 return $q->where('courses.department_id', $departmentId);
             })->get();
 
+        $studentsById = $studentsList->keyBy('id');
+
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
             ->join('students', 'student_grades.student_id', '=', 'students.id')
-            ->select('student_grades.student_id', 'student_grades.course_id', 'student_grades.grade', 'student_grades.score')
+            ->select('student_grades.student_id', 'student_grades.course_id', 'student_grades.grade', 'student_grades.score', 'student_grades.semester')
             ->when($departmentId, function($q) use ($departmentId) {
                 return $q->where('students.department_id', $departmentId);
             })
@@ -244,9 +248,9 @@ class CplController extends Controller
             })
             ->when($kelas, function($q) use ($kelas) {
                 return $q->where('students.kelas', $kelas);
-            });
-        $this->applyGradePeriodFilters($allGrades, $semesterType, $academicYear);
-        $allGrades = $allGrades->get();
+            })
+            ->get();
+        $allGrades = $this->filterGradesForAcademicPeriod($allGrades, $studentsById, $semesterType, $academicYear);
 
         $gradesMap = [];
         foreach ($allGrades as $g) {
@@ -373,10 +377,12 @@ class CplController extends Controller
             ->select('course_cpl_mappings.course_id', 'course_cpl_mappings.cpl_id', 'course_cpl_mappings.weight', 'cpls.code as cpl_code', 'cpls.description as cpl_desc', 'cpls.target_value')
             ->get();
 
+        $studentsById = $studentQuery->get()->keyBy('id');
+
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
-            ->whereIn('student_id', $studentIds);
-        $this->applyGradePeriodFilters($allGrades, $semesterType, $academicYear);
-        $allGrades = $allGrades->get();
+            ->whereIn('student_id', $studentIds)
+            ->get();
+        $allGrades = $this->filterGradesForAcademicPeriod($allGrades, $studentsById, $semesterType, $academicYear);
 
         $gradesByCourse = [];
         foreach ($allGrades as $g) {
@@ -434,33 +440,81 @@ class CplController extends Controller
         return response()->json($result);
     }
 
-    private function applyGradePeriodFilters($query, $semesterType = null, $academicYear = null)
+    private function filterGradesForAcademicPeriod($grades, $studentsById, $semesterType = null, $academicYear = null)
     {
-        if ($academicYear) {
-            $query->where('student_grades.academic_year', $academicYear);
+        if (!$semesterType && !$academicYear) {
+            return $grades;
         }
 
-        $semesters = $this->semestersForPeriod($semesterType);
-        if (!empty($semesters)) {
-            $query->whereIn('student_grades.semester', $semesters);
-        }
-
-        return $query;
+        return $grades->filter(function ($grade) use ($studentsById, $semesterType, $academicYear) {
+            $student = $studentsById->get($grade->student_id);
+            return $this->gradeMatchesAcademicPeriod($grade->semester ?? null, $student->angkatan ?? null, $semesterType, $academicYear);
+        })->values();
     }
 
-    private function semestersForPeriod($semesterType)
+    private function gradeMatchesAcademicPeriod($gradeSemester, $angkatan, $semesterType = null, $academicYear = null)
     {
-        $normalized = strtolower(trim((string) $semesterType));
-
-        if ($normalized === 'ganjil') {
-            return ['1', '3', '5', '7', 'I', 'III', 'V', 'VII', 'i', 'iii', 'v', 'vii'];
+        $semesterNumber = $this->semesterToNumber($gradeSemester);
+        if ($semesterNumber === null) {
+            return true;
         }
 
-        if ($normalized === 'genap') {
-            return ['2', '4', '6', '8', 'II', 'IV', 'VI', 'VIII', 'ii', 'iv', 'vi', 'viii'];
+        $period = strtolower(trim((string) $semesterType));
+        if ($period === 'ganjil' && $semesterNumber % 2 === 0) {
+            return false;
+        }
+        if ($period === 'genap' && $semesterNumber % 2 !== 0) {
+            return false;
         }
 
-        return [];
+        if (!$academicYear) {
+            return true;
+        }
+
+        $currentSemester = $this->currentSemesterForCohort($angkatan, $academicYear, $period);
+        return $currentSemester === null || $semesterNumber === $currentSemester;
+    }
+
+    private function currentSemesterForCohort($angkatan, $academicYear, $semesterType = null)
+    {
+        if (!$angkatan || !preg_match('/^\d{4}/', (string) $academicYear, $matches)) {
+            return null;
+        }
+
+        $academicStartYear = (int) $matches[0];
+        $cohortYear = (int) $angkatan;
+        if ($cohortYear > $academicStartYear) {
+            return 0;
+        }
+
+        $period = strtolower(trim((string) $semesterType));
+        $semesterOffset = $period === 'ganjil' ? 1 : 2;
+        return max(0, (($academicStartYear - $cohortYear) * 2) + $semesterOffset);
+    }
+
+    private function semesterToNumber($semester)
+    {
+        $value = strtoupper(trim((string) $semester));
+        if ($value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        $roman = [
+            'I' => 1,
+            'II' => 2,
+            'III' => 3,
+            'IV' => 4,
+            'V' => 5,
+            'VI' => 6,
+            'VII' => 7,
+            'VIII' => 8,
+        ];
+
+        return $roman[$value] ?? null;
     }
 
     public function achievements(Request $request, string $studentId)

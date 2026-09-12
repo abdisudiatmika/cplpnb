@@ -204,7 +204,7 @@ class StudentController extends Controller
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
             ->join('students', 'student_grades.student_id', '=', 'students.id')
             ->join('courses', 'student_grades.course_id', '=', 'courses.id')
-            ->select('student_grades.student_id', 'student_grades.grade', 'courses.sks')
+            ->select('student_grades.student_id', 'student_grades.grade', 'student_grades.semester', 'students.angkatan', 'courses.sks')
             ->when($departmentId, function($q) use ($departmentId) {
                 return $q->where('students.department_id', $departmentId);
             })
@@ -214,20 +214,8 @@ class StudentController extends Controller
             ->when($kelas, function($q) use ($kelas) {
                 return $q->where('students.kelas', $kelas);
             })
-            ->when($academicYear, function($q) use ($academicYear) {
-                return $q->where('student_grades.academic_year', $academicYear);
-            })
-            ->when($semesterType, function($q) use ($semesterType) {
-                $normalized = strtolower(trim((string) $semesterType));
-                if ($normalized === 'ganjil') {
-                    return $q->whereIn('student_grades.semester', ['1', '3', '5', '7', 'I', 'III', 'V', 'VII', 'i', 'iii', 'v', 'vii']);
-                }
-                if ($normalized === 'genap') {
-                    return $q->whereIn('student_grades.semester', ['2', '4', '6', '8', 'II', 'IV', 'VI', 'VIII', 'ii', 'iv', 'vi', 'viii']);
-                }
-                return $q;
-            })
             ->get();
+        $allGrades = $this->filterGradesForAcademicPeriod($allGrades, $semesterType, $academicYear);
 
         $studentStats = [];
         foreach ($allGrades as $g) {
@@ -266,5 +254,76 @@ class StudentController extends Controller
         $averageIpk = $studentsWithIpk > 0 ? round($sumIpk / $studentsWithIpk, 2) : 0;
 
         return response()->json(['averageIpk' => $averageIpk]);
+    }
+
+    private function filterGradesForAcademicPeriod($grades, $semesterType = null, $academicYear = null)
+    {
+        if (!$semesterType && !$academicYear) {
+            return $grades;
+        }
+
+        return $grades->filter(function ($grade) use ($semesterType, $academicYear) {
+            $semesterNumber = $this->semesterToNumber($grade->semester ?? null);
+            if ($semesterNumber === null) {
+                return true;
+            }
+
+            $period = strtolower(trim((string) $semesterType));
+            if ($period === 'ganjil' && $semesterNumber % 2 === 0) {
+                return false;
+            }
+            if ($period === 'genap' && $semesterNumber % 2 !== 0) {
+                return false;
+            }
+
+            if (!$academicYear) {
+                return true;
+            }
+
+            $currentSemester = $this->currentSemesterForCohort($grade->angkatan ?? null, $academicYear, $period);
+            return $currentSemester === null || $semesterNumber === $currentSemester;
+        })->values();
+    }
+
+    private function currentSemesterForCohort($angkatan, $academicYear, $semesterType = null)
+    {
+        if (!$angkatan || !preg_match('/^\d{4}/', (string) $academicYear, $matches)) {
+            return null;
+        }
+
+        $academicStartYear = (int) $matches[0];
+        $cohortYear = (int) $angkatan;
+        if ($cohortYear > $academicStartYear) {
+            return 0;
+        }
+
+        $period = strtolower(trim((string) $semesterType));
+        $semesterOffset = $period === 'ganjil' ? 1 : 2;
+        return max(0, (($academicStartYear - $cohortYear) * 2) + $semesterOffset);
+    }
+
+    private function semesterToNumber($semester)
+    {
+        $value = strtoupper(trim((string) $semester));
+        if ($value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        $roman = [
+            'I' => 1,
+            'II' => 2,
+            'III' => 3,
+            'IV' => 4,
+            'V' => 5,
+            'VI' => 6,
+            'VII' => 7,
+            'VIII' => 8,
+        ];
+
+        return $roman[$value] ?? null;
     }
 }

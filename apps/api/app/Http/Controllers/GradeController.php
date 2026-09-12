@@ -155,20 +155,49 @@ class GradeController extends Controller
     public function periods(Request $request)
     {
         $user = $request->user();
-        $query = StudentGrade::query()
+        $gradeYearsQuery = StudentGrade::query()
             ->join('students', 'student_grades.student_id', '=', 'students.id')
             ->select('student_grades.academic_year')
             ->whereNotNull('student_grades.academic_year')
             ->where('student_grades.academic_year', '!=', '');
+        $studentYearsQuery = \App\Models\Student::query()
+            ->select('angkatan')
+            ->whereNotNull('angkatan')
+            ->where('angkatan', '!=', '');
 
         if ($user && $user->role === 'admin_jurusan') {
-            $query->where('students.department_id', $user->department_id);
+            $gradeYearsQuery->where('students.department_id', $user->department_id);
+            $studentYearsQuery->where('department_id', $user->department_id);
         }
 
-        $academicYears = $query
+        $academicYears = $gradeYearsQuery
             ->distinct()
-            ->orderByDesc('student_grades.academic_year')
             ->pluck('student_grades.academic_year')
+            ->filter()
+            ->values();
+
+        $cohortYears = $studentYearsQuery
+            ->distinct()
+            ->pluck('angkatan')
+            ->map(fn ($year) => (int) $year)
+            ->filter(fn ($year) => $year > 0)
+            ->values();
+
+        $currentYear = (int) now()->format('Y');
+        $currentMonth = (int) now()->format('n');
+        $currentAcademicStart = $currentMonth >= 8 ? $currentYear : $currentYear - 1;
+        $minYear = min($cohortYears->min() ?: $currentAcademicStart, $currentAcademicStart);
+        $maxYear = $currentAcademicStart + 1;
+
+        $generatedYears = collect(range($minYear, $maxYear))
+            ->map(fn ($year) => $year . '/' . ($year + 1));
+
+        $academicYears = $academicYears
+            ->merge($generatedYears)
+            ->unique()
+            ->sortByDesc(function ($year) {
+                return (int) substr((string) $year, 0, 4);
+            })
             ->values();
 
         return response()->json([

@@ -70,6 +70,7 @@ function getActiveAcademicPeriod(date = new Date()) {
 
   return {
     academicYear: `${academicStartYear}/${academicStartYear + 1}`,
+    semesterType: isOddSemesterPeriod ? 'ganjil' : 'genap',
     isOddSemesterPeriod,
     academicStartYear,
   };
@@ -254,8 +255,8 @@ export default function App() {
   // Removed unused cpl search/filter states
   const [cplMatrixAngkatan, setCplMatrixAngkatan] = useState('');
   const [cplMatrixKelas, setCplMatrixKelas] = useState('');
-  const [cplMatrixSemesterType, setCplMatrixSemesterType] = useState('');
-  const [cplMatrixAcademicYear, setCplMatrixAcademicYear] = useState('');
+  const [cplMatrixSemesterType, setCplMatrixSemesterType] = useState(getActiveAcademicPeriod().semesterType);
+  const [cplMatrixAcademicYear, setCplMatrixAcademicYear] = useState(getActiveAcademicPeriod().academicYear);
   const [cplMatrixAcademicYears, setCplMatrixAcademicYears] = useState<string[]>([]);
   const [cplMatrixAverageIpk, setCplMatrixAverageIpk] = useState<number | null>(null);
   const [selectedStudentForCpl, setSelectedStudentForCpl] = useState<string | null>(null);
