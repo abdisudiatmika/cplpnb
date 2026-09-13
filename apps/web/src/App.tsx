@@ -1457,7 +1457,7 @@ export default function App() {
       const subHeaderRow = ['', ''];
 
       coursesForTemplate.forEach(course => {
-        headerRow.push(course.code, '');
+        headerRow.push(course.code, course.code);
         subHeaderRow.push('Nilai Angka', 'Nilai Huruf');
       });
 
@@ -1504,13 +1504,6 @@ export default function App() {
       const worksheet = XLSX.utils.aoa_to_sheet(dataRows);
       const workbook = XLSX.utils.book_new();
 
-      coursesForTemplate.forEach((_, index) => {
-        const startCol = 2 + index * 2;
-        worksheet['!merges'] = [
-          ...(worksheet['!merges'] || []),
-          { s: { r: 0, c: startCol }, e: { r: 0, c: startCol + 1 } },
-        ];
-      });
       worksheet['!cols'] = [
         { wch: 16 },
         { wch: 34 },
@@ -1775,10 +1768,25 @@ export default function App() {
 
       if (found.length > courseColumns.length) {
         headerRowIndex = rowIndex;
-        courseColumns = found.map(cell => ({
-          code: cell.text.replace(/\*$/, ''),
-          scoreColumn: cell.colIndex,
-        }));
+        const groupedColumns: Array<{ code: string; startColumn: number; endColumn?: number }> = [];
+
+        found.forEach((cell) => {
+          const code = cell.text.replace(/\*$/, '');
+          const lastGroup = groupedColumns[groupedColumns.length - 1];
+
+          if (lastGroup && lastGroup.code === code) {
+            return;
+          }
+
+          groupedColumns.push({ code, startColumn: cell.colIndex });
+        });
+
+        courseColumns = groupedColumns.map((group, index) => ({
+          code: group.code,
+          scoreColumn: group.startColumn,
+          gradeColumn: undefined,
+          endColumn: groupedColumns[index + 1]?.startColumn,
+        })) as Array<{ code: string; scoreColumn: number; gradeColumn?: number; endColumn?: number }>;
       }
     });
 
@@ -1790,15 +1798,16 @@ export default function App() {
     courseColumns = courseColumns.map((course) => {
       let scoreColumn = course.scoreColumn;
       let gradeColumn: number | undefined;
+      const endColumn = (course as typeof course & { endColumn?: number }).endColumn ?? course.scoreColumn + 3;
 
       for (const subRow of subHeaderRows) {
-        for (let offset = 0; offset < 3; offset++) {
-          const subHeader = getExcelCellText(subRow[course.scoreColumn + offset]).toLowerCase();
+        for (let colIndex = course.scoreColumn; colIndex < endColumn; colIndex++) {
+          const subHeader = getExcelCellText(subRow[colIndex]).toLowerCase();
           if (subHeader === 'na' || subHeader.includes('nilai angka')) {
-            scoreColumn = course.scoreColumn + offset;
+            scoreColumn = colIndex;
           }
           if (subHeader === 'nh' || subHeader.includes('nilai huruf')) {
-            gradeColumn = course.scoreColumn + offset;
+            gradeColumn = colIndex;
           }
         }
       }
