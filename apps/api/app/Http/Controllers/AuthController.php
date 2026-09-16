@@ -100,7 +100,7 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
-            'department_id' => 'nullable|exists:departments,id'
+            'department_id' => 'required|exists:departments,id'
         ]);
 
         $user = User::create([
@@ -128,7 +128,7 @@ class AuthController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'email' => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:8',
-            'department_id' => 'nullable|exists:departments,id'
+            'department_id' => 'sometimes|required|exists:departments,id'
         ]);
 
         if ($request->filled('name')) $user->name = $request->name;

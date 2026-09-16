@@ -1361,6 +1361,7 @@ export default function App() {
 
         const itemsToImport: any[] = [];
         const errors: string[] = [];
+        const nimRows = new Map<string, number>();
 
         for (let i = startRow; i < parsedRows.length; i++) {
           const row = parsedRows[i];
@@ -1390,6 +1391,11 @@ export default function App() {
             errors.push(`Baris ${i + 1}: Tahun angkatan kosong.`);
             continue;
           }
+          if (nimRows.has(rawNim)) {
+            errors.push(`Baris ${i + 1}: NIM ${rawNim} duplikat dengan baris ${nimRows.get(rawNim)}.`);
+            continue;
+          }
+          nimRows.set(rawNim, i + 1);
 
           itemsToImport.push({
             nim: rawNim,
