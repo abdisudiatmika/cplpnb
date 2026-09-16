@@ -15,6 +15,17 @@ interface CplPrintTemplateProps {
     value: number;
   }>;
   cplMatrixAverageIpk: number | null;
+  courseSummaries: Array<{
+    id: string;
+    code: string;
+    name: string;
+    sks?: number;
+    mappings?: Array<{
+      cpl_id: string;
+      cpl_code: string;
+      weight: number;
+    }>;
+  }>;
 }
 
 export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
@@ -26,6 +37,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   departmentCode,
   cplAverages,
   cplMatrixAverageIpk,
+  courseSummaries,
 }) => {
   const criteria = [
     {
@@ -90,6 +102,13 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   const reportDepartmentName = departmentName || 'Program Studi';
   const reportDepartmentCode = departmentCode ? ` (${departmentCode})` : '';
   const reportAcademicYear = cplMatrixAcademicYear || 'Semua Tahun Ajaran';
+  const mappedCourseSummaries = [...courseSummaries]
+    .filter(course => Array.isArray(course.mappings) && course.mappings.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+  const formatWeight = (weight: number) => {
+    const value = Number(weight || 0);
+    return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
+  };
 
   return (
     <div 
@@ -359,6 +378,58 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
         ) : (
           <div style={{ border: '1px solid #000000', padding: '12px', fontSize: '12px', textAlign: 'center' }}>
             Belum ada nilai CPL yang dapat divisualisasikan.
+          </div>
+        )}
+      </div>
+
+      {/* Matriks Mata Kuliah dan CPL Terkait */}
+      <div data-pdf-block data-pdf-page-break="before" style={{ marginBottom: '30px' }}>
+        <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
+          Matriks Mata Kuliah, CPL Terkait, dan Bobot
+        </h3>
+        <p style={{ fontSize: '11px', margin: '0 0 10px 0', textAlign: 'justify', color: '#111111' }}>
+          Tabel berikut menampilkan mata kuliah yang telah dipetakan ke CPL beserta bobot kontribusi setiap mata kuliah pada CPL terkait.
+        </p>
+        {mappedCourseSummaries.length > 0 ? (
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', color: '#000000' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f2f2f2' }}>
+                <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '5%' }}>No.</th>
+                <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '27%' }}>Mata Kuliah</th>
+                <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '43%' }}>CPL Terkait</th>
+                <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '25%' }}>Bobot MK pada CPL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mappedCourseSummaries.map((course, index) => {
+                const mappings = [...(course.mappings || [])].sort((a, b) =>
+                  a.cpl_code.localeCompare(b.cpl_code, undefined, { numeric: true, sensitivity: 'base' })
+                );
+                const relatedCpls = mappings.map(mapping => `${mapping.cpl_code} (${formatWeight(mapping.weight)})`).join(', ');
+                const totalWeight = mappings.reduce((sum, mapping) => sum + Number(mapping.weight || 0), 0);
+
+                return (
+                  <tr key={course.id} style={{ backgroundColor: index % 2 === 1 ? '#fafafa' : '#ffffff' }}>
+                    <td style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center' }}>{index + 1}</td>
+                    <td style={{ border: '1px solid #000000', padding: '6px 8px', fontWeight: 'bold' }}>
+                      {course.name}
+                      <span style={{ display: 'block', fontSize: '9px', fontWeight: 'normal', color: '#555555' }}>{course.code}</span>
+                    </td>
+                    <td style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left' }}>{relatedCpls}</td>
+                    <td style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left' }}>
+                      {mappings.map(mapping => `${mapping.cpl_code}: ${formatWeight(mapping.weight)}`).join('; ')}
+                      <span style={{ display: 'block', fontSize: '9px', color: '#555555', marginTop: '2px' }}>
+                        Total bobot: {formatWeight(totalWeight)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div style={{ border: '1px solid #000000', padding: '12px', fontSize: '12px', textAlign: 'center' }}>
+            Belum ada data pemetaan mata kuliah ke CPL.
           </div>
         )}
       </div>

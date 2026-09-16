@@ -89,7 +89,7 @@ class StudentController extends Controller
 
         $validated = $request->validate([
             'items' => 'required|array|min:1',
-            'items.*.nim' => 'required|string|max:50|distinct|unique:students,nim',
+            'items.*.nim' => 'required|string|max:50|distinct',
             'items.*.name' => 'required|string|max:255',
             'items.*.angkatan' => 'required|string|max:50',
             'items.*.kelas' => 'required|string|max:50',
@@ -97,24 +97,40 @@ class StudentController extends Controller
         ]);
 
         $now = now();
-        $students = collect($validated['items'])->map(function ($item) use ($departmentId, $now) {
-            return [
-                'id' => (string) Str::uuid(),
-                'nim' => $item['nim'],
-                'name' => $item['name'],
-                'angkatan' => $item['angkatan'],
-                'kelas' => $item['kelas'],
-                'status' => $item['status'] ?? 'Aktif',
-                'department_id' => $departmentId,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
+        $nims = collect($validated['items'])->pluck('nim');
+        $studentsFromOtherDepartments = Student::whereIn('nim', $nims)
+            ->where('department_id', '!=', $departmentId)
+            ->pluck('nim');
+
+        if ($studentsFromOtherDepartments->isNotEmpty()) {
+            return response()->json([
+                'message' => 'Beberapa NIM sudah terdaftar di jurusan lain: ' . $studentsFromOtherDepartments->join(', '),
+            ], 422);
+        }
+
+        $studentIds = DB::transaction(function () use ($validated, $departmentId, $now) {
+            return collect($validated['items'])->map(function ($item) use ($departmentId, $now) {
+                $student = Student::firstOrNew(['nim' => $item['nim']]);
+
+                if (!$student->exists) {
+                    $student->id = (string) Str::uuid();
+                    $student->department_id = $departmentId;
+                    $student->created_at = $now;
+                }
+
+                $student->name = $item['name'];
+                $student->angkatan = $item['angkatan'];
+                $student->kelas = $item['kelas'];
+                $student->status = $item['status'] ?? 'Aktif';
+                $student->updated_at = $now;
+                $student->save();
+
+                return $student->id;
+            });
         });
 
-        DB::table('students')->insert($students->all());
-
         return response()->json(
-            Student::with('department')->whereIn('id', $students->pluck('id'))->get(),
+            Student::with('department')->whereIn('id', $studentIds)->get(),
             201
         );
     }

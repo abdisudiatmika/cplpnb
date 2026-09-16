@@ -87,30 +87,37 @@ class CourseController extends Controller
 
         $validated = $request->validate([
             'items' => 'required|array|min:1',
-            'items.*.code' => 'required|string|max:50',
+            'items.*.code' => 'required|string|max:50|distinct',
             'items.*.name' => 'required|string|max:255',
             'items.*.sks' => 'required|integer|min:1',
             'items.*.semester' => 'nullable|integer|min:1|max:14',
         ]);
 
         $now = now();
-        $courses = collect($validated['items'])->map(function ($item) use ($departmentId, $now) {
-            return [
-                'id' => (string) Str::uuid(),
-                'code' => $item['code'],
-                'name' => $item['name'],
-                'sks' => $item['sks'],
-                'semester' => $item['semester'] ?? null,
-                'department_id' => $departmentId,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
+        $courseIds = DB::transaction(function () use ($validated, $departmentId, $now) {
+            return collect($validated['items'])->map(function ($item) use ($departmentId, $now) {
+                $course = Course::firstOrNew([
+                    'department_id' => $departmentId,
+                    'code' => $item['code'],
+                ]);
+
+                if (!$course->exists) {
+                    $course->id = (string) Str::uuid();
+                    $course->created_at = $now;
+                }
+
+                $course->name = $item['name'];
+                $course->sks = $item['sks'];
+                $course->semester = $item['semester'] ?? null;
+                $course->updated_at = $now;
+                $course->save();
+
+                return $course->id;
+            });
         });
 
-        DB::table('courses')->insert($courses->all());
-
         return response()->json(
-            Course::with('department')->whereIn('id', $courses->pluck('id'))->get(),
+            Course::with('department')->whereIn('id', $courseIds)->get(),
             201
         );
     }

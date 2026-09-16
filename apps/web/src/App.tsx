@@ -256,8 +256,8 @@ export default function App() {
   // Removed unused cpl search/filter states
   const [cplMatrixAngkatan, setCplMatrixAngkatan] = useState('');
   const [cplMatrixKelas, setCplMatrixKelas] = useState('');
-  const [cplMatrixSemesterType, setCplMatrixSemesterType] = useState(getActiveAcademicPeriod().semesterType);
-  const [cplMatrixAcademicYear, setCplMatrixAcademicYear] = useState(getActiveAcademicPeriod().academicYear);
+  const [cplMatrixSemesterType, setCplMatrixSemesterType] = useState('');
+  const [cplMatrixAcademicYear, setCplMatrixAcademicYear] = useState('');
   const [cplMatrixAcademicYears, setCplMatrixAcademicYears] = useState<string[]>([]);
   const [cplMatrixAverageIpk, setCplMatrixAverageIpk] = useState<number | null>(null);
   const [selectedStudentForCpl, setSelectedStudentForCpl] = useState<string | null>(null);
@@ -1008,7 +1008,7 @@ export default function App() {
 
         setDataLoading(true);
         const result = await apiCall('/courses/bulk', 'POST', { items: itemsToImport });
-        showToast(`${result.length} Mata Kuliah berhasil diimpor.`);
+        showToast(`${result.length} Mata Kuliah berhasil diproses.`);
 
         // Reload Course list
         const updatedList = await apiCall('/courses');
@@ -1412,7 +1412,7 @@ export default function App() {
 
         setDataLoading(true);
         const result = await apiCall('/students/bulk', 'POST', { items: itemsToImport });
-        showToast(`${result.length} Mahasiswa berhasil diimpor.`);
+        showToast(`${result.length} Mahasiswa berhasil diproses.`);
 
         // Reload Student list
         const updatedList = await apiCall('/students');
@@ -2063,17 +2063,22 @@ export default function App() {
             let ipkUrl = '/students/ipk-average';
             if (params.toString()) ipkUrl += `?${params.toString()}`;
 
-            const [studentList, averages, ipkData, periodData] = await Promise.all([
+            let courseSummaryUrl = '/cpl/course-summary';
+            if (params.toString()) courseSummaryUrl += `?${params.toString()}`;
+
+            const [studentList, averages, ipkData, periodData, courseSummaryData] = await Promise.all([
               apiCall('/students'),
               apiCall(url),
               apiCall(ipkUrl),
-              apiCall('/grades/periods')
+              apiCall('/grades/periods'),
+              apiCall(courseSummaryUrl)
             ]);
             
             setStudents(studentList);
             setCplAverages(averages);
             setCplMatrixAverageIpk(ipkData.averageIpk);
             setCplMatrixAcademicYears(Array.isArray(periodData.academicYears) ? periodData.academicYears : []);
+            setCourseSummaries(Array.isArray(courseSummaryData) ? courseSummaryData : []);
           }
           
           if (activeTab === 'mahasiswa' && selectedStudentForCpl) {
@@ -5942,6 +5947,7 @@ export default function App() {
               departmentCode={currentUser?.departmentCode}
               cplAverages={cplAverages}
               cplMatrixAverageIpk={cplMatrixAverageIpk}
+              courseSummaries={courseSummaries}
             />
           </div>
         )}
