@@ -384,18 +384,21 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
 
       {/* Matriks Mata Kuliah dan CPL Terkait */}
       <div style={{ marginBottom: '30px' }}>
-        <div data-pdf-block data-pdf-page-break="before">
-          <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
-            Matriks Mata Kuliah, CPL Terkait, dan Bobot
-          </h3>
-          <p style={{ fontSize: '11px', margin: '0 0 10px 0', textAlign: 'justify', color: '#111111' }}>
-            Tabel berikut menampilkan mata kuliah yang telah dipetakan ke CPL beserta bobot kontribusi setiap mata kuliah pada CPL terkait.
-          </p>
-        </div>
         {mappedCourseSummaries.length > 0 ? (
           <>
             {Array.from({ length: Math.ceil(mappedCourseSummaries.length / 6) }, (_, pageIndex) => (
-              <table key={pageIndex} data-pdf-block={pageIndex > 0 ? true : undefined} data-pdf-page-break={pageIndex > 0 ? 'before' : undefined} style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', color: '#000000', marginBottom: '12px' }}>
+              <div key={pageIndex} data-pdf-block data-pdf-page-break="before">
+                {pageIndex === 0 && (
+                  <>
+                    <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
+                      Matriks Mata Kuliah, CPL Terkait, dan Bobot
+                    </h3>
+                    <p style={{ fontSize: '11px', margin: '0 0 10px 0', textAlign: 'justify', color: '#111111' }}>
+                      Tabel berikut menampilkan mata kuliah yang telah dipetakan ke CPL beserta bobot kontribusi setiap mata kuliah pada CPL terkait.
+                    </p>
+                  </>
+                )}
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', color: '#000000', marginBottom: '12px' }}>
             <thead>
               <tr style={{ backgroundColor: '#f2f2f2' }}>
                 <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '5%' }}>No.</th>
@@ -431,7 +434,8 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
                 );
               })}
             </tbody>
-              </table>
+                </table>
+              </div>
             ))}
           </>
         ) : (
