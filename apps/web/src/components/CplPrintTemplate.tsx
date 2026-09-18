@@ -539,6 +539,51 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
           })()}
         </ul>
       </div>
+
+      {/* Kesimpulan dan Tindak Lanjut */}
+      <div data-pdf-block data-pdf-page-break="before" style={{ pageBreakInside: 'avoid' }}>
+        <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 10px 0', textTransform: 'uppercase', borderBottom: '1px solid #000000', paddingBottom: '3px', color: '#000000' }}>
+          Kesimpulan dan Tindak Lanjut
+        </h3>
+        {(() => {
+          const measured = sortedCpls.filter(cpl => cpl.value > 0);
+          const unmeasured = sortedCpls.filter(cpl => cpl.value === 0).map(cpl => cpl.code);
+          const average = measured.length > 0
+            ? measured.reduce((sum, cpl) => sum + cpl.value, 0) / measured.length
+            : 0;
+          const minimum = measured.length > 0 ? Math.min(...measured.map(cpl => cpl.value)) : 0;
+          const maximum = measured.length > 0 ? Math.max(...measured.map(cpl => cpl.value)) : 0;
+          const allMeetTarget = measured.length > 0 && measured.every(cpl => cpl.value >= 75);
+          const targetText = allMeetTarget
+            ? 'seluruh CPL yang telah terukur memenuhi target minimal 75%'
+            : 'sebagian CPL yang telah terukur masih memerlukan penguatan agar mencapai target minimal 75%';
+          const filterText = [
+            cplMatrixAngkatan ? `Angkatan ${cplMatrixAngkatan}` : '',
+            cplMatrixKelas ? `Kelas ${cplMatrixKelas}` : '',
+            cplMatrixSemesterLabel ? `periode ${cplMatrixSemesterLabel}` : '',
+            cplMatrixAcademicYear ? `tahun ajaran ${cplMatrixAcademicYear}` : '',
+          ].filter(Boolean).join(', ');
+
+          return (
+            <div style={{ fontSize: '12px', color: '#000000', textAlign: 'justify' }}>
+              <p style={{ margin: '0 0 10px 0' }}>
+                Secara umum, hasil ketercapaian CPL {filterText ? `untuk ${filterText} ` : ''}
+                menunjukkan bahwa {targetText}. Rata-rata nilai CPL terukur sebesar <strong>{average.toFixed(2)}</strong>
+                {measured.length > 0 ? ` dengan rentang capaian ${minimum.toFixed(2)} - ${maximum.toFixed(2)}.` : '.'}
+                {measured.length > 0 && allMeetTarget
+                  ? ' Kondisi ini menunjukkan bahwa proses pembelajaran dan asesmen pada CPL yang terukur telah berjalan efektif.'
+                  : ' Kondisi ini menjadi dasar untuk melakukan penguatan pembelajaran dan asesmen pada CPL yang belum mencapai target.'}
+              </p>
+              <p style={{ margin: '0' }}>
+                Tindak lanjut utama diarahkan pada {unmeasured.length > 0
+                  ? `pelengkapan data untuk CPL yang masih Belum Diukur, yaitu ${unmeasured.join(', ')}. `
+                  : 'pemeliharaan kualitas pembelajaran dan asesmen pada seluruh CPL yang telah terukur. '}
+                Program studi perlu memastikan bahwa mata kuliah, komponen nilai, rubrik asesmen, dan bobot kontribusi CPL telah dipetakan secara konsisten pada sistem agar laporan capaian CPL dapat menggambarkan performa lulusan secara utuh.
+              </p>
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 };
