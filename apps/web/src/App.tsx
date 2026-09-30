@@ -167,6 +167,12 @@ interface CplAchievement {
   status: 'Tercapai' | 'Tidak Tercapai' | 'Belum Diukur';
 }
 
+interface ReportSettings {
+  headName: string;
+  headNip: string;
+  signatureData: string;
+}
+
 export default function App() {
   // Authentication & Session
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -218,6 +224,13 @@ export default function App() {
   const [cpls, setCpls] = useState<Cpl[]>([]);
   const [mappings, setMappings] = useState<CourseMapping[]>([]);
   const [grades, setGrades] = useState<StudentGrade[]>([]);
+  const [reportSettings, setReportSettings] = useState<ReportSettings>({
+    headName: '',
+    headNip: '',
+    signatureData: '',
+  });
+  const [reportSettingsSaving, setReportSettingsSaving] = useState(false);
+  const signatureFileInputRef = useRef<HTMLInputElement>(null);
 
   // Filtering / Stats states (Department Admin Dashboard)
   const [studentStats, setStudentStats] = useState({ total: 0, active: 0, cuti: 0, lulus: 0 });
@@ -1998,6 +2011,66 @@ export default function App() {
     reader.readAsArrayBuffer(file);
   };
 
+  useEffect(() => {
+    if (!isLoggedIn || currentUser?.role !== 'admin_jurusan') return;
+
+    apiCall('/report-settings')
+      .then((settings) => {
+        setReportSettings({
+          headName: settings?.headName || '',
+          headNip: settings?.headNip || '',
+          signatureData: settings?.signatureData || '',
+        });
+      })
+      .catch((error) => showToast(error.message || 'Gagal memuat pengaturan laporan.'));
+  }, [isLoggedIn, currentUser?.role]);
+
+  const handleSignatureFile = (file?: File) => {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      showToast('Tanda tangan harus berupa PNG atau JPG.');
+      return;
+    }
+    if (file.size > 1.5 * 1024 * 1024) {
+      showToast('Ukuran gambar tanda tangan maksimal 1,5 MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setReportSettings(current => ({ ...current, signatureData: String(reader.result || '') }));
+    };
+    reader.onerror = () => showToast('Gagal membaca gambar tanda tangan.');
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveReportSettings = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!reportSettings.headName.trim() || !reportSettings.headNip.trim()) {
+      showToast('Nama Kaprodi dan NIP wajib diisi.');
+      return;
+    }
+
+    setReportSettingsSaving(true);
+    try {
+      const saved = await apiCall('/report-settings', 'PUT', {
+        headName: reportSettings.headName.trim(),
+        headNip: reportSettings.headNip.trim(),
+        signatureData: reportSettings.signatureData || null,
+      });
+      setReportSettings({
+        headName: saved?.headName || '',
+        headNip: saved?.headNip || '',
+        signatureData: saved?.signatureData || '',
+      });
+      showToast('Pengaturan laporan berhasil disimpan.');
+    } catch (error: any) {
+      showToast(error.message || 'Gagal menyimpan pengaturan laporan.');
+    } finally {
+      setReportSettingsSaving(false);
+    }
+  };
+
   // Fetch Data trigger depending on role & active tab
   useEffect(() => {
     if (!isLoggedIn || !currentUser) return;
@@ -2621,9 +2694,17 @@ export default function App() {
     pdf.setFontSize(9.5);
     pdf.text("Jimbaran, " + formatIndonesianDate(), 142, signY);
     pdf.text("Koordinator Program Studi,", 142, signY + 5);
-    
-    pdf.line(142, signY + 23, 188, signY + 23);
-    pdf.text("NIP. ", 142, signY + 27);
+
+    if (reportSettings.signatureData) {
+      const signatureFormat = reportSettings.signatureData.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+      pdf.addImage(reportSettings.signatureData, signatureFormat, 148, signY + 7, 34, 13);
+    }
+
+    pdf.setFont("times", "bold");
+    pdf.text(reportSettings.headName || 'Nama Kaprodi belum diatur', 165, signY + 23, { align: "center" });
+    pdf.setFont("times", "normal");
+    pdf.line(142, signY + 24, 188, signY + 24);
+    pdf.text(`NIP. ${reportSettings.headNip || '-'}`, 165, signY + 28, { align: "center" });
   };
 
   const handleDownloadSingleStudentCplReport = async (student: any) => {
@@ -3009,9 +3090,17 @@ export default function App() {
     pdf.setFontSize(9.5);
     pdf.text("Jimbaran, " + formatIndonesianDate(), 142, signY);
     pdf.text("Koordinator Program Studi,", 142, signY + 5);
-    
-    pdf.line(142, signY + 23, 188, signY + 23);
-    pdf.text("NIP. ", 142, signY + 27);
+
+    if (reportSettings.signatureData) {
+      const signatureFormat = reportSettings.signatureData.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+      pdf.addImage(reportSettings.signatureData, signatureFormat, 148, signY + 7, 34, 13);
+    }
+
+    pdf.setFont("times", "bold");
+    pdf.text(reportSettings.headName || 'Nama Kaprodi belum diatur', 165, signY + 23, { align: "center" });
+    pdf.setFont("times", "normal");
+    pdf.line(142, signY + 24, 188, signY + 24);
+    pdf.text(`NIP. ${reportSettings.headNip || '-'}`, 165, signY + 28, { align: "center" });
   };
 
   const handleDownloadSingleCourseCplReport = (course: any) => {
@@ -3910,6 +3999,18 @@ export default function App() {
                 >
                   <span className="material-symbols-outlined">analytics</span>
                   <span>Hasil CPL</span>
+                </button>
+
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'report_settings'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => setActiveTab('report_settings')}
+                >
+                  <span className="material-symbols-outlined">settings</span>
+                  <span>Pengaturan Laporan</span>
                 </button>
               </>
             )}
@@ -5686,6 +5787,97 @@ export default function App() {
           </div>
         )}
 
+        {currentUser?.role === 'admin_jurusan' && activeTab === 'report_settings' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div>
+              <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Pengaturan Laporan</h3>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">Identitas penandatangan yang digunakan pada laporan CPL mahasiswa.</p>
+            </div>
+
+            <form onSubmit={handleSaveReportSettings} className="glass-panel p-xl rounded-xl max-w-3xl space-y-lg shadow-md">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
+                <label className="space-y-xs">
+                  <span className="block font-label-sm text-label-sm font-bold text-on-surface">Nama Kaprodi</span>
+                  <input
+                    type="text"
+                    value={reportSettings.headName}
+                    onChange={(event) => setReportSettings(current => ({ ...current, headName: event.target.value }))}
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="Nama lengkap Kaprodi"
+                    maxLength={255}
+                    required
+                  />
+                </label>
+                <label className="space-y-xs">
+                  <span className="block font-label-sm text-label-sm font-bold text-on-surface">NIP</span>
+                  <input
+                    type="text"
+                    value={reportSettings.headNip}
+                    onChange={(event) => setReportSettings(current => ({ ...current, headNip: event.target.value }))}
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm text-on-surface outline-none focus:border-primary"
+                    placeholder="Nomor Induk Pegawai"
+                    maxLength={100}
+                    required
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-sm">
+                <span className="block font-label-sm text-label-sm font-bold text-on-surface">Tanda Tangan Kaprodi</span>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-lg">
+                  <div className="w-56 h-32 border border-dashed border-outline-variant bg-white rounded-lg flex items-center justify-center overflow-hidden">
+                    {reportSettings.signatureData ? (
+                      <img src={reportSettings.signatureData} alt="Pratinjau tanda tangan Kaprodi" className="max-w-full max-h-full object-contain" />
+                    ) : (
+                      <span className="text-on-surface-variant text-center text-sm px-md">Belum ada tanda tangan</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-sm">
+                    <button
+                      type="button"
+                      onClick={() => signatureFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-xs bg-secondary text-on-secondary px-md py-sm rounded-lg font-label-sm font-bold"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">upload</span>
+                      Pilih Gambar
+                    </button>
+                    {reportSettings.signatureData && (
+                      <button
+                        type="button"
+                        onClick={() => setReportSettings(current => ({ ...current, signatureData: '' }))}
+                        className="inline-flex items-center gap-xs border border-error text-error px-md py-sm rounded-lg font-label-sm font-bold"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">delete</span>
+                        Hapus
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    ref={signatureFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    onChange={(event) => {
+                      handleSignatureFile(event.target.files?.[0]);
+                      event.target.value = '';
+                    }}
+                  />
+                </div>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">Gunakan PNG transparan agar hasil cetak terlihat rapi. Ukuran maksimal 1,5 MB.</p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={reportSettingsSaving}
+                className="inline-flex items-center gap-sm bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[20px]">save</span>
+                {reportSettingsSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}
+              </button>
+            </form>
+          </div>
+        )}
+
         {currentUser?.role === 'admin_jurusan' && activeTab === 'hasil_cpl' && (
           <div className="p-gutter space-y-lg flex-1">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -6018,6 +6210,9 @@ export default function App() {
               cplAverages={cplAverages}
               cplMatrixAverageIpk={cplMatrixAverageIpk}
               courseSummaries={courseSummaries}
+              headName={reportSettings.headName}
+              headNip={reportSettings.headNip}
+              signatureData={reportSettings.signatureData}
             />
           </div>
         )}

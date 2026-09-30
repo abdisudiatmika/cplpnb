@@ -26,6 +26,9 @@ interface CplPrintTemplateProps {
       weight: number;
     }>;
   }>;
+  headName?: string;
+  headNip?: string;
+  signatureData?: string;
 }
 
 export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
@@ -38,6 +41,9 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
   cplAverages,
   cplMatrixAverageIpk,
   courseSummaries,
+  headName,
+  headNip,
+  signatureData,
 }) => {
   const criteria = [
     {
@@ -583,6 +589,18 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
             </div>
           );
         })()}
+      </div>
+
+      <div data-pdf-block style={{ display: 'flex', justifyContent: 'flex-end', pageBreakInside: 'avoid', marginTop: '24px', color: '#000000' }}>
+        <div style={{ width: '260px', textAlign: 'center', fontSize: '12px' }}>
+          <div>Jimbaran, {new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</div>
+          <div>Koordinator Program Studi,</div>
+          <div style={{ height: '72px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {signatureData && <img src={signatureData} alt="Tanda tangan Kaprodi" style={{ maxWidth: '150px', maxHeight: '68px', objectFit: 'contain' }} />}
+          </div>
+          <div style={{ fontWeight: 'bold', borderBottom: '1px solid #000000', paddingBottom: '2px' }}>{headName || 'Nama Kaprodi belum diatur'}</div>
+          <div>NIP. {headNip || '-'}</div>
+        </div>
       </div>
     </div>
   );

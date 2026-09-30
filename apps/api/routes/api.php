@@ -81,6 +81,8 @@ Route::get('/debug-auth', function () {
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::get('/report-settings', [DepartmentController::class, 'reportSettings']);
+    Route::put('/report-settings', [DepartmentController::class, 'updateReportSettings']);
     
     // Frontend compatibility and custom routes MUST be before resource routes
     Route::get('/cpl/averages', [CplController::class, 'averages']);

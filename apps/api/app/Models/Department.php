@@ -10,7 +10,7 @@ class Department extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = ['name', 'code'];
+    protected $fillable = ['name', 'code', 'head_name', 'head_nip', 'signature_data'];
 
     public function users()
     {
