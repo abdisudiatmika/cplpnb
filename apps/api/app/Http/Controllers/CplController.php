@@ -525,6 +525,8 @@ class CplController extends Controller
             abort(403, 'Unauthorized');
         }
         $departmentId = $student->department_id;
+        $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
+        $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
         $allCpls = Cpl::where('department_id', $departmentId)->get();
 
@@ -537,6 +539,12 @@ class CplController extends Controller
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
             ->where('student_id', $studentId)
             ->get();
+        $allGrades = $this->filterGradesForAcademicPeriod(
+            $allGrades,
+            collect([$student->id => $student]),
+            $semesterType,
+            $academicYear
+        );
 
         $gradesMap = [];
         foreach ($allGrades as $g) {

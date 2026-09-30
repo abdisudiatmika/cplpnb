@@ -233,6 +233,9 @@ export default function App() {
   const [studentSearch, setStudentSearch] = useState('');
   const [studentFilterAngkatan, setStudentFilterAngkatan] = useState('');
   const [studentFilterKelas, setStudentFilterKelas] = useState('');
+  const [studentCplSemesterType, setStudentCplSemesterType] = useState(getActiveAcademicPeriod().semesterType);
+  const [studentCplAcademicYear, setStudentCplAcademicYear] = useState(getActiveAcademicPeriod().academicYear);
+  const [studentCplAcademicYears, setStudentCplAcademicYears] = useState<string[]>([]);
   const [studentPage, setStudentPage] = useState(1);
   const [studentItemsPerPage, setStudentItemsPerPage] = useState(25);
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
@@ -2031,8 +2034,16 @@ export default function App() {
             setCourses(courseList);
             setCplAverages(averages);
           } else if (activeTab === 'mahasiswa') {
-            const list = await apiCall('/students');
+            const [list, periodData] = await Promise.all([
+              apiCall('/students'),
+              apiCall('/grades/periods'),
+            ]);
             setStudents(list);
+            const years = Array.isArray(periodData.academicYears) ? periodData.academicYears : [];
+            setStudentCplAcademicYears(years);
+            if (years.length > 0 && !years.includes(studentCplAcademicYear)) {
+              setStudentCplAcademicYear(years[0]);
+            }
           } else if (activeTab === 'matakuliah') {
             const [courseList, cplList, mappingList] = await Promise.all([
               apiCall('/courses'),
@@ -2088,7 +2099,11 @@ export default function App() {
           }
           
           if (activeTab === 'mahasiswa' && selectedStudentForCpl) {
-            const achs = await apiCall(`/cpl/achievements/${selectedStudentForCpl}`);
+            const params = new URLSearchParams();
+            if (studentCplSemesterType) params.append('semesterType', studentCplSemesterType);
+            if (studentCplAcademicYear) params.append('academicYear', studentCplAcademicYear);
+            const query = params.toString() ? `?${params.toString()}` : '';
+            const achs = await apiCall(`/cpl/achievements/${selectedStudentForCpl}${query}`);
             setSelectedStudentAchievements(achs);
           }
         }
@@ -2100,7 +2115,7 @@ export default function App() {
     };
 
     loadData();
-  }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear, selectedStudentForCpl, dashboardAngkatan, dashboardKelas]);
+  }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear, selectedStudentForCpl, studentCplSemesterType, studentCplAcademicYear, dashboardAngkatan, dashboardKelas]);
 
   // Fetch course summary when course report modal is open
   useEffect(() => {
@@ -2438,7 +2453,7 @@ export default function App() {
 
     // Student Info Block
     pdf.setLineWidth(0.2);
-    pdf.rect(15, 49, 180, 24);
+    pdf.rect(15, 49, 180, 30);
     
     pdf.setFont("times", "bold");
     pdf.setFontSize(9);
@@ -2471,7 +2486,17 @@ export default function App() {
     pdf.setFont("times", "normal");
     pdf.text(`: ${student.status}`, 138, 66);
 
-    let currentY = 80;
+    pdf.setFont("times", "bold");
+    pdf.text("Periode CPL", 18, 72);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${studentCplSemesterType ? studentCplSemesterType.charAt(0).toUpperCase() + studentCplSemesterType.slice(1) : 'Semua Periode'}`, 48, 72);
+
+    pdf.setFont("times", "bold");
+    pdf.text("Tahun Ajaran", 110, 72);
+    pdf.setFont("times", "normal");
+    pdf.text(`: ${studentCplAcademicYear || 'Semua Tahun'}`, 138, 72);
+
+    let currentY = 86;
     
     // Table Header
     pdf.setFillColor(240, 240, 240);
@@ -2604,10 +2629,15 @@ export default function App() {
   const handleDownloadSingleStudentCplReport = async (student: any) => {
     showToast(`Mempersiapkan Laporan CPL untuk ${student.name}...`);
     try {
-      const achs = await apiCall(`/cpl/achievements/${student.id}`);
+      const params = new URLSearchParams();
+      if (studentCplSemesterType) params.append('semesterType', studentCplSemesterType);
+      if (studentCplAcademicYear) params.append('academicYear', studentCplAcademicYear);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const achs = await apiCall(`/cpl/achievements/${student.id}${query}`);
       const pdf = new jsPDF('p', 'mm', 'a4');
       drawStudentCplPage(pdf, student, achs);
-      pdf.save(`Laporan_CPL_${student.nim}_${student.name.replace(/\s+/g, '_')}.pdf`);
+      const periodLabel = [studentCplSemesterType || 'semua-periode', studentCplAcademicYear?.replace('/', '-') || 'semua-tahun'].join('_');
+      pdf.save(`Laporan_CPL_${student.nim}_${student.name.replace(/\s+/g, '_')}_${periodLabel}.pdf`);
       showToast('Unduhan laporan CPL berhasil!');
     } catch (e: any) {
       console.error(e);
@@ -2640,7 +2670,11 @@ export default function App() {
         await Promise.all(batch.map(async (student, batchIdx) => {
           const index = i + batchIdx;
           try {
-            const achievements = await apiCall(`/cpl/achievements/${student.id}`);
+            const params = new URLSearchParams();
+            if (studentCplSemesterType) params.append('semesterType', studentCplSemesterType);
+            if (studentCplAcademicYear) params.append('academicYear', studentCplAcademicYear);
+            const query = params.toString() ? `?${params.toString()}` : '';
+            const achievements = await apiCall(`/cpl/achievements/${student.id}${query}`);
             allResults[index] = achievements;
           } catch (err) {
             console.error(`Gagal mengambil data CPL untuk mahasiswa ${student.name}:`, err);
@@ -2664,7 +2698,12 @@ export default function App() {
         drawStudentCplPage(pdf, student, achievements);
       }
 
-      const fileLabel = (studentFilterAngkatan || 'Semua') + '_' + (studentFilterKelas || 'Semua');
+      const fileLabel = [
+        studentFilterAngkatan || 'Semua',
+        studentFilterKelas || 'Semua',
+        studentCplSemesterType || 'Semua-Periode',
+        studentCplAcademicYear?.replace('/', '-') || 'Semua-Tahun',
+      ].join('_');
       pdf.save(`Laporan_CPL_Mahasiswa_${fileLabel}.pdf`);
       showToast('Berhasil mengunduh semua laporan CPL!');
     } catch (e: any) {
@@ -4371,12 +4410,37 @@ export default function App() {
                   ))}
                 </select>
 
+                <select
+                  aria-label="Periode CPL mahasiswa"
+                  className="bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm font-body-sm text-body-sm text-on-surface outline-none focus:border-primary cursor-pointer"
+                  value={studentCplSemesterType}
+                  onChange={(e) => setStudentCplSemesterType(e.target.value)}
+                >
+                  <option value="">Semua Periode</option>
+                  <option value="ganjil">Ganjil</option>
+                  <option value="genap">Genap</option>
+                </select>
+
+                <select
+                  aria-label="Tahun ajaran CPL mahasiswa"
+                  className="bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm font-body-sm text-body-sm text-on-surface outline-none focus:border-primary cursor-pointer"
+                  value={studentCplAcademicYear}
+                  onChange={(e) => setStudentCplAcademicYear(e.target.value)}
+                >
+                  <option value="">Semua Tahun Ajaran</option>
+                  {studentCplAcademicYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+
                 <button 
                   className="bg-surface-bright text-on-surface px-md py-sm rounded-lg font-label-sm text-label-sm flex items-center gap-xs hover:bg-surface-container-highest transition-colors cursor-pointer"
                   onClick={() => {
                     setStudentSearch('');
                     setStudentFilterAngkatan('');
                     setStudentFilterKelas('');
+                    setStudentCplSemesterType(getActiveAcademicPeriod().semesterType);
+                    setStudentCplAcademicYear(getActiveAcademicPeriod().academicYear);
                   }}
                 >
                   <span className="material-symbols-outlined">filter_list</span>
