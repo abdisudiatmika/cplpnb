@@ -2742,8 +2742,31 @@ export default function App() {
 
     try {
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const concurrency = 15;
+      // Shared hosting can reject bursts of many Laravel requests. Keep the
+      // batch small and retry so a failed request never becomes a blank report.
+      const concurrency = 3;
       const allResults: any[] = new Array(filteredStudents.length);
+      const failedStudents: any[] = [];
+
+      const fetchAchievementsWithRetry = async (student: any, attempts = 3) => {
+        const params = new URLSearchParams();
+        if (studentCplSemesterType) params.append('semesterType', studentCplSemesterType);
+        if (studentCplAcademicYear) params.append('academicYear', studentCplAcademicYear);
+        const query = params.toString() ? `?${params.toString()}` : '';
+
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= attempts; attempt++) {
+          try {
+            return await apiCall(`/cpl/achievements/${student.id}${query}`);
+          } catch (error) {
+            lastError = error;
+            if (attempt < attempts) {
+              await new Promise(resolve => setTimeout(resolve, attempt * 750));
+            }
+          }
+        }
+        throw lastError;
+      };
 
       // Fetch student achievements in parallel batches
       for (let i = 0; i < filteredStudents.length; i += concurrency) {
@@ -2751,18 +2774,19 @@ export default function App() {
         await Promise.all(batch.map(async (student, batchIdx) => {
           const index = i + batchIdx;
           try {
-            const params = new URLSearchParams();
-            if (studentCplSemesterType) params.append('semesterType', studentCplSemesterType);
-            if (studentCplAcademicYear) params.append('academicYear', studentCplAcademicYear);
-            const query = params.toString() ? `?${params.toString()}` : '';
-            const achievements = await apiCall(`/cpl/achievements/${student.id}${query}`);
-            allResults[index] = achievements;
+            allResults[index] = await fetchAchievementsWithRetry(student);
           } catch (err) {
             console.error(`Gagal mengambil data CPL untuk mahasiswa ${student.name}:`, err);
-            allResults[index] = [];
+            failedStudents.push(student);
           }
           setBulkDownloadProgress(prev => Math.min(filteredStudents.length, prev + 1));
         }));
+      }
+
+      if (failedStudents.length > 0) {
+        const failedNims = failedStudents.slice(0, 8).map(student => student.nim).join(', ');
+        const remaining = failedStudents.length > 8 ? ` dan ${failedStudents.length - 8} lainnya` : '';
+        throw new Error(`Data CPL gagal dimuat untuk NIM ${failedNims}${remaining}. Silakan coba unduh kembali.`);
       }
 
       // Generate the PDF pages sequentially
