@@ -2728,11 +2728,11 @@ export default function App() {
 
   const handleDownloadAllCplReports = async () => {
     if (!filteredStudents || filteredStudents.length === 0) {
-      showToast('Tidak ada data mahasiswa untuk dicetak.');
+      showToast('Tidak ada data mahasiswa untuk diekspor.');
       return;
     }
 
-    if (!window.confirm(`Apakah Anda yakin ingin mengunduh laporan CPL untuk ${filteredStudents.length} mahasiswa dalam satu file PDF?`)) {
+    if (!window.confirm(`Unduh data CPL untuk ${filteredStudents.length} mahasiswa dalam satu file Excel?`)) {
       return;
     }
 
@@ -2741,9 +2741,8 @@ export default function App() {
     setBulkDownloadLoading(true);
 
     try {
-      const pdf = new jsPDF('p', 'mm', 'a4');
       // Shared hosting can reject bursts of many Laravel requests. Keep the
-      // batch small and retry so a failed request never becomes a blank report.
+      // batch small and retry so a failed request never becomes incomplete data.
       const concurrency = 3;
       const allResults: any[] = new Array(filteredStudents.length);
       const failedStudents: any[] = [];
@@ -2789,19 +2788,81 @@ export default function App() {
         throw new Error(`Data CPL gagal dimuat untuk NIM ${failedNims}${remaining}. Silakan coba unduh kembali.`);
       }
 
-      // Generate the PDF pages sequentially
-      let isFirst = true;
-      for (let i = 0; i < filteredStudents.length; i++) {
-        const student = filteredStudents[i];
-        const achievements = allResults[i] || [];
+      const cplColumns = Array.from(
+        new Map(
+          allResults.flatMap(result => (result || []).map((cpl: any) => [cpl.code, cpl]))
+        ).values()
+      ).sort((a: any, b: any) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
 
-        if (!isFirst) {
-          pdf.addPage();
-        }
-        isFirst = false;
+      const summaryRows: any[][] = [
+        ['NIM', 'Nama Mahasiswa', 'Angkatan', 'Kelas', ...cplColumns.map((cpl: any) => cpl.code)],
+      ];
+      const detailRows: any[][] = [[
+        'NIM', 'Nama Mahasiswa', 'Angkatan', 'Kelas', 'Kode CPL', 'Kategori',
+        'Deskripsi Kompetensi', 'Nilai', 'Status', 'Target',
+      ]];
 
-        drawStudentCplPage(pdf, student, achievements);
-      }
+      filteredStudents.forEach((student, index) => {
+        const achievements = allResults[index] || [];
+        const byCode = new Map(achievements.map((cpl: any) => [cpl.code, cpl]));
+        summaryRows.push([
+          student.nim,
+          student.name,
+          student.angkatan,
+          student.kelas,
+          ...cplColumns.map((column: any) => {
+            const cpl: any = byCode.get(column.code);
+            return cpl && Number(cpl.value) > 0 ? Number(cpl.value) : '';
+          }),
+        ]);
+
+        achievements
+          .sort((a: any, b: any) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }))
+          .forEach((cpl: any) => {
+            detailRows.push([
+              student.nim,
+              student.name,
+              student.angkatan,
+              student.kelas,
+              cpl.code,
+              cpl.category || '',
+              cpl.description || '',
+              Number(cpl.value) > 0 ? Number(cpl.value) : '',
+              cpl.status || (Number(cpl.value) > 0 ? 'Terukur' : 'Belum Diukur'),
+              cpl.target ?? 75,
+            ]);
+          });
+      });
+
+      const infoRows = [
+        ['Informasi Laporan', ''],
+        ['Jurusan', currentUser?.departmentName || ''],
+        ['Angkatan', studentFilterAngkatan || 'Semua Angkatan'],
+        ['Kelas', studentFilterKelas || 'Semua Kelas'],
+        ['Periode', studentCplSemesterType ? studentCplSemesterType.charAt(0).toUpperCase() + studentCplSemesterType.slice(1) : 'Semua Periode'],
+        ['Tahun Ajaran', studentCplAcademicYear || 'Semua Tahun Ajaran'],
+        ['Jumlah Mahasiswa', filteredStudents.length],
+        ['Tanggal Ekspor', new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeStyle: 'short' }).format(new Date())],
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      const detailSheet = XLSX.utils.aoa_to_sheet(detailRows);
+      const infoSheet = XLSX.utils.aoa_to_sheet(infoRows);
+
+      summarySheet['!cols'] = [
+        { wch: 16 }, { wch: 34 }, { wch: 12 }, { wch: 10 },
+        ...cplColumns.map(() => ({ wch: 11 })),
+      ];
+      detailSheet['!cols'] = [
+        { wch: 16 }, { wch: 34 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+        { wch: 24 }, { wch: 70 }, { wch: 10 }, { wch: 32 }, { wch: 10 },
+      ];
+      infoSheet['!cols'] = [{ wch: 22 }, { wch: 32 }];
+
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Ringkasan');
+      XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detail_CPL');
+      XLSX.utils.book_append_sheet(workbook, infoSheet, 'Informasi');
 
       const fileLabel = [
         studentFilterAngkatan || 'Semua',
@@ -2809,11 +2870,11 @@ export default function App() {
         studentCplSemesterType || 'Semua-Periode',
         studentCplAcademicYear?.replace('/', '-') || 'Semua-Tahun',
       ].join('_');
-      pdf.save(`Laporan_CPL_Mahasiswa_${fileLabel}.pdf`);
-      showToast('Berhasil mengunduh semua laporan CPL!');
+      XLSX.writeFile(workbook, `Laporan_CPL_Mahasiswa_${fileLabel}.xlsx`);
+      showToast('Berhasil mengunduh laporan CPL dalam Excel!');
     } catch (e: any) {
       console.error(e);
-      showToast('Gagal memproses laporan CPL massal.');
+      showToast(e?.message || 'Gagal memproses laporan CPL Excel.');
     } finally {
       setBulkDownloadLoading(false);
     }
@@ -4475,8 +4536,8 @@ export default function App() {
                   className="flex items-center gap-sm bg-tertiary text-on-tertiary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-tertiary transition-all cursor-pointer"
                   onClick={handleDownloadAllCplReports}
                 >
-                  <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
-                  Cetak Semua CPL
+                  <span className="material-symbols-outlined text-[20px]">table_view</span>
+                  Unduh Excel CPL
                 </button>
                 <input 
                   type="file" 
@@ -6259,7 +6320,7 @@ export default function App() {
           <div className="glass-panel w-full max-w-[400px] rounded-2xl shadow-2xl overflow-hidden flex flex-col p-xl items-center text-center gap-lg">
             <span className="material-symbols-outlined text-[48px] text-primary animate-spin">progress_activity</span>
             <div>
-              <h3 className="font-headline-lg text-headline-lg text-white font-bold mb-xs">Mempersiapkan Laporan CPL</h3>
+              <h3 className="font-headline-lg text-headline-lg text-white font-bold mb-xs">Mempersiapkan Excel CPL</h3>
               <p className="text-body-sm text-on-surface-variant">
                 Sedang memproses data mahasiswa...
               </p>
