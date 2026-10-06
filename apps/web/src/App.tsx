@@ -2741,56 +2741,28 @@ export default function App() {
     setBulkDownloadLoading(true);
 
     try {
-      // Shared hosting can reject bursts of many Laravel requests. Keep the
-      // batch small and retry so a failed request never becomes incomplete data.
-      const concurrency = 3;
-      const allResults: any[] = new Array(filteredStudents.length);
-      const failedStudents: any[] = [];
+      const params = new URLSearchParams();
+      if (studentFilterAngkatan) params.append('angkatan', studentFilterAngkatan);
+      if (studentFilterKelas) params.append('kelas', studentFilterKelas);
+      if (studentSearch.trim()) params.append('search', studentSearch.trim());
+      if (studentCplSemesterType) params.append('semesterType', studentCplSemesterType);
+      if (studentCplAcademicYear) params.append('academicYear', studentCplAcademicYear);
 
-      const fetchAchievementsWithRetry = async (student: any, attempts = 3) => {
-        const params = new URLSearchParams();
-        if (studentCplSemesterType) params.append('semesterType', studentCplSemesterType);
-        if (studentCplAcademicYear) params.append('academicYear', studentCplAcademicYear);
-        const query = params.toString() ? `?${params.toString()}` : '';
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const bulkData = await apiCall(`/cpl/achievements-bulk${query}`);
+      const exportStudents = Array.isArray(bulkData?.students) ? bulkData.students : [];
 
-        let lastError: unknown;
-        for (let attempt = 1; attempt <= attempts; attempt++) {
-          try {
-            return await apiCall(`/cpl/achievements/${student.id}${query}`);
-          } catch (error) {
-            lastError = error;
-            if (attempt < attempts) {
-              await new Promise(resolve => setTimeout(resolve, attempt * 750));
-            }
-          }
-        }
-        throw lastError;
-      };
-
-      // Fetch student achievements in parallel batches
-      for (let i = 0; i < filteredStudents.length; i += concurrency) {
-        const batch = filteredStudents.slice(i, i + concurrency);
-        await Promise.all(batch.map(async (student, batchIdx) => {
-          const index = i + batchIdx;
-          try {
-            allResults[index] = await fetchAchievementsWithRetry(student);
-          } catch (err) {
-            console.error(`Gagal mengambil data CPL untuk mahasiswa ${student.name}:`, err);
-            failedStudents.push(student);
-          }
-          setBulkDownloadProgress(prev => Math.min(filteredStudents.length, prev + 1));
-        }));
+      if (exportStudents.length === 0) {
+        throw new Error('Tidak ada data CPL mahasiswa untuk filter yang dipilih.');
       }
 
-      if (failedStudents.length > 0) {
-        const failedNims = failedStudents.slice(0, 8).map(student => student.nim).join(', ');
-        const remaining = failedStudents.length > 8 ? ` dan ${failedStudents.length - 8} lainnya` : '';
-        throw new Error(`Data CPL gagal dimuat untuk NIM ${failedNims}${remaining}. Silakan coba unduh kembali.`);
-      }
+      setBulkDownloadTotal(exportStudents.length);
+      setBulkDownloadProgress(exportStudents.length);
+      const allResults = exportStudents.map((student: any) => student.achievements || []);
 
       const cplColumns = Array.from(
         new Map(
-          allResults.flatMap(result => (result || []).map((cpl: any) => [cpl.code, cpl]))
+          allResults.flatMap((result: any[]) => (result || []).map((cpl: any) => [cpl.code, cpl]))
         ).values()
       ).sort((a: any, b: any) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
 
@@ -2802,7 +2774,7 @@ export default function App() {
         'Deskripsi Kompetensi', 'Nilai', 'Status', 'Target',
       ]];
 
-      filteredStudents.forEach((student, index) => {
+      exportStudents.forEach((student: any, index: number) => {
         const achievements = allResults[index] || [];
         const byCode = new Map(achievements.map((cpl: any) => [cpl.code, cpl]));
         summaryRows.push([
@@ -2841,7 +2813,7 @@ export default function App() {
         ['Kelas', studentFilterKelas || 'Semua Kelas'],
         ['Periode', studentCplSemesterType ? studentCplSemesterType.charAt(0).toUpperCase() + studentCplSemesterType.slice(1) : 'Semua Periode'],
         ['Tahun Ajaran', studentCplAcademicYear || 'Semua Tahun Ajaran'],
-        ['Jumlah Mahasiswa', filteredStudents.length],
+        ['Jumlah Mahasiswa', exportStudents.length],
         ['Tanggal Ekspor', new Intl.DateTimeFormat('id-ID', { dateStyle: 'long', timeStyle: 'short' }).format(new Date())],
       ];
 

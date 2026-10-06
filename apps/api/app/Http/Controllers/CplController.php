@@ -635,4 +635,121 @@ class CplController extends Controller
         
         return response()->json($achievements);
     }
+
+    public function achievementsBulk(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user && $user->role === 'admin_jurusan', 403, 'Unauthorized');
+        abort_unless($user->department_id, 422, 'Jurusan akun belum ditentukan.');
+        $departmentId = $user->department_id;
+
+        $angkatan = $request->query('angkatan');
+        $kelas = $request->query('kelas');
+        $search = trim((string) $request->query('search', ''));
+        $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
+        $academicYear = $request->query('academicYear', $request->query('academic_year'));
+
+        $students = \App\Models\Student::query()
+            ->where('department_id', $departmentId)
+            ->when($angkatan, fn ($query) => $query->where('angkatan', $angkatan))
+            ->when($kelas, fn ($query) => $query->where('kelas', $kelas))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($nested) use ($search) {
+                    $nested->where('nim', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%");
+                });
+            })
+            ->orderBy('nim')
+            ->get();
+
+        if ($students->isEmpty()) {
+            return response()->json(['students' => []]);
+        }
+
+        $allCpls = Cpl::where('department_id', $departmentId)
+            ->orderBy('code')
+            ->get();
+        $mappingsByCpl = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
+            ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
+            ->select('course_cpl_mappings.cpl_id', 'course_cpl_mappings.course_id', 'course_cpl_mappings.weight')
+            ->where('courses.department_id', $departmentId)
+            ->get()
+            ->groupBy('cpl_id');
+
+        $studentsById = $students->keyBy('id');
+        $gradesByStudent = $this->filterGradesForAcademicPeriod(
+            \Illuminate\Support\Facades\DB::table('student_grades')
+                ->whereIn('student_id', $students->pluck('id'))
+                ->get(),
+            $studentsById,
+            $semesterType,
+            $academicYear
+        )->groupBy('student_id');
+
+        $result = $students->map(function ($student) use ($allCpls, $mappingsByCpl, $gradesByStudent) {
+            $gradesMap = [];
+            foreach ($gradesByStudent->get($student->id, collect()) as $grade) {
+                $gradesMap[$grade->course_id] = [
+                    'grade' => $grade->grade,
+                    'score' => $grade->score,
+                ];
+            }
+
+            $achievements = $allCpls->map(function ($cpl) use ($mappingsByCpl, $gradesMap) {
+                $mappings = $mappingsByCpl->get($cpl->id, collect());
+                $totalScoreWeight = 0;
+                $totalWeight = 0;
+
+                foreach ($mappings as $mapping) {
+                    $grade = $gradesMap[$mapping->course_id] ?? null;
+                    if (!$grade || $grade['grade'] === 'Belum Diambil') {
+                        continue;
+                    }
+
+                    $score = isset($grade['score']) && $grade['score'] !== null && $grade['score'] > 0
+                        ? ($grade['score'] <= 10 ? $grade['score'] * 10 : $grade['score'])
+                        : $this->convertGradeToPct($grade['grade']);
+                    $weight = (float) $mapping->weight;
+                    $totalScoreWeight += $score * $weight;
+                    $totalWeight += $weight;
+                }
+
+                $value = $totalWeight > 0 ? round($totalScoreWeight / $totalWeight) : 0;
+                if ($value >= 85) {
+                    $status = 'Sangat kompeten (Exemplary)';
+                } elseif ($value >= 75) {
+                    $status = 'Kompeten (Competent)';
+                } elseif ($value >= 60) {
+                    $status = 'Berkembang (Developing)';
+                } elseif ($value > 0) {
+                    $status = 'Tidak memuaskan (Unsatisfactory)';
+                } else {
+                    $status = 'Belum Diukur';
+                }
+
+                return [
+                    'id' => $cpl->id,
+                    'code' => $cpl->code,
+                    'name' => $cpl->name,
+                    'description' => $cpl->description,
+                    'category' => $cpl->category,
+                    'value' => $value,
+                    'status' => $status,
+                    'target' => $cpl->target_value ?? 75,
+                ];
+            })->values();
+
+            return [
+                'id' => $student->id,
+                'nim' => $student->nim,
+                'name' => $student->name,
+                'angkatan' => $student->angkatan,
+                'kelas' => $student->kelas,
+                'status' => $student->status,
+                'achievements' => $achievements,
+            ];
+        })->values();
+
+        return response()->json(['students' => $result]);
+    }
 }

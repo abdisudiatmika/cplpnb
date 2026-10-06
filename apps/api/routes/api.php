@@ -86,6 +86,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Frontend compatibility and custom routes MUST be before resource routes
     Route::get('/cpl/averages', [CplController::class, 'averages']);
+    Route::get('/cpl/achievements-bulk', [CplController::class, 'achievementsBulk']);
     Route::get('/cpl/achievements/{id}', [CplController::class, 'achievements']);
     Route::get('/cpl/course-breakdown/{cplId}', [CplController::class, 'courseBreakdown']);
     Route::get('/cpl/course-summary', [CplController::class, 'courseSummary']);
