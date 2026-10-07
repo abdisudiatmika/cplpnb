@@ -10,7 +10,7 @@ class Cpl extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = ['code', 'description', 'category', 'target_value', 'department_id'];
+    protected $fillable = ['code', 'description', 'target_value', 'department_id'];
 
     protected $appends = ['targetValue'];
 

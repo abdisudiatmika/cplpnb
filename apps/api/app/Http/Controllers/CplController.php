@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Cpl;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class CplController extends Controller
 {
@@ -28,14 +30,20 @@ class CplController extends Controller
         }
 
         $request->merge([
+            'code' => strtoupper(trim((string) $request->input('code'))),
             'target_value' => $targetValue,
             'department_id' => $departmentId,
         ]);
 
         $validated = $request->validate([
-            'code' => 'required|string|max:50',
+            'code' => [
+                'required',
+                'string',
+                'max:50',
+                'regex:/^CPL-[1-9][0-9]*$/',
+                Rule::unique('cpls', 'code')->where('department_id', $departmentId),
+            ],
             'description' => 'required|string',
-            'category' => 'required|in:Sikap,Pengetahuan,Keterampilan Umum,Keterampilan Khusus',
             'target_value' => 'nullable|integer|min:0|max:100',
             'department_id' => 'required|exists:departments,id',
         ]);
@@ -63,13 +71,21 @@ class CplController extends Controller
         $targetValue = $request->input('targetValue', $request->input('target_value'));
         $departmentId = $request->input('departmentId', $request->input('department_id'));
 
+        $effectiveDepartmentId = $departmentId ?? $cpl->department_id;
+        if ($request->has('code')) $request->merge(['code' => strtoupper(trim((string) $request->input('code')))]);
         if ($targetValue !== null) $request->merge(['target_value' => $targetValue]);
         if ($departmentId !== null) $request->merge(['department_id' => $departmentId]);
 
         $validated = $request->validate([
-            'code' => 'sometimes|required|string|max:50',
+            'code' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:50',
+                'regex:/^CPL-[1-9][0-9]*$/',
+                Rule::unique('cpls', 'code')->where('department_id', $effectiveDepartmentId)->ignore($cpl->id),
+            ],
             'description' => 'sometimes|required|string',
-            'category' => 'sometimes|required|in:Sikap,Pengetahuan,Keterampilan Umum,Keterampilan Khusus',
             'target_value' => 'sometimes|nullable|integer|min:0|max:100',
             'department_id' => 'sometimes|required|exists:departments,id',
         ]);
@@ -87,6 +103,40 @@ class CplController extends Controller
         $cpl = Cpl::findOrFail($id);
         $cpl->delete();
         return response()->json(null, 204);
+    }
+
+    public function bulk(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user && $user->department_id, 422, 'Jurusan akun belum ditentukan.');
+
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.code' => ['required', 'string', 'max:50', 'regex:/^CPL-[1-9][0-9]*$/i', 'distinct:ignore_case'],
+            'items.*.description' => 'required|string',
+            'items.*.targetValue' => 'nullable|integer|min:0|max:100',
+        ]);
+
+        $codes = collect($validated['items'])->pluck('code')->map(fn ($code) => strtoupper($code));
+        abort_if(
+            Cpl::where('department_id', $user->department_id)->whereIn('code', $codes)->exists(),
+            422,
+            'Salah satu kode CPL sudah digunakan.'
+        );
+
+        $created = DB::transaction(function () use ($validated, $user) {
+            return collect($validated['items'])->map(function (array $item) use ($user) {
+                return Cpl::create([
+                    'id' => (string) Str::uuid(),
+                    'code' => strtoupper($item['code']),
+                    'description' => $item['description'],
+                    'target_value' => $item['targetValue'] ?? 75,
+                    'department_id' => $user->department_id,
+                ]);
+            });
+        });
+
+        return response()->json($created, 201);
     }
 
     /**
@@ -271,7 +321,6 @@ class CplController extends Controller
                     'code' => $cpl->code,
                     'name' => $cpl->name,
                     'description' => $cpl->description,
-                    'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
                     'target' => $cpl->target_value ?? 70,
@@ -318,7 +367,6 @@ class CplController extends Controller
                     'code' => $cpl->code,
                     'name' => $cpl->name,
                     'description' => $cpl->description,
-                    'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
                     'target' => $cpl->target_value ?? 75,
@@ -342,7 +390,6 @@ class CplController extends Controller
                     'code' => $cpl->code,
                     'name' => $cpl->name,
                     'description' => $cpl->description,
-                    'category' => $cpl->category,
                     'value' => $value,
                     'status' => $status,
                     'target' => $target,
@@ -565,7 +612,6 @@ class CplController extends Controller
                     'code' => $cpl->code,
                     'name' => $cpl->name,
                     'description' => $cpl->description,
-                    'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
                     'target' => $cpl->target_value ?? 75,
@@ -601,7 +647,6 @@ class CplController extends Controller
                     'code' => $cpl->code,
                     'name' => $cpl->name,
                     'description' => $cpl->description,
-                    'category' => $cpl->category,
                     'value' => 0,
                     'status' => 'Belum Diukur',
                     'target' => $cpl->target_value ?? 75,
@@ -625,7 +670,6 @@ class CplController extends Controller
                     'code' => $cpl->code,
                     'name' => $cpl->name,
                     'description' => $cpl->description,
-                    'category' => $cpl->category,
                     'value' => $value,
                     'status' => $status,
                     'target' => $target,
@@ -732,7 +776,6 @@ class CplController extends Controller
                     'code' => $cpl->code,
                     'name' => $cpl->name,
                     'description' => $cpl->description,
-                    'category' => $cpl->category,
                     'value' => $value,
                     'status' => $status,
                     'target' => $cpl->target_value ?? 75,

@@ -6,7 +6,6 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { RadarChart } from './components/RadarChart';
 import { CourseRadarChart } from './components/CourseRadarChart';
 import { BarChart } from './components/BarChart';
 import { CplPrintTemplate } from './components/CplPrintTemplate';
@@ -129,7 +128,6 @@ interface Cpl {
   id: string;
   code: string;
   description: string;
-  category: 'Sikap' | 'Pengetahuan' | 'Keterampilan Umum' | 'Keterampilan Khusus';
   targetValue: number;
 }
 
@@ -141,7 +139,6 @@ interface CourseMapping {
   cplId: string;
   cplCode: string;
   cplDescription: string;
-  cplCategory: string;
   weight: number;
 }
 
@@ -162,7 +159,6 @@ interface CplAchievement {
   id: string;
   code: string;
   description: string;
-  category: 'Sikap' | 'Pengetahuan' | 'Keterampilan Umum' | 'Keterampilan Khusus';
   value: number;
   status: 'Tercapai' | 'Tidak Tercapai' | 'Belum Diukur';
 }
@@ -333,7 +329,6 @@ export default function App() {
   // CPL form
   const [cplFormCode, setCplFormCode] = useState('');
   const [cplFormDesc, setCplFormDesc] = useState('');
-  const [cplFormCat, setCplFormCat] = useState<'Sikap' | 'Pengetahuan' | 'Keterampilan Umum' | 'Keterampilan Khusus'>('Sikap');
   const [cplFormTarget, setCplFormTarget] = useState(75);
 
   // Slide panel for course detail & mapping
@@ -419,71 +414,22 @@ export default function App() {
     setTimeout(() => setToastMessage(''), 3000);
   };
 
-  // Excel categories normalizer
-  const normalizeCategory = (cat: string): 'Sikap' | 'Pengetahuan' | 'Keterampilan Umum' | 'Keterampilan Khusus' | null => {
-    const c = cat.toLowerCase().trim();
-    if (c.includes('sikap')) return 'Sikap';
-    if (c.includes('pengetahuan')) return 'Pengetahuan';
-    if (c.includes('umum') || c === 'ku' || c.includes('keterampilan umum') || c.includes('ketrampilan umum')) return 'Keterampilan Umum';
-    if (c.includes('khusus') || c === 'kk' || c.includes('keterampilan khusus') || c.includes('ketrampilan khusus')) return 'Keterampilan Khusus';
-    return null;
-  };
-
   // Download CPL Excel template
   const downloadCplTemplate = () => {
     const sampleData = [
       {
-        "kode_cpl": "S1",
-        "deskripsi": "Lulusan yang beriman, bertakwa, berakhlak mulia, berkarakter sesuai dengan nilai-nilai Pancasila dan menginternalisasi sikap, norma dan perilaku sesuai dengan Etika Bisnis dan etika profesi; dan",
-        "kategori": "Sikap",
+        "kode_cpl": "CPL-1",
+        "deskripsi": "Deskripsi CPL terintegrasi pertama.",
         "target_nilai": 75
       },
       {
-        "kode_cpl": "S2",
-        "deskripsi": "Menunjukkan sikap bertanggungjawab atas pekerjaan di bidang keahliannya secara mandiri.",
-        "kategori": "Sikap",
+        "kode_cpl": "CPL-2",
+        "deskripsi": "Deskripsi CPL terintegrasi kedua.",
         "target_nilai": 75
       },
       {
-        "kode_cpl": "P1",
-        "deskripsi": "Menguasai prinsip dan konsep teoritis akuntansi perusahaan jasa, dagang dan pabrikasi berskala kecil, menengah dan besar & sektor publik secara umum; beserta penyajian dan pengungkapan laporan keuangan sesuai standar akuntansi yang berlaku secara umum",
-        "kategori": "Pengetahuan",
-        "target_nilai": 75
-      },
-      {
-        "kode_cpl": "P2",
-        "deskripsi": "Menguasai konsep teoritis akuntansi manajemen, perhitungan biaya dan penganggaran entitas jasa, dagang dan pabrikasi, serta mampu menganalisis laporan keuangan secara umum",
-        "kategori": "Pengetahuan",
-        "target_nilai": 75
-      },
-      {
-        "kode_cpl": "P3",
-        "deskripsi": "Menguasai konsep teoritis dan prinsip-prinsip sistem informasi akuntansi dan pengendalian internal serta pengauditan laporan keuangan secara umum sesuai dengan standar audit yang berlaku",
-        "kategori": "Pengetahuan",
-        "target_nilai": 75
-      },
-      {
-        "kode_cpl": "P4",
-        "deskripsi": "Menguasai pengetahuan operasional yang lengkap, prinsip-prinsip serta konsep umum perpajakan, tata cara perhitungan, pemungutan dan penyetoran Pajak sesuai peraturan yang berlaku;",
-        "kategori": "Pengetahuan",
-        "target_nilai": 75
-      },
-      {
-        "kode_cpl": "P5",
-        "deskripsi": "Menguasai konsep teoritis, prinsip-prinsip teknologi kekinian (informasi dan digital), aplikasi komputer dan perangkat lunak akuntansi serta aplikasi pengolah angka (spreadsheet) dan aplikasi komputer akuntansi secara umum;",
-        "kategori": "Pengetahuan",
-        "target_nilai": 75
-      },
-      {
-        "kode_cpl": "P6",
-        "deskripsi": "Menguasai pengetahuan teoritis & prinsip-prinsip bisnis, ekonomi & metode kuantitatif, serta hukum komersial;",
-        "kategori": "Pengetahuan",
-        "target_nilai": 75
-      },
-      {
-        "kode_cpl": "P7",
-        "deskripsi": "Menguasai konsep teoritis dan prinsip-prinsip penyusunan karya ilmiah serta teknik komunikasi yang efektif secara lisan maupun tulisan dalam bahasa Indonesia maupun dalam bahasa asing.",
-        "kategori": "Pengetahuan",
+        "kode_cpl": "CPL-3",
+        "deskripsi": "Deskripsi CPL terintegrasi ketiga.",
         "target_nilai": 75
       }
     ];
@@ -493,7 +439,6 @@ export default function App() {
     worksheet['!cols'] = [
       { wch: 12 }, // kode_cpl
       { wch: 80 }, // deskripsi
-      { wch: 18 }, // kategori
       { wch: 15 }, // target_nilai
     ];
 
@@ -529,27 +474,23 @@ export default function App() {
           cell.includes('kode') || 
           cell.includes('code') || 
           cell.includes('deskripsi') || 
-          cell.includes('description') || 
-          cell.includes('kategori') || 
-          cell.includes('category')
+          cell.includes('description')
         );
 
         let codeIdx = 0;
         let descIdx = 1;
-        let catIdx = 2;
-        let targetIdx = 3;
+        let targetIdx = 2;
         let startRow = 0;
 
         if (isHeader) {
           codeIdx = firstRow.findIndex((h: string) => h.includes('kode') || h.includes('code'));
           descIdx = firstRow.findIndex((h: string) => h.includes('deskripsi') || h.includes('description') || h.includes('desc'));
-          catIdx = firstRow.findIndex((h: string) => h.includes('kategori') || h.includes('category') || h.includes('cat'));
           targetIdx = firstRow.findIndex((h: string) => h.includes('target') || h.includes('nilai'));
           startRow = 1;
         }
 
-        if (codeIdx === -1 || descIdx === -1 || catIdx === -1) {
-          showToast('Kolom kode_cpl, deskripsi, atau kategori tidak ditemukan.');
+        if (codeIdx === -1 || descIdx === -1) {
+          showToast('Kolom kode_cpl atau deskripsi tidak ditemukan.');
           return;
         }
 
@@ -562,11 +503,10 @@ export default function App() {
 
           const rawCode = String(row[codeIdx] || '').trim();
           const rawDesc = String(row[descIdx] || '').trim();
-          const rawCat = String(row[catIdx] || '').trim();
           const rawTarget = targetIdx !== -1 && row[targetIdx] !== undefined ? String(row[targetIdx]).trim() : '75';
 
           // Skip completely empty rows
-          if (!rawCode && !rawDesc && !rawCat) continue;
+          if (!rawCode && !rawDesc) continue;
 
           if (!rawCode) {
             errors.push(`Baris ${i + 1}: Kode CPL kosong.`);
@@ -576,10 +516,8 @@ export default function App() {
             errors.push(`Baris ${i + 1}: Deskripsi CPL kosong.`);
             continue;
           }
-
-          const category = normalizeCategory(rawCat);
-          if (!category) {
-            errors.push(`Baris ${i + 1}: Kategori "${rawCat}" tidak valid. Harus salah satu dari: Sikap, Pengetahuan, Keterampilan Umum, Keterampilan Khusus.`);
+          if (!/^CPL-[1-9][0-9]*$/i.test(rawCode)) {
+            errors.push(`Baris ${i + 1}: Kode "${rawCode}" tidak valid. Gunakan format CPL-1, CPL-2, dan seterusnya.`);
             continue;
           }
 
@@ -588,7 +526,6 @@ export default function App() {
           itemsToImport.push({
             code: rawCode,
             description: rawDesc,
-            category,
             targetValue,
           });
         }
@@ -2580,15 +2517,13 @@ export default function App() {
     pdf.setFontSize(8.5);
     pdf.text("No", 19, currentY + 5.5, { align: "center" });
     pdf.text("CPL", 30, currentY + 5.5, { align: "center" });
-    pdf.text("Kategori", 39, currentY + 5.5);
-    pdf.text("Deskripsi Kompetensi", 74, currentY + 5.5);
+    pdf.text("Deskripsi Kompetensi", 39, currentY + 5.5);
     pdf.text("Nilai", 139.5, currentY + 5.5, { align: "center" });
     pdf.text("Kategori Ketercapaian CPL", 171, currentY + 5.5, { align: "center" });
 
     // Column lines
     pdf.line(23, currentY, 23, currentY + 8);
     pdf.line(37, currentY, 37, currentY + 8);
-    pdf.line(72, currentY, 72, currentY + 8);
     pdf.line(132, currentY, 132, currentY + 8);
     pdf.line(147, currentY, 147, currentY + 8);
 
@@ -2605,7 +2540,7 @@ export default function App() {
       currentY += 10;
     } else {
       sortedAchs.forEach((cpl, index) => {
-        const descLines = pdf.splitTextToSize(cpl.description, 58);
+        const descLines = pdf.splitTextToSize(cpl.description, 90);
         const rowHeight = Math.max(7, 3.8 * descLines.length + 3);
         
         if (currentY + rowHeight > 248) {
@@ -2620,14 +2555,12 @@ export default function App() {
           pdf.setFont("times", "bold");
           pdf.text("No", 19, currentY + 5.5, { align: "center" });
           pdf.text("CPL", 30, currentY + 5.5, { align: "center" });
-          pdf.text("Kategori", 39, currentY + 5.5);
-          pdf.text("Deskripsi Kompetensi", 74, currentY + 5.5);
+          pdf.text("Deskripsi Kompetensi", 39, currentY + 5.5);
           pdf.text("Nilai", 139.5, currentY + 5.5, { align: "center" });
           pdf.text("Kategori Ketercapaian CPL", 171, currentY + 5.5, { align: "center" });
           
           pdf.line(23, currentY, 23, currentY + 8);
           pdf.line(37, currentY, 37, currentY + 8);
-          pdf.line(72, currentY, 72, currentY + 8);
           pdf.line(132, currentY, 132, currentY + 8);
           pdf.line(147, currentY, 147, currentY + 8);
           
@@ -2642,10 +2575,8 @@ export default function App() {
         pdf.setFont("times", "bold");
         pdf.text(cpl.code, 30, currentY + 4.8, { align: "center" });
         pdf.setFont("times", "normal");
-        pdf.text(cpl.category || '-', 39, currentY + 4.8);
-        
         descLines.forEach((line: string, lineIdx: number) => {
-          pdf.text(line, 74, currentY + 4.8 + (lineIdx * 3.8));
+          pdf.text(line, 39, currentY + 4.8 + (lineIdx * 3.8));
         });
         
         pdf.setFont("times", "bold");
@@ -2770,7 +2701,7 @@ export default function App() {
         ['NIM', 'Nama Mahasiswa', 'Angkatan', 'Kelas', ...cplColumns.map((cpl: any) => cpl.code)],
       ];
       const detailRows: any[][] = [[
-        'NIM', 'Nama Mahasiswa', 'Angkatan', 'Kelas', 'Kode CPL', 'Kategori',
+        'NIM', 'Nama Mahasiswa', 'Angkatan', 'Kelas', 'Kode CPL',
         'Deskripsi Kompetensi', 'Nilai', 'Status', 'Target',
       ]];
 
@@ -2797,7 +2728,6 @@ export default function App() {
               student.angkatan,
               student.kelas,
               cpl.code,
-              cpl.category || '',
               cpl.description || '',
               Number(cpl.value) > 0 ? Number(cpl.value) : '',
               cpl.status || (Number(cpl.value) > 0 ? 'Terukur' : 'Belum Diukur'),
@@ -3323,23 +3253,25 @@ export default function App() {
         const list = await apiCall('/courses');
         setCourses(list);
       } else if (modalType === 'cpl') {
-        if (!cplFormCode.trim() || !cplFormDesc.trim() || !cplFormCat) {
+        if (!cplFormCode.trim() || !cplFormDesc.trim()) {
           setModalError('Harap isi semua kolom.');
+          return;
+        }
+        if (!/^CPL-[1-9][0-9]*$/i.test(cplFormCode.trim())) {
+          setModalError('Kode CPL harus menggunakan format CPL-1, CPL-2, dan seterusnya.');
           return;
         }
         if (modalAction === 'add') {
           await apiCall('/cpl', 'POST', {
-            code: cplFormCode,
+            code: cplFormCode.toUpperCase(),
             description: cplFormDesc,
-            category: cplFormCat,
             targetValue: 75,
           });
           showToast('CPL berhasil ditambahkan.');
         } else {
           await apiCall(`/cpl/${editingId}`, 'PUT', {
-            code: cplFormCode,
+            code: cplFormCode.toUpperCase(),
             description: cplFormDesc,
-            category: cplFormCat,
             targetValue: 75,
           });
           showToast('CPL berhasil diperbarui.');
@@ -3474,7 +3406,6 @@ export default function App() {
     } else if (type === 'cpl') {
       setCplFormCode('');
       setCplFormDesc('');
-      setCplFormCat('Sikap');
       setCplFormTarget(75);
     } else if (type === 'grade') {
       const defaultCourseId = courses[0]?.id || '';
@@ -3516,7 +3447,6 @@ export default function App() {
     } else if (type === 'cpl') {
       setCplFormCode(item.code);
       setCplFormDesc(item.description);
-      setCplFormCat(item.category);
       setCplFormTarget(item.targetValue);
     } else if (type === 'grade') {
       setGradeFormCourseId(item.course_id || item.courseId || '');
@@ -3700,16 +3630,6 @@ export default function App() {
   const averageCplValue = measuredCpls.length > 0 ? (measuredCpls.reduce((acc, curr) => acc + curr.value, 0) / measuredCpls.length).toFixed(1) : '0.0';
 
   // Radar categories average computation
-  const getCategoryAvg = (cat: string) => {
-    const list = cplAverages.filter(c => c.category === cat && c.status !== 'Belum Diukur');
-    if (list.length === 0) return 0;
-    return Math.round(list.reduce((acc, curr) => acc + curr.value, 0) / list.length);
-  };
-  const avgSikap = getCategoryAvg('Sikap');
-  const avgPengetahuan = getCategoryAvg('Pengetahuan');
-  const avgKtmpUmum = getCategoryAvg('Keterampilan Umum');
-  const avgKtmpKhusus = getCategoryAvg('Keterampilan Khusus');
-
   // Removed unused studentRadarPoints
 
   // App initialization screen
@@ -4411,64 +4331,6 @@ export default function App() {
               </div>
             </section>
 
-            {/* Radar Kategori Capaian CPL */}
-            <section className="glass-panel p-lg rounded-3xl shadow-md">
-              <div className="flex flex-col md:flex-row justify-between md:items-center mb-xl gap-md">
-                <h4 className="font-headline-lg text-headline-lg font-bold text-on-surface">Radar Capaian Kategori CPL</h4>
-                <div className="flex gap-md">
-                  <div className="flex items-center gap-xs font-label-xs text-label-xs">
-                    <span className="w-3 h-3 rounded bg-secondary"></span> Target Kurikulum
-                  </div>
-                  <div className="flex items-center gap-xs font-label-xs text-label-xs">
-                    <span className="w-3 h-3 rounded bg-primary"></span> Realisasi Capaian
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-gutter mt-lg">
-                <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-primary">
-                  <p className="font-label-xs text-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Sikap</p>
-                  <p className="font-headline-xl text-headline-xl font-bold text-on-surface">{avgSikap}%</p>
-                  <div className="w-full bg-white/10 h-1.5 rounded-full mt-sm">
-                    <div className="bg-primary h-full rounded-full transition-all duration-500" style={{ width: `${avgSikap}%` }}></div>
-                  </div>
-                </div>
-
-                <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-secondary">
-                  <p className="font-label-xs text-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Pengetahuan</p>
-                  <p className="font-headline-xl text-headline-xl font-bold text-on-surface">{avgPengetahuan}%</p>
-                  <div className="w-full bg-white/10 h-1.5 rounded-full mt-sm">
-                    <div className="bg-secondary h-full rounded-full transition-all duration-500" style={{ width: `${avgPengetahuan}%` }}></div>
-                  </div>
-                </div>
-
-                <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-tertiary">
-                  <p className="font-label-xs text-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Keterampilan Umum</p>
-                  <p className="font-headline-xl text-headline-xl font-bold text-on-surface">{avgKtmpUmum}%</p>
-                  <div className="w-full bg-white/10 h-1.5 rounded-full mt-sm">
-                    <div className="bg-tertiary h-full rounded-full transition-all duration-500" style={{ width: `${avgKtmpUmum}%` }}></div>
-                  </div>
-                </div>
-
-                <div className="glass-panel p-lg rounded-2xl flex flex-col justify-center border-l-4 border-surface-tint">
-                  <p className="font-label-xs text-label-xs text-on-surface-variant uppercase mb-xs font-semibold">Keterampilan Khusus</p>
-                  <p className="font-headline-xl text-headline-xl font-bold text-on-surface">{avgKtmpKhusus}%</p>
-                  <div className="w-full bg-white/10 h-1.5 rounded-full mt-sm">
-                    <div className="bg-surface-tint h-full rounded-full transition-all duration-500" style={{ width: `${avgKtmpKhusus}%` }}></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Radar SVG Chart */}
-              <div className="mt-2xl h-[400px] w-full flex items-center justify-center relative overflow-hidden bg-white/5 rounded-3xl border border-slate-200 shadow-inner">
-                <RadarChart
-                  avgSikap={avgSikap}
-                  avgPengetahuan={avgPengetahuan}
-                  avgKtmpUmum={avgKtmpUmum}
-                  avgKtmpKhusus={avgKtmpKhusus}
-                />
-              </div>
-            </section>
             </div>
           </div>
         )}
@@ -5437,7 +5299,6 @@ export default function App() {
                       <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kode CPL</th>
-                        <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kategori</th>
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Deskripsi</th>
                         <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                       </tr>
@@ -5448,11 +5309,6 @@ export default function App() {
                           <tr key={cpl.id} className="hover-row transition-colors">
                             <td className="px-lg py-md font-body-sm">{index + 1}</td>
                             <td className="px-lg py-md font-body-sm font-bold text-primary">{cpl.code}</td>
-                            <td className="px-lg py-md">
-                              <span className="inline-block px-sm py-[2px] rounded text-label-xs font-bold bg-white/5 border border-white/10 text-on-surface-variant">
-                                {cpl.category}
-                              </span>
-                            </td>
                             <td className="px-lg py-md font-body-sm text-on-surface-variant max-w-sm">{cpl.description}</td>
                             <td className="px-lg py-md">
                               <div className="flex items-center justify-center gap-sm">
@@ -5474,7 +5330,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={5} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data CPL.</td>
+                          <td colSpan={4} className="px-lg py-xl text-center text-on-surface-variant">Belum ada data CPL.</td>
                         </tr>
                       )}
                     </tbody>
@@ -5511,7 +5367,6 @@ export default function App() {
                       <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">No</th>
                       <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Mata Kuliah</th>
                       <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">CPL</th>
-                      <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider">Kategori CPL</th>
                       <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Bobot</th>
                       <th className="px-lg py-md font-label-xs text-label-xs text-on-surface-variant font-bold uppercase tracking-wider text-center">Aksi</th>
                     </tr>
@@ -5525,7 +5380,6 @@ export default function App() {
                             {map.courseName} <span className="text-primary font-bold text-[12px]">[{map.courseCode}]</span>
                           </td>
                           <td className="px-lg py-md font-body-sm font-bold text-secondary">{map.cplCode}</td>
-                          <td className="px-lg py-md font-body-sm text-on-surface-variant">{map.cplCategory}</td>
                           <td className="px-lg py-md font-body-sm text-center font-bold text-tertiary">{map.weight}</td>
                           <td className="px-lg py-md">
                             <div className="flex items-center justify-center gap-sm">
@@ -5541,7 +5395,7 @@ export default function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6} className="px-lg py-xl text-center text-on-surface-variant">Belum ada pemetaan bobot.</td>
+                          <td colSpan={5} className="px-lg py-xl text-center text-on-surface-variant">Belum ada pemetaan bobot.</td>
                       </tr>
                     )}
                   </tbody>
@@ -6060,21 +5914,6 @@ export default function App() {
                   {/* Bar Chart (Top) */}
                   <BarChart measuredCpls={measuredCpls} />
 
-                  {/* Radar Chart (Bottom) */}
-                  <div className="glass-panel rounded-xl p-lg flex flex-col justify-between shadow-md">
-                    <div className="flex items-center justify-between mb-lg">
-                      <h4 className="font-headline-lg text-headline-lg text-on-surface font-bold">Profil Kompetensi Kelas</h4>
-                      <span className="material-symbols-outlined text-outline">radar</span>
-                    </div>
-                    <div className="h-[400px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-slate-200 shadow-inner overflow-hidden">
-                      <RadarChart
-                        avgSikap={avgSikap}
-                        avgPengetahuan={avgPengetahuan}
-                        avgKtmpUmum={avgKtmpUmum}
-                        avgKtmpKhusus={avgKtmpKhusus}
-                      />
-                    </div>
-                  </div>
                 </div>
 
                 {/* Achievements Table */}
@@ -6545,24 +6384,11 @@ export default function App() {
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Kode CPL</label>
                     <input 
                       className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
-                      placeholder="e.g. CPL-01"
+                      placeholder="Contoh: CPL-1"
                       type="text"
                       value={cplFormCode}
                       onChange={(e) => setCplFormCode(e.target.value)}
                     />
-                  </div>
-                  <div className="flex flex-col gap-sm">
-                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Kategori CPL</label>
-                    <select 
-                      className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all"
-                      value={cplFormCat}
-                      onChange={(e: any) => setCplFormCat(e.target.value)}
-                    >
-                      <option value="Sikap">Sikap</option>
-                      <option value="Pengetahuan">Pengetahuan</option>
-                      <option value="Keterampilan Umum">Keterampilan Umum</option>
-                      <option value="Keterampilan Khusus">Keterampilan Khusus</option>
-                    </select>
                   </div>
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Deskripsi CPL</label>

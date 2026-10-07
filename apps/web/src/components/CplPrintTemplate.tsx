@@ -11,7 +11,6 @@ interface CplPrintTemplateProps {
     id: string;
     code: string;
     description: string;
-    category: string;
     value: number;
   }>;
   cplMatrixAverageIpk: number | null;
@@ -94,17 +93,6 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
 
   const chartCpls = sortedCpls.filter(cpl => cpl.value > 0);
   const maxChartValue = Math.max(100, ...chartCpls.map(cpl => cpl.value));
-  const groupedCpls = sortedCpls.reduce<Record<string, typeof sortedCpls>>((groups, cpl) => {
-    const category = cpl.category || 'Lainnya';
-    groups[category] = groups[category] || [];
-    groups[category].push(cpl);
-    return groups;
-  }, {});
-  const categoryOrder = ['Sikap', 'Pengetahuan', 'Keterampilan Umum', 'Keterampilan Khusus'];
-  const orderedCategories = [
-    ...categoryOrder.filter(category => groupedCpls[category]?.length),
-    ...Object.keys(groupedCpls).filter(category => !categoryOrder.includes(category)),
-  ];
   const reportDepartmentName = departmentName || 'Program Studi';
   const reportDepartmentCode = departmentCode ? ` (${departmentCode})` : '';
   const reportAcademicYear = cplMatrixAcademicYear || 'Semua Tahun Ajaran';
@@ -192,11 +180,8 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
           </p>
         </div>
 
-        {orderedCategories.length > 0 ? orderedCategories.map((category) => (
-          <div key={category} data-pdf-block style={{ marginBottom: '16px', pageBreakInside: 'avoid' }}>
-            <h4 style={{ fontSize: '12px', fontWeight: 'bold', margin: '0 0 6px 0', textTransform: 'uppercase', color: '#000000' }}>
-              {category}
-            </h4>
+        {sortedCpls.length > 0 ? (
+          <div data-pdf-block style={{ marginBottom: '16px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', color: '#000000' }}>
               <thead>
                 <tr style={{ backgroundColor: '#f2f2f2' }}>
@@ -205,7 +190,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {groupedCpls[category].map((cpl, index) => (
+                {sortedCpls.map((cpl, index) => (
                   <tr key={cpl.id} style={{ backgroundColor: index % 2 === 1 ? '#fafafa' : '#ffffff' }}>
                     <td style={{ border: '1px solid #000000', padding: '5px 6px', textAlign: 'center', fontWeight: 'bold' }}>{cpl.code}</td>
                     <td style={{ border: '1px solid #000000', padding: '5px 8px', textAlign: 'justify' }}>{cpl.description}</td>
@@ -214,7 +199,7 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
               </tbody>
             </table>
           </div>
-        )) : (
+        ) : (
           <div style={{ border: '1px solid #000000', padding: '12px', fontSize: '12px', textAlign: 'center' }}>
             Belum ada data CPL pada database untuk jurusan ini.
           </div>
@@ -460,11 +445,10 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
           <thead>
             <tr style={{ backgroundColor: '#f2f2f2' }}>
               <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '5%' }}>No.</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'left', fontWeight: 'bold', width: '20%' }}>Kategori CPL</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>CPL</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '42%' }}>Deskripsi Kompetensi</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '8%' }}>Rata-rata Nilai</th>
-              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'center', fontWeight: 'bold', width: '17%' }}>Kategori Ketercapaian CPL</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>CPL</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'left', fontWeight: 'bold', width: '55%' }}>Deskripsi Kompetensi</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold', width: '10%' }}>Rata-rata Nilai</th>
+              <th style={{ border: '1px solid #000000', padding: '6px 6px', textAlign: 'center', fontWeight: 'bold', width: '20%' }}>Kategori Ketercapaian CPL</th>
             </tr>
           </thead>
           <tbody>
@@ -491,7 +475,6 @@ export const CplPrintTemplate: React.FC<CplPrintTemplateProps> = ({
                 return (
                   <tr key={cpl.id} style={{ backgroundColor: rowBg }}>
                     <td style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center' }}>{index + 1}</td>
-                    <td style={{ border: '1px solid #000000', padding: '6px 6px' }}>{cpl.category || '-'}</td>
                     <td style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold' }}>{cpl.code}</td>
                     <td style={{ border: '1px solid #000000', padding: '6px 8px', textAlign: 'justify' }}>{cpl.description}</td>
                     <td style={{ border: '1px solid #000000', padding: '6px 4px', textAlign: 'center', fontWeight: 'bold' }}>

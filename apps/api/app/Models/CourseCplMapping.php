@@ -18,8 +18,7 @@ class CourseCplMapping extends Model
         'courseCode',
         'courseName',
         'cplCode',
-        'cplDescription',
-        'cplCategory'
+        'cplDescription'
     ];
 
     public function getCourseIdAttribute()
@@ -50,11 +49,6 @@ class CourseCplMapping extends Model
     public function getCplDescriptionAttribute()
     {
         return $this->cpl?->description;
-    }
-
-    public function getCplCategoryAttribute()
-    {
-        return $this->cpl?->category;
     }
 
     public function course()
