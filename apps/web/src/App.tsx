@@ -177,6 +177,12 @@ interface AssessmentPlan {
   items: AssessmentItemDraft[];
 }
 
+interface GradebookScoreDraft {
+  score: string;
+  eligibilityStatus: 'eligible' | 'not_eligible_attendance' | 'excused' | 'absent' | 'makeup_exam';
+  note: string;
+}
+
 interface Student {
   id: string;
   nim: string;
@@ -292,6 +298,11 @@ export default function App() {
   const [assessmentDraftItems, setAssessmentDraftItems] = useState<AssessmentItemDraft[]>([]);
   const [editingAssessmentPlanId, setEditingAssessmentPlanId] = useState<string | null>(null);
   const [assessmentSaving, setAssessmentSaving] = useState(false);
+  const [gradebookAssignments, setGradebookAssignments] = useState<any[]>([]);
+  const [selectedGradebookAssignmentId, setSelectedGradebookAssignmentId] = useState('');
+  const [gradebookData, setGradebookData] = useState<any | null>(null);
+  const [gradebookScoreDrafts, setGradebookScoreDrafts] = useState<Record<string, GradebookScoreDraft>>({});
+  const [gradebookSaving, setGradebookSaving] = useState(false);
 
   // Department Admin
   const [students, setStudents] = useState<Student[]>([]);
@@ -2247,6 +2258,27 @@ export default function App() {
           ]);
           setLecturerProfile(profile);
           setTeachingAssignments(assignmentList);
+        } else if (currentUser.role === 'dosen' && activeTab === 'gradebook') {
+          const assignmentList = await apiCall('/lecturer-gradebooks');
+          setGradebookAssignments(assignmentList);
+          const assignmentId = selectedGradebookAssignmentId || assignmentList[0]?.id || '';
+          if (assignmentId) {
+            if (!selectedGradebookAssignmentId) setSelectedGradebookAssignmentId(assignmentId);
+            const detail = await apiCall(`/lecturer-gradebooks/${assignmentId}`);
+            setGradebookData(detail);
+            const drafts: Record<string, GradebookScoreDraft> = {};
+            detail.students.forEach((student: any) => detail.plan.items.forEach((item: any) => {
+              const stored = student.scores[item.id] || {};
+              drafts[`${student.enrollmentId}:${item.id}`] = {
+                score: stored.score === null || stored.score === undefined ? '' : String(stored.score),
+                eligibilityStatus: stored.eligibilityStatus || 'eligible',
+                note: stored.note || '',
+              };
+            }));
+            setGradebookScoreDrafts(drafts);
+          } else {
+            setGradebookData(null);
+          }
         }
       } catch (e: any) {
         showToast(e.message || 'Error loading data');
@@ -2256,7 +2288,7 @@ export default function App() {
     };
 
     loadData();
-  }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear, selectedStudentForCpl, studentCplSemesterType, studentCplAcademicYear, dashboardAngkatan, dashboardKelas]);
+  }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear, selectedStudentForCpl, studentCplSemesterType, studentCplAcademicYear, dashboardAngkatan, dashboardKelas, selectedGradebookAssignmentId]);
 
   // Fetch course summary when course report modal is open
   useEffect(() => {
@@ -3367,6 +3399,47 @@ export default function App() {
     }
   };
 
+  const syncAssignmentEnrollments = async (assignmentId: string) => {
+    try {
+      const result = await apiCall(`/teaching-assignments/${assignmentId}/sync-enrollments`, 'POST');
+      showToast(`${result.matchedStudents} mahasiswa cocok; ${result.enrollments} peserta terdaftar.`);
+    } catch (error: any) {
+      showToast(error.message || 'Gagal menyinkronkan peserta kelas.');
+    }
+  };
+
+  const updateGradebookDraft = (enrollmentId: string, itemId: string, changes: Partial<GradebookScoreDraft>) => {
+    const key = `${enrollmentId}:${itemId}`;
+    setGradebookScoreDrafts(current => {
+      const previous = current[key] || { score: '', eligibilityStatus: 'eligible' as const, note: '' };
+      return { ...current, [key]: { ...previous, ...changes } };
+    });
+  };
+
+  const saveGradebookScores = async () => {
+    if (!gradebookData || !selectedGradebookAssignmentId) return;
+    setGradebookSaving(true);
+    try {
+      const scores = gradebookData.students.flatMap((student: any) => gradebookData.plan.items.map((item: any) => {
+        const draft = gradebookScoreDrafts[`${student.enrollmentId}:${item.id}`] || { score: '', eligibilityStatus: 'eligible', note: '' };
+        return {
+          enrollmentId: student.enrollmentId,
+          assessmentItemId: item.id,
+          score: draft.score.trim() === '' ? null : Number(draft.score),
+          eligibilityStatus: draft.eligibilityStatus,
+          note: draft.note || null,
+        };
+      }));
+      const detail = await apiCall(`/lecturer-gradebooks/${selectedGradebookAssignmentId}/scores`, 'PUT', { scores });
+      setGradebookData(detail);
+      showToast('Nilai berhasil disimpan sebagai draft.');
+    } catch (error: any) {
+      showToast(error.message || 'Gagal menyimpan nilai.');
+    } finally {
+      setGradebookSaving(false);
+    }
+  };
+
   // CRUD Save helper
   const handleSaveData = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4357,13 +4430,22 @@ export default function App() {
                 </button>
               </>
             ) : (
-              <button
-                className="w-full flex items-center gap-md px-md py-sm rounded-lg text-left text-primary font-bold bg-primary/5 font-label-sm text-label-sm"
-                onClick={() => setActiveTab('dashboard')}
-              >
-                <span className="material-symbols-outlined">dashboard</span>
-                <span>Dashboard Dosen</span>
-              </button>
+              <>
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left font-label-sm text-label-sm ${activeTab === 'dashboard' ? 'text-primary font-bold bg-primary/5' : 'text-on-surface-variant hover:bg-surface-variant'}`}
+                  onClick={() => setActiveTab('dashboard')}
+                >
+                  <span className="material-symbols-outlined">dashboard</span>
+                  <span>Dashboard Dosen</span>
+                </button>
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left font-label-sm text-label-sm ${activeTab === 'gradebook' ? 'text-primary font-bold bg-primary/5' : 'text-on-surface-variant hover:bg-surface-variant'}`}
+                  onClick={() => setActiveTab('gradebook')}
+                >
+                  <span className="material-symbols-outlined">edit_square</span>
+                  <span>Input Nilai CPMK</span>
+                </button>
+              </>
             )}
           </nav>
         </aside>
@@ -4623,6 +4705,7 @@ export default function App() {
                         <td className="px-md py-md font-body-sm">{assignment.role === 'coordinator' ? 'Koordinator' : 'Anggota'}</td>
                         <td className="px-md py-md"><span className={`font-label-xs font-bold ${assignment.status === 'Aktif' ? 'text-success' : 'text-error'}`}>{assignment.status}</span></td>
                         <td className="px-md py-md"><div className="flex justify-center gap-sm">
+                          <button type="button" className="p-xs text-primary" title="Sinkronkan mahasiswa sesuai kelas dan angkatan" onClick={() => syncAssignmentEnrollments(assignment.id)}><span className="material-symbols-outlined text-[20px]">group_add</span></button>
                           <button type="button" className="p-xs text-on-surface-variant hover:text-secondary" title="Ubah penugasan" onClick={() => openEditModal('assignment', assignment)}><span className="material-symbols-outlined text-[20px]">edit</span></button>
                           <button type="button" className="p-xs text-on-surface-variant hover:text-error" title="Hapus penugasan" onClick={() => openDeleteConfirm('assignment', assignment.id, `${assignment.lecturerName} - ${assignment.courseName}`)}><span className="material-symbols-outlined text-[20px]">delete</span></button>
                         </div></td>
@@ -4751,6 +4834,64 @@ export default function App() {
               </>
             ) : (
               <div className="glass-panel rounded-xl p-xl text-center text-error">Profil dosen tidak dapat dimuat.</div>
+            )}
+          </div>
+        )}
+
+        {currentUser?.role === 'dosen' && activeTab === 'gradebook' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-md">
+              <div>
+                <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Input Nilai CPMK</h3>
+                <p className="font-body-sm text-on-surface-variant">Nilai kosong berbeda dengan nilai nol. Nilai akhir dihitung otomatis setelah seluruh komponen wajib terisi.</p>
+              </div>
+              {gradebookData && <button type="button" className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={gradebookSaving} onClick={saveGradebookScores}>{gradebookSaving ? 'Menyimpan...' : 'Simpan Nilai'}</button>}
+            </div>
+
+            <section className="glass-panel rounded-xl p-md shadow-md">
+              <label className="block font-label-xs text-on-surface-variant uppercase mb-xs">Mata Kuliah dan Kelas</label>
+              <select className="w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm text-on-surface" value={selectedGradebookAssignmentId} onChange={(e) => setSelectedGradebookAssignmentId(e.target.value)}>
+                <option value="">-- Pilih Penugasan --</option>
+                {gradebookAssignments.map(assignment => <option key={assignment.id} value={assignment.id}>{assignment.courseCode} - {assignment.courseName} · Kelas {assignment.className} · {assignment.semester} {assignment.academicYear}</option>)}
+              </select>
+            </section>
+
+            {dataLoading ? (
+              <div className="p-xl text-center text-on-surface-variant">Memuat buku nilai...</div>
+            ) : !gradebookData ? (
+              <div className="glass-panel rounded-xl p-xl text-center text-on-surface-variant">Belum ada rencana asesmen terpublikasi pada penugasan Anda.</div>
+            ) : gradebookData.students.length === 0 ? (
+              <div className="glass-panel rounded-xl p-xl text-center text-on-surface-variant">Belum ada peserta kelas. Hubungi admin jurusan untuk menyinkronkan mahasiswa sesuai kelas dan angkatan.</div>
+            ) : (
+              <div className="border border-outline-variant rounded-xl overflow-auto bg-surface shadow-md">
+                <table className="min-w-max w-full text-left border-collapse">
+                  <thead className="sticky top-0 z-20 bg-surface-container">
+                    <tr className="border-b border-outline-variant">
+                      <th className="sticky left-0 z-30 bg-surface-container px-md py-md min-w-[120px]">NIM</th>
+                      <th className="sticky left-[120px] z-30 bg-surface-container px-md py-md min-w-[220px]">Nama Mahasiswa</th>
+                      {gradebookData.plan.items.map((item: any) => <th key={item.id} className="px-md py-md min-w-[170px] text-center"><p className="font-label-sm font-bold">{item.cpmkCode} · {item.name}</p><p className="font-label-xs text-primary">{item.cplCode} · {item.weight}%</p></th>)}
+                      <th className="px-md py-md min-w-[110px] text-center">Nilai Akhir</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/50">
+                    {gradebookData.students.map((student: any) => <tr key={student.enrollmentId}>
+                      <td className="sticky left-0 bg-surface px-md py-md font-body-sm font-bold">{student.nim}</td>
+                      <td className="sticky left-[120px] bg-surface px-md py-md font-body-sm">{student.name}</td>
+                      {gradebookData.plan.items.map((item: any) => {
+                        const key = `${student.enrollmentId}:${item.id}`;
+                        const draft = gradebookScoreDrafts[key] || { score: '', eligibilityStatus: 'eligible', note: '' };
+                        return <td key={item.id} className="px-sm py-sm align-top">
+                          <input className="w-full bg-surface-container border border-outline-variant rounded-md px-sm py-xs text-center" type="number" min="0" max="100" step="0.01" value={draft.score} placeholder="Kosong" onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { score: e.target.value })} />
+                          <select className="mt-xs w-full bg-surface-container-low border border-outline-variant rounded-md px-xs py-xs text-[11px]" value={draft.eligibilityStatus} onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { eligibilityStatus: e.target.value as GradebookScoreDraft['eligibilityStatus'] })}>
+                            <option value="eligible">Berhak</option><option value="not_eligible_attendance">Tidak berhak karena presensi</option><option value="excused">Izin</option><option value="absent">Tidak hadir</option><option value="makeup_exam">Ujian susulan</option>
+                          </select>
+                        </td>;
+                      })}
+                      <td className="px-md py-md text-center font-bold">{student.finalScore === null ? 'Belum lengkap' : student.finalScore.toFixed(2)}</td>
+                    </tr>)}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

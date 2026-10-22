@@ -15,4 +15,5 @@ class AssessmentItem extends Model
 
     public function assessmentPlan() { return $this->belongsTo(AssessmentPlan::class); }
     public function cpmk() { return $this->belongsTo(Cpmk::class); }
+    public function scores() { return $this->hasMany(StudentAssessmentScore::class); }
 }

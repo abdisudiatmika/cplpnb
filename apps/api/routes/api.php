@@ -13,6 +13,7 @@ use App\Http\Controllers\LecturerController;
 use App\Http\Controllers\CpmkController;
 use App\Http\Controllers\TeachingAssignmentController;
 use App\Http\Controllers\AssessmentPlanController;
+use App\Http\Controllers\LecturerGradebookController;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
@@ -125,6 +126,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/assessment-plans/{assessmentPlan}/publish', [AssessmentPlanController::class, 'publish']);
     Route::apiResource('assessment-plans', AssessmentPlanController::class)
         ->parameters(['assessment-plans' => 'assessmentPlan']);
+    Route::get('/lecturer-gradebooks', [LecturerGradebookController::class, 'index']);
+    Route::get('/lecturer-gradebooks/{teachingAssignment}', [LecturerGradebookController::class, 'show']);
+    Route::put('/lecturer-gradebooks/{teachingAssignment}/scores', [LecturerGradebookController::class, 'saveScores']);
+    Route::post('/teaching-assignments/{teachingAssignment}/sync-enrollments', [LecturerGradebookController::class, 'syncEnrollments']);
     
     // Resource routes
     Route::apiResource('departments', DepartmentController::class);
