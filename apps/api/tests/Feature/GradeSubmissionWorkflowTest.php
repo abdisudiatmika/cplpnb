@@ -60,6 +60,12 @@ class GradeSubmissionWorkflowTest extends TestCase
             ->postJson("/api/lecturer-gradebooks/{$context['memberAssignment']->id}/lock")
             ->assertOk()->assertJsonPath('submission.status', 'Locked');
 
+        $this->actingAs($context['admin'])->getJson('/api/dashboard/obe-summary')
+            ->assertOk()
+            ->assertJsonPath('gradeStatuses.Locked', 1)
+            ->assertJsonFragment(['code' => 'CPL-1', 'value' => 70, 'status' => 'Belum Kompeten'])
+            ->assertJsonFragment(['code' => 'CPL-2', 'value' => 80, 'status' => 'Kompeten']);
+
         $this->actingAs($context['admin'])
             ->postJson("/api/lecturer-gradebooks/{$context['memberAssignment']->id}/reopen", ['reason' => 'Perbaikan nilai berdasarkan berita acara.'])
             ->assertOk()->assertJsonPath('submission.status', 'Draft');

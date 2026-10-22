@@ -328,6 +328,8 @@ export default function App() {
   // Filtering / Stats states (Department Admin Dashboard)
   const [studentStats, setStudentStats] = useState({ total: 0, active: 0, cuti: 0, lulus: 0 });
   const [cplAverages, setCplAverages] = useState<any[]>([]);
+  const [dashboardCpmks, setDashboardCpmks] = useState<any[]>([]);
+  const [dashboardGradeStatuses, setDashboardGradeStatuses] = useState<Record<string, number>>({ Draft: 0, Submitted: 0, Approved: 0, Locked: 0 });
   const [dashboardAngkatan, setDashboardAngkatan] = useState('');
   const [dashboardKelas, setDashboardKelas] = useState('');
 
@@ -2147,22 +2149,22 @@ export default function App() {
           }
         } else if (currentUser.role === 'admin_jurusan') {
           if (activeTab === 'dashboard') {
-            let url = '/cpl/averages';
-            const params = new URLSearchParams();
-            if (dashboardAngkatan) params.append('angkatan', dashboardAngkatan);
-            if (dashboardKelas) params.append('kelas', dashboardKelas);
-            if (params.toString()) url += `?${params.toString()}`;
-
-            const [list, stats, courseList, averages] = await Promise.all([
+            const dashboardParams = new URLSearchParams();
+            if (dashboardAngkatan) dashboardParams.append('angkatan', dashboardAngkatan);
+            if (dashboardKelas) dashboardParams.append('kelas', dashboardKelas);
+            const summaryUrl = `/dashboard/obe-summary${dashboardParams.toString() ? `?${dashboardParams.toString()}` : ''}`;
+            const [list, stats, courseList, obeSummary] = await Promise.all([
               apiCall('/students'),
               apiCall('/students/stats'),
               apiCall('/courses'),
-              apiCall(url)
+              apiCall(summaryUrl)
             ]);
             setStudents(list);
             setStudentStats(stats);
             setCourses(courseList);
-            setCplAverages(averages);
+            setCplAverages(obeSummary.cpls || []);
+            setDashboardCpmks(obeSummary.cpmks || []);
+            setDashboardGradeStatuses(obeSummary.gradeStatuses || { Draft: 0, Submitted: 0, Approved: 0, Locked: 0 });
           } else if (activeTab === 'mahasiswa') {
             const [list, periodData] = await Promise.all([
               apiCall('/students'),
@@ -4123,8 +4125,7 @@ export default function App() {
 
   // Dashboard calculations based on averages
   const measuredCpls = React.useMemo(() => {
-    const measured = cplAverages.filter(c => c.status !== 'Belum Diukur');
-    return measured.length > 0 ? measured : cplAverages;
+    return cplAverages.filter(c => c.status !== 'Belum Diukur');
   }, [cplAverages]);
   const achievedCpls = measuredCpls.filter(c => c.value >= 75);
   const cplTerpenuhiPct = measuredCpls.length > 0 ? Math.round((achievedCpls.length / measuredCpls.length) * 100) : 0;
@@ -4476,19 +4477,6 @@ export default function App() {
                 >
                   <span className="material-symbols-outlined">account_tree</span>
                   <span>CPMK</span>
-                </button>
-
-                {/* Input Nilai */}
-                <button 
-                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
-                    activeTab === 'nilai' 
-                      ? 'text-primary font-bold bg-primary/5' 
-                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
-                  }`} 
-                  onClick={() => setActiveTab('nilai')}
-                >
-                  <span className="material-symbols-outlined">edit_note</span>
-                  <span>Input Nilai</span>
                 </button>
 
                 {/* Hasil CPL */}
@@ -5282,6 +5270,39 @@ export default function App() {
                 ) : (
                   <div className="w-full text-center pb-lg text-on-surface-variant">Belum ada data CPL diukur.</div>
                 )}
+              </div>
+            </section>
+
+            <section className="border-t border-outline-variant pt-lg space-y-md">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-sm">
+                <div>
+                  <h4 className="font-headline-lg font-bold text-on-surface">Diagnosis CPMK dan Progres Nilai</h4>
+                  <p className="font-body-sm text-on-surface-variant">CPMK membantu menelusuri penyebab capaian CPL. Hanya nilai berstatus Locked yang masuk ke capaian resmi.</p>
+                </div>
+                <button type="button" className="text-primary font-label-sm font-bold" onClick={() => setActiveTab('cpmks')}>Lihat Master CPMK</button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
+                {(['Draft', 'Submitted', 'Approved', 'Locked'] as const).map(status => <div key={status} className="glass-panel p-md rounded-xl">
+                  <p className="font-label-xs uppercase text-on-surface-variant">{status}</p>
+                  <p className="font-display-xl font-bold text-on-surface">{dashboardGradeStatuses[status] || 0}</p>
+                  <p className="font-label-xs text-on-surface-variant">Rencana penilaian</p>
+                </div>)}
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-[1fr_2fr] gap-md">
+                <div className="glass-panel p-lg rounded-xl">
+                  <p className="font-label-xs uppercase text-on-surface-variant">CPMK Terukur</p>
+                  <p className="font-display-2xl font-bold text-on-surface">{dashboardCpmks.filter(item => item.value !== null).length} <span className="font-body-sm font-normal text-on-surface-variant">dari {dashboardCpmks.length}</span></p>
+                  <p className="font-body-sm text-on-surface-variant mt-sm">{dashboardCpmks.filter(item => item.value !== null && item.value < 75).length} CPMK belum mencapai target 75.</p>
+                </div>
+                <div className="border border-outline-variant rounded-xl overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left">
+                    <thead><tr className="bg-surface-container border-b border-outline-variant"><th className="px-md py-sm font-label-xs uppercase">CPMK</th><th className="px-md py-sm font-label-xs uppercase">Mata Kuliah</th><th className="px-md py-sm font-label-xs uppercase">Nilai</th><th className="px-md py-sm font-label-xs uppercase">Status</th></tr></thead>
+                    <tbody className="divide-y divide-outline-variant/50">
+                      {dashboardCpmks.slice(0, 6).map(item => <tr key={item.id}><td className="px-md py-sm font-bold text-primary">{item.code}</td><td className="px-md py-sm"><p className="font-body-sm">{item.courseName}</p><p className="font-label-xs text-on-surface-variant">{item.courseCode}</p></td><td className="px-md py-sm font-bold">{item.value === null ? '—' : Number(item.value).toFixed(2)}</td><td className="px-md py-sm font-label-xs font-bold">{item.status}</td></tr>)}
+                      {dashboardCpmks.length === 0 && <tr><td colSpan={4} className="px-md py-lg text-center text-on-surface-variant">Belum ada CPMK aktif.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
 

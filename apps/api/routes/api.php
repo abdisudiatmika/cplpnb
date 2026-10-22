@@ -14,6 +14,7 @@ use App\Http\Controllers\CpmkController;
 use App\Http\Controllers\TeachingAssignmentController;
 use App\Http\Controllers\AssessmentPlanController;
 use App\Http\Controllers\LecturerGradebookController;
+use App\Http\Controllers\ObeDashboardController;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
@@ -134,6 +135,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/lecturer-gradebooks/{teachingAssignment}/lock', [LecturerGradebookController::class, 'lock']);
     Route::post('/lecturer-gradebooks/{teachingAssignment}/reopen', [LecturerGradebookController::class, 'reopen']);
     Route::post('/teaching-assignments/{teachingAssignment}/sync-enrollments', [LecturerGradebookController::class, 'syncEnrollments']);
+    Route::get('/dashboard/obe-summary', [ObeDashboardController::class, 'summary']);
     
     // Resource routes
     Route::apiResource('departments', DepartmentController::class);
