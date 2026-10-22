@@ -16,6 +16,11 @@ class AuthController extends Controller
             $user->departmentName = $user->department->name;
             $user->departmentCode = $user->department->code;
         }
+        if ($user && $user->lecturer) {
+            $user->lecturerId = $user->lecturer->id;
+            $user->employeeNumber = $user->lecturer->employee_number;
+            $user->lecturerStatus = $user->lecturer->status;
+        }
         return $user;
     }
 
@@ -27,9 +32,23 @@ class AuthController extends Controller
         ]);
 
         if (Auth::attempt($request->only('email', 'password'))) {
-            $request->session()->regenerate();
-            
-            $user = Auth::user()->load('department');
+            $user = Auth::user()->load(['department', 'lecturer']);
+            if ($user->role === 'dosen' && (!$user->lecturer || $user->lecturer->status !== 'Aktif')) {
+                Auth::guard('web')->logout();
+                if ($request->hasSession()) {
+                    $request->session()->invalidate();
+                    $request->session()->regenerateToken();
+                }
+
+                throw ValidationException::withMessages([
+                    'email' => ['Akun dosen tidak aktif. Hubungi admin jurusan.'],
+                ]);
+            }
+
+            if ($request->hasSession()) {
+                $request->session()->regenerate();
+            }
+
             return response()->json([
                 'user' => $this->appendDepartmentInfo($user)
             ]);
@@ -52,7 +71,7 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        $user = $request->user()->load('department');
+        $user = $request->user()->load(['department', 'lecturer']);
         return response()->json([
             'user' => $this->appendDepartmentInfo($user)
         ]);

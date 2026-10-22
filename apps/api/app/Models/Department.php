@@ -31,4 +31,9 @@ class Department extends Model
     {
         return $this->hasMany(Cpl::class);
     }
+
+    public function lecturers()
+    {
+        return $this->hasMany(Lecturer::class);
+    }
 }

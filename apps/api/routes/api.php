@@ -9,6 +9,7 @@ use App\Http\Controllers\CourseController;
 use App\Http\Controllers\CplController;
 use App\Http\Controllers\MappingController;
 use App\Http\Controllers\GradeController;
+use App\Http\Controllers\LecturerController;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
@@ -110,6 +111,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/grades/periods', [GradeController::class, 'periods']);
     Route::get('/grades/export/all', [GradeController::class, 'exportAll']);
     Route::get('/grades/student/{studentId}', [GradeController::class, 'byStudent']);
+
+    // Lecturer master data. Teaching assignments are added in the next phase.
+    Route::get('/lecturers/me', [LecturerController::class, 'me']);
+    Route::apiResource('lecturers', LecturerController::class);
     
     // Resource routes
     Route::apiResource('departments', DepartmentController::class);

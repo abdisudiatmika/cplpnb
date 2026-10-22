@@ -107,6 +107,21 @@ interface AdminUser {
   createdAt: string;
 }
 
+interface Lecturer {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: 'dosen';
+  employeeNumber: string;
+  status: 'Aktif' | 'Nonaktif';
+  departmentId: string;
+  departmentName: string | null;
+  departmentCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Student {
   id: string;
   nim: string;
@@ -213,6 +228,8 @@ export default function App() {
   // Super Admin
   const [departments, setDepartments] = useState<Department[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [lecturers, setLecturers] = useState<Lecturer[]>([]);
+  const [lecturerProfile, setLecturerProfile] = useState<Lecturer | null>(null);
 
   // Department Admin
   const [students, setStudents] = useState<Student[]>([]);
@@ -293,7 +310,7 @@ export default function App() {
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<'department' | 'admin' | 'student' | 'course' | 'cpl' | 'mapping' | 'grade'>('student');
+  const [modalType, setModalType] = useState<'department' | 'admin' | 'lecturer' | 'student' | 'course' | 'cpl' | 'mapping' | 'grade'>('student');
   const [modalAction, setModalAction] = useState<'add' | 'edit'>('add');
   const [modalError, setModalError] = useState('');
 
@@ -312,6 +329,14 @@ export default function App() {
   const [adminFormEmail, setAdminFormEmail] = useState('');
   const [adminFormPassword, setAdminFormPassword] = useState('');
   const [adminFormDeptId, setAdminFormDeptId] = useState('');
+
+  // Lecturer form
+  const [lecturerFormName, setLecturerFormName] = useState('');
+  const [lecturerFormEmail, setLecturerFormEmail] = useState('');
+  const [lecturerFormPassword, setLecturerFormPassword] = useState('');
+  const [lecturerFormEmployeeNumber, setLecturerFormEmployeeNumber] = useState('');
+  const [lecturerFormDeptId, setLecturerFormDeptId] = useState('');
+  const [lecturerFormStatus, setLecturerFormStatus] = useState<'Aktif' | 'Nonaktif'>('Aktif');
 
   // Student form
   const [studentFormNim, setStudentFormNim] = useState('');
@@ -2024,6 +2049,13 @@ export default function App() {
             setAdmins(adminList);
             const deptList = await apiCall('/departments');
             setDepartments(deptList);
+          } else if (activeTab === 'lecturers') {
+            const [lecturerList, deptList] = await Promise.all([
+              apiCall('/lecturers'),
+              apiCall('/departments'),
+            ]);
+            setLecturers(lecturerList);
+            setDepartments(deptList);
           }
         } else if (currentUser.role === 'admin_jurusan') {
           if (activeTab === 'dashboard') {
@@ -2106,6 +2138,9 @@ export default function App() {
             setCplMatrixAverageIpk(ipkData.averageIpk);
             setCplMatrixAcademicYears(Array.isArray(periodData.academicYears) ? periodData.academicYears : []);
             setCourseSummaries(Array.isArray(courseSummaryData) ? courseSummaryData : []);
+          } else if (activeTab === 'lecturers') {
+            const lecturerList = await apiCall('/lecturers');
+            setLecturers(lecturerList);
           }
           
           if (activeTab === 'mahasiswa' && selectedStudentForCpl) {
@@ -2116,6 +2151,9 @@ export default function App() {
             const achs = await apiCall(`/cpl/achievements/${selectedStudentForCpl}${query}`);
             setSelectedStudentAchievements(achs);
           }
+        } else if (currentUser.role === 'dosen' && activeTab === 'dashboard') {
+          const profile = await apiCall('/lecturers/me');
+          setLecturerProfile(profile);
         }
       } catch (e: any) {
         showToast(e.message || 'Error loading data');
@@ -3200,6 +3238,38 @@ export default function App() {
         // Refresh
         const list = await apiCall('/user-admins');
         setAdmins(list);
+      } else if (modalType === 'lecturer') {
+        if (!lecturerFormName.trim() || !lecturerFormEmail.trim() || !lecturerFormEmployeeNumber.trim() || (!editingId && !lecturerFormPassword)) {
+          setModalError('Nama, email, NIP/NIDN, dan password wajib diisi.');
+          return;
+        }
+        const departmentId = currentUser?.role === 'super_admin'
+          ? lecturerFormDeptId
+          : currentUser?.department_id || currentUser?.departmentId;
+        if (!departmentId) {
+          setModalError('Pilih jurusan untuk dosen.');
+          return;
+        }
+
+        const payload = {
+          name: lecturerFormName.trim(),
+          email: lecturerFormEmail.trim(),
+          password: lecturerFormPassword || undefined,
+          employee_number: lecturerFormEmployeeNumber.trim(),
+          departmentId,
+          status: lecturerFormStatus,
+        };
+
+        if (modalAction === 'add') {
+          await apiCall('/lecturers', 'POST', payload);
+          showToast('Akun dosen berhasil dibuat.');
+        } else {
+          await apiCall(`/lecturers/${editingId}`, 'PUT', payload);
+          showToast('Data dosen berhasil diperbarui.');
+        }
+
+        const list = await apiCall('/lecturers');
+        setLecturers(list);
       } else if (modalType === 'student') {
         if (!studentFormNim.trim() || !studentFormName.trim() || !studentFormAngkatan || !studentFormKelas) {
           setModalError('Harap isi semua kolom.');
@@ -3336,6 +3406,10 @@ export default function App() {
         await apiCall(`/user-admins/${id}`, 'DELETE');
         showToast('Admin berhasil dihapus.');
         setAdmins(admins.filter(a => a.id !== id));
+      } else if (type === 'lecturer') {
+        await apiCall(`/lecturers/${id}`, 'DELETE');
+        showToast('Akun dosen berhasil dihapus.');
+        setLecturers(lecturers.filter(lecturer => lecturer.id !== id));
       } else if (type === 'student') {
         await apiCall(`/students/${id}`, 'DELETE');
         showToast('Mahasiswa berhasil dihapus.');
@@ -3392,6 +3466,15 @@ export default function App() {
       setAdminFormEmail('');
       setAdminFormPassword('');
       setAdminFormDeptId(departments[0]?.id || '');
+    } else if (type === 'lecturer') {
+      setLecturerFormName('');
+      setLecturerFormEmail('');
+      setLecturerFormPassword('');
+      setLecturerFormEmployeeNumber('');
+      setLecturerFormDeptId(currentUser?.role === 'admin_jurusan'
+        ? currentUser?.department_id || currentUser?.departmentId || ''
+        : departments[0]?.id || '');
+      setLecturerFormStatus('Aktif');
     } else if (type === 'student') {
       setStudentFormNim('');
       setStudentFormName('');
@@ -3433,6 +3516,13 @@ export default function App() {
       setAdminFormEmail(item.email);
       setAdminFormPassword('');
       setAdminFormDeptId(item.department_id || item.departmentId || '');
+    } else if (type === 'lecturer') {
+      setLecturerFormName(item.name);
+      setLecturerFormEmail(item.email);
+      setLecturerFormPassword('');
+      setLecturerFormEmployeeNumber(item.employeeNumber || item.employee_number || '');
+      setLecturerFormDeptId(item.departmentId || item.department_id || '');
+      setLecturerFormStatus(item.status || 'Aktif');
     } else if (type === 'student') {
       setStudentFormNim(item.nim);
       setStudentFormName(item.name);
@@ -3897,8 +3987,20 @@ export default function App() {
                   <span className="material-symbols-outlined">admin_panel_settings</span>
                   <span>Admin Jurusan</span>
                 </button>
+
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'lecturers'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => setActiveTab('lecturers')}
+                >
+                  <span className="material-symbols-outlined">school</span>
+                  <span>Dosen</span>
+                </button>
               </>
-            ) : (
+            ) : currentUser?.role === 'admin_jurusan' ? (
               <>
                 {/* Dashboard Tab */}
                 <button 
@@ -3989,7 +4091,27 @@ export default function App() {
                   <span className="material-symbols-outlined">settings</span>
                   <span>Pengaturan Laporan</span>
                 </button>
+
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'lecturers'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => setActiveTab('lecturers')}
+                >
+                  <span className="material-symbols-outlined">school</span>
+                  <span>Dosen</span>
+                </button>
               </>
+            ) : (
+              <button
+                className="w-full flex items-center gap-md px-md py-sm rounded-lg text-left text-primary font-bold bg-primary/5 font-label-sm text-label-sm"
+                onClick={() => setActiveTab('dashboard')}
+              >
+                <span className="material-symbols-outlined">dashboard</span>
+                <span>Dashboard Dosen</span>
+              </button>
             )}
           </nav>
         </aside>
@@ -4141,6 +4263,107 @@ export default function App() {
                 </table>
               )}
             </div>
+          </div>
+        )}
+
+        {['super_admin', 'admin_jurusan'].includes(currentUser?.role || '') && activeTab === 'lecturers' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-md">
+              <div>
+                <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Dosen</h3>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  {currentUser?.role === 'super_admin' ? 'Kelola akun dosen pada seluruh jurusan.' : 'Kelola akun dosen pada jurusan Anda.'}
+                </p>
+              </div>
+              <button className="flex items-center gap-sm bg-primary text-on-primary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-primary" onClick={() => openAddModal('lecturer')}>
+                <span className="material-symbols-outlined">person_add</span>
+                Tambah Dosen
+              </button>
+            </div>
+
+            <div className="glass-panel rounded-xl overflow-x-auto shadow-xl">
+              {dataLoading ? (
+                <div className="p-xl text-center text-on-surface-variant">Memuat data...</div>
+              ) : (
+                <table className="w-full min-w-[860px] text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-outline-variant/30 bg-white/[0.02]">
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">No</th>
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">NIP/NIDN</th>
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Nama</th>
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Email</th>
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Jurusan</th>
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Status</th>
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/50">
+                    {lecturers.length > 0 ? lecturers.map((lecturer, index) => (
+                      <tr key={lecturer.id} className="hover-row transition-colors">
+                        <td className="px-lg py-md font-body-sm">{index + 1}</td>
+                        <td className="px-lg py-md font-body-sm font-bold text-primary">{lecturer.employeeNumber}</td>
+                        <td className="px-lg py-md font-body-sm font-medium text-on-surface">{lecturer.name}</td>
+                        <td className="px-lg py-md font-body-sm text-on-surface-variant">{lecturer.email}</td>
+                        <td className="px-lg py-md font-body-sm text-on-surface-variant">
+                          {lecturer.departmentName ? `${lecturer.departmentName}${lecturer.departmentCode ? ` (${lecturer.departmentCode})` : ''}` : '—'}
+                        </td>
+                        <td className="px-lg py-md">
+                          <span className={`inline-flex px-sm py-xs rounded-full font-label-xs font-bold ${lecturer.status === 'Aktif' ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
+                            {lecturer.status}
+                          </span>
+                        </td>
+                        <td className="px-lg py-md">
+                          <div className="flex items-center justify-center gap-sm">
+                            <button className="p-xs text-on-surface-variant hover:text-secondary transition-colors" onClick={() => openEditModal('lecturer', lecturer)} title="Ubah dosen">
+                              <span className="material-symbols-outlined text-[20px]">edit</span>
+                            </button>
+                            <button className="p-xs text-on-surface-variant hover:text-error transition-colors" onClick={() => openDeleteConfirm('lecturer', lecturer.id, lecturer.name)} title="Hapus dosen">
+                              <span className="material-symbols-outlined text-[20px]">delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={7} className="px-lg py-xl text-center text-on-surface-variant">Belum ada akun dosen pada lingkup jurusan ini.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {currentUser?.role === 'dosen' && activeTab === 'dashboard' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div>
+              <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Dashboard Dosen</h3>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">Informasi akun dan kesiapan penugasan mengajar.</p>
+            </div>
+            {dataLoading ? (
+              <div className="glass-panel rounded-xl p-xl text-center text-on-surface-variant">Memuat profil dosen...</div>
+            ) : lecturerProfile ? (
+              <>
+                <section className="glass-panel rounded-xl p-lg shadow-md">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-lg">
+                    <div><p className="font-label-xs text-on-surface-variant uppercase mb-xs">Nama Dosen</p><p className="font-body-base font-bold text-on-surface">{lecturerProfile.name}</p></div>
+                    <div><p className="font-label-xs text-on-surface-variant uppercase mb-xs">NIP/NIDN</p><p className="font-body-base font-bold text-on-surface">{lecturerProfile.employeeNumber}</p></div>
+                    <div><p className="font-label-xs text-on-surface-variant uppercase mb-xs">Jurusan</p><p className="font-body-base font-bold text-on-surface">{lecturerProfile.departmentName || '—'}</p></div>
+                    <div><p className="font-label-xs text-on-surface-variant uppercase mb-xs">Status Akun</p><p className="font-body-base font-bold text-success">{lecturerProfile.status}</p></div>
+                  </div>
+                </section>
+                <section className="border-t border-outline-variant pt-lg">
+                  <div className="flex items-start gap-md max-w-3xl">
+                    <span className="material-symbols-outlined text-primary mt-xs">assignment_late</span>
+                    <div>
+                      <h4 className="font-headline-lg font-bold text-on-surface mb-xs">Belum ada penugasan mengajar</h4>
+                      <p className="font-body-sm text-on-surface-variant">Penugasan mata kuliah dan kelas akan tersedia setelah admin menyelesaikan konfigurasi tahap berikutnya.</p>
+                    </div>
+                  </div>
+                </section>
+              </>
+            ) : (
+              <div className="glass-panel rounded-xl p-xl text-center text-error">Profil dosen tidak dapat dimuat.</div>
+            )}
           </div>
         )}
 
@@ -6243,6 +6466,50 @@ export default function App() {
                         <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
                       ))}
                     </select>
+                  </div>
+                </>
+              )}
+
+              {/* Lecturer Form Fields */}
+              {modalType === 'lecturer' && (
+                <>
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Nama Lengkap</label>
+                    <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all" placeholder="Nama dosen" type="text" value={lecturerFormName} onChange={(e) => setLecturerFormName(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">NIP/NIDN</label>
+                    <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all" placeholder="Nomor identitas dosen" type="text" value={lecturerFormEmployeeNumber} onChange={(e) => setLecturerFormEmployeeNumber(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Email</label>
+                    <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all" placeholder="dosen@pnb.ac.id" type="email" value={lecturerFormEmail} onChange={(e) => setLecturerFormEmail(e.target.value)} />
+                  </div>
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Password {modalAction === 'edit' && '(Kosongkan jika tidak ingin diubah)'}</label>
+                    <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all" placeholder="••••••••" type="password" value={lecturerFormPassword} onChange={(e) => setLecturerFormPassword(e.target.value)} />
+                  </div>
+                  {currentUser?.role === 'super_admin' ? (
+                    <div className="flex flex-col gap-sm">
+                      <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Jurusan</label>
+                      <select className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all cursor-pointer" value={lecturerFormDeptId} onChange={(e) => setLecturerFormDeptId(e.target.value)}>
+                        <option value="">-- Pilih Jurusan --</option>
+                        {departments.map(department => <option key={department.id} value={department.id}>{department.name} ({department.code})</option>)}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-sm">
+                      <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Jurusan</label>
+                      <div className="w-full bg-surface-container-low border border-outline-variant/40 rounded-lg py-md px-md text-on-surface-variant">{currentUser?.departmentName || 'Jurusan akun admin'}</div>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Status</label>
+                    <div className="grid grid-cols-2 gap-sm">
+                      {(['Aktif', 'Nonaktif'] as const).map(status => (
+                        <button key={status} type="button" className={`py-sm px-md rounded-lg border font-label-sm font-bold transition-colors ${lecturerFormStatus === status ? 'bg-primary text-on-primary border-primary' : 'bg-surface-container text-on-surface-variant border-outline-variant'}`} onClick={() => setLecturerFormStatus(status)}>{status}</button>
+                      ))}
+                    </div>
                   </div>
                 </>
               )}
