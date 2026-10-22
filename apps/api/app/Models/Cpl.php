@@ -28,4 +28,9 @@ class Cpl extends Model
     {
         return $this->hasMany(CourseCplMapping::class);
     }
+
+    public function cpmkMappings()
+    {
+        return $this->hasMany(CpmkCplMapping::class);
+    }
 }

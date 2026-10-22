@@ -26,4 +26,9 @@ class Course extends Model
     {
         return $this->hasMany(StudentGrade::class);
     }
+
+    public function cpmks()
+    {
+        return $this->hasMany(Cpmk::class);
+    }
 }

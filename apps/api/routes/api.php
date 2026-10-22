@@ -10,6 +10,7 @@ use App\Http\Controllers\CplController;
 use App\Http\Controllers\MappingController;
 use App\Http\Controllers\GradeController;
 use App\Http\Controllers\LecturerController;
+use App\Http\Controllers\CpmkController;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
@@ -115,6 +116,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Lecturer master data. Teaching assignments are added in the next phase.
     Route::get('/lecturers/me', [LecturerController::class, 'me']);
     Route::apiResource('lecturers', LecturerController::class);
+    Route::post('/cpmks/bulk', [CpmkController::class, 'bulk']);
+    Route::apiResource('cpmks', CpmkController::class);
     
     // Resource routes
     Route::apiResource('departments', DepartmentController::class);
