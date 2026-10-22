@@ -149,6 +149,9 @@ interface CpmkMaster {
   courseCode: string;
   courseName: string;
   cplCode: string;
+  curriculumVersion: string | null;
+  contributionWeight: number;
+  status: 'Aktif' | 'Nonaktif';
 }
 
 interface AssessmentItemDraft {
@@ -294,6 +297,9 @@ export default function App() {
   const [lecturerProfile, setLecturerProfile] = useState<Lecturer | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
   const [cpmkMasters, setCpmkMasters] = useState<CpmkMaster[]>([]);
+  const [editingCpmkId, setEditingCpmkId] = useState<string | null>(null);
+  const [cpmkSaving, setCpmkSaving] = useState(false);
+  const [cpmkForm, setCpmkForm] = useState({ courseId: '', code: '', description: '', cplCode: '', curriculumVersion: '2026', contributionWeight: '100', status: 'Aktif' });
   const [assessmentPlans, setAssessmentPlans] = useState<AssessmentPlan[]>([]);
   const [selectedAssessmentOfferingId, setSelectedAssessmentOfferingId] = useState('');
   const [assessmentDraftItems, setAssessmentDraftItems] = useState<AssessmentItemDraft[]>([]);
@@ -2180,6 +2186,15 @@ export default function App() {
           } else if (activeTab === 'cpl') {
             const list = await apiCall('/cpl');
             setCpls(list);
+          } else if (activeTab === 'cpmks') {
+            const [cpmkList, courseList, cplList] = await Promise.all([
+              apiCall('/cpmks'),
+              apiCall('/courses'),
+              apiCall('/cpl'),
+            ]);
+            setCpmkMasters(cpmkList);
+            setCourses(courseList);
+            setCpls(cplList);
           } else if (activeTab === 'nilai') {
             const [studentList, courseList] = await Promise.all([
               apiCall('/students'),
@@ -3427,6 +3442,67 @@ export default function App() {
     }
   };
 
+  const resetCpmkForm = () => {
+    setEditingCpmkId(null);
+    setCpmkForm({ courseId: '', code: '', description: '', cplCode: '', curriculumVersion: '2026', contributionWeight: '100', status: 'Aktif' });
+  };
+
+  const editCpmk = (cpmk: CpmkMaster) => {
+    setEditingCpmkId(cpmk.id);
+    setCpmkForm({
+      courseId: cpmk.courseId,
+      code: cpmk.code,
+      description: cpmk.description,
+      cplCode: cpmk.cplCode,
+      curriculumVersion: cpmk.curriculumVersion || '',
+      contributionWeight: String(cpmk.contributionWeight || 100),
+      status: cpmk.status,
+    });
+  };
+
+  const saveCpmk = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const course = courses.find(item => item.id === cpmkForm.courseId);
+    if (!course || !cpmkForm.code.trim() || !cpmkForm.description.trim() || !cpmkForm.cplCode) {
+      showToast('Mata kuliah, kode, deskripsi, dan CPL terkait wajib diisi.');
+      return;
+    }
+    setCpmkSaving(true);
+    try {
+      const payload = {
+        courseId: course.id,
+        courseCode: course.code,
+        code: cpmkForm.code.trim().toUpperCase(),
+        description: cpmkForm.description.trim(),
+        cplCode: cpmkForm.cplCode,
+        curriculumVersion: cpmkForm.curriculumVersion.trim() || null,
+        contributionWeight: Number(cpmkForm.contributionWeight),
+        status: cpmkForm.status,
+      };
+      if (editingCpmkId) await apiCall(`/cpmks/${editingCpmkId}`, 'PUT', payload);
+      else await apiCall('/cpmks', 'POST', payload);
+      setCpmkMasters(await apiCall('/cpmks'));
+      resetCpmkForm();
+      showToast(editingCpmkId ? 'CPMK berhasil diperbarui.' : 'CPMK berhasil ditambahkan.');
+    } catch (error: any) {
+      showToast(error.message || 'Gagal menyimpan CPMK.');
+    } finally {
+      setCpmkSaving(false);
+    }
+  };
+
+  const deleteCpmk = async (cpmk: CpmkMaster) => {
+    if (!window.confirm(`Hapus ${cpmk.code} dari ${cpmk.courseName}?`)) return;
+    try {
+      await apiCall(`/cpmks/${cpmk.id}`, 'DELETE');
+      setCpmkMasters(current => current.filter(item => item.id !== cpmk.id));
+      if (editingCpmkId === cpmk.id) resetCpmkForm();
+      showToast('CPMK berhasil dihapus.');
+    } catch (error: any) {
+      showToast(error.message || 'CPMK tidak dapat dihapus karena sudah digunakan.');
+    }
+  };
+
   const updateGradebookDraft = (enrollmentId: string, itemId: string, changes: Partial<GradebookScoreDraft>) => {
     const key = `${enrollmentId}:${itemId}`;
     setGradebookScoreDrafts(current => {
@@ -4390,6 +4466,18 @@ export default function App() {
                   <span>CPL</span>
                 </button>
 
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'cpmks'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => setActiveTab('cpmks')}
+                >
+                  <span className="material-symbols-outlined">account_tree</span>
+                  <span>CPMK</span>
+                </button>
+
                 {/* Input Nilai */}
                 <button 
                   className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
@@ -4631,6 +4719,72 @@ export default function App() {
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        )}
+
+        {currentUser?.role === 'admin_jurusan' && activeTab === 'cpmks' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div>
+              <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Master CPMK</h3>
+              <p className="font-body-sm text-on-surface-variant">Tetapkan CPMK setiap mata kuliah dan hubungkan dengan CPL terintegrasi.</p>
+            </div>
+
+            <form onSubmit={saveCpmk} className="glass-panel rounded-xl p-lg shadow-md space-y-md">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+                <label className="font-label-sm text-on-surface">Mata Kuliah
+                  <select className="mt-xs w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm" value={cpmkForm.courseId} onChange={event => setCpmkForm(current => ({ ...current, courseId: event.target.value }))}>
+                    <option value="">-- Pilih Mata Kuliah --</option>
+                    {courses.map(course => <option key={course.id} value={course.id}>{course.code} - {course.name}</option>)}
+                  </select>
+                </label>
+                <label className="font-label-sm text-on-surface">Kode CPMK
+                  <input className="mt-xs w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm" value={cpmkForm.code} placeholder="CPMK01-01" onChange={event => setCpmkForm(current => ({ ...current, code: event.target.value.toUpperCase() }))} />
+                </label>
+                <label className="font-label-sm text-on-surface">CPL Terkait
+                  <select className="mt-xs w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm" value={cpmkForm.cplCode} onChange={event => setCpmkForm(current => ({ ...current, cplCode: event.target.value }))}>
+                    <option value="">-- Pilih CPL --</option>
+                    {cpls.map(cpl => <option key={cpl.id} value={cpl.code}>{cpl.code} - {cpl.description}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="block font-label-sm text-on-surface">Deskripsi CPMK
+                <textarea className="mt-xs w-full min-h-[90px] bg-surface-container border border-outline-variant rounded-lg px-md py-sm" value={cpmkForm.description} onChange={event => setCpmkForm(current => ({ ...current, description: event.target.value }))} />
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
+                <label className="font-label-sm text-on-surface">Versi Kurikulum
+                  <input className="mt-xs w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm" value={cpmkForm.curriculumVersion} onChange={event => setCpmkForm(current => ({ ...current, curriculumVersion: event.target.value }))} />
+                </label>
+                <label className="font-label-sm text-on-surface">Bobot Kontribusi (%)
+                  <input type="number" min="0.01" max="100" step="0.01" className="mt-xs w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm" value={cpmkForm.contributionWeight} onChange={event => setCpmkForm(current => ({ ...current, contributionWeight: event.target.value }))} />
+                </label>
+                <label className="font-label-sm text-on-surface">Status
+                  <select className="mt-xs w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm" value={cpmkForm.status} onChange={event => setCpmkForm(current => ({ ...current, status: event.target.value }))}>
+                    <option value="Aktif">Aktif</option><option value="Nonaktif">Nonaktif</option>
+                  </select>
+                </label>
+              </div>
+              <div className="flex justify-end gap-sm">
+                {editingCpmkId && <button type="button" className="px-lg py-sm text-on-surface-variant" onClick={resetCpmkForm}>Batal</button>}
+                <button disabled={cpmkSaving} className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50">{cpmkSaving ? 'Menyimpan...' : editingCpmkId ? 'Simpan Perubahan' : 'Tambah CPMK'}</button>
+              </div>
+            </form>
+
+            <div className="glass-panel rounded-xl overflow-x-auto shadow-md">
+              <table className="w-full min-w-[900px] text-left border-collapse">
+                <thead><tr className="border-b border-outline-variant/30">
+                  <th className="px-md py-md font-label-xs uppercase">Kode</th><th className="px-md py-md font-label-xs uppercase">Mata Kuliah</th><th className="px-md py-md font-label-xs uppercase">Deskripsi</th><th className="px-md py-md font-label-xs uppercase">CPL</th><th className="px-md py-md font-label-xs uppercase">Bobot</th><th className="px-md py-md font-label-xs uppercase text-center">Aksi</th>
+                </tr></thead>
+                <tbody className="divide-y divide-outline-variant/50">
+                  {cpmkMasters.length ? cpmkMasters.map(cpmk => <tr key={cpmk.id}>
+                    <td className="px-md py-md font-bold text-primary">{cpmk.code}</td>
+                    <td className="px-md py-md"><p className="font-body-sm font-bold">{cpmk.courseName}</p><p className="font-label-xs text-on-surface-variant">{cpmk.courseCode}</p></td>
+                    <td className="px-md py-md font-body-sm max-w-[420px]">{cpmk.description}</td>
+                    <td className="px-md py-md font-bold">{cpmk.cplCode}</td><td className="px-md py-md">{cpmk.contributionWeight}%</td>
+                    <td className="px-md py-md"><div className="flex justify-center gap-sm"><button type="button" title="Ubah CPMK" className="p-xs text-primary" onClick={() => editCpmk(cpmk)}><span className="material-symbols-outlined">edit</span></button><button type="button" title="Hapus CPMK" className="p-xs text-error" onClick={() => deleteCpmk(cpmk)}><span className="material-symbols-outlined">delete</span></button></div></td>
+                  </tr>) : <tr><td colSpan={6} className="px-lg py-xl text-center text-on-surface-variant">Belum ada CPMK.</td></tr>}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
