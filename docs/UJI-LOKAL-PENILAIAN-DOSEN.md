@@ -31,8 +31,8 @@ Semua akun menggunakan kata sandi `DemoCpl2026!`.
 ## Skenario utama
 
 1. Login sebagai dosen anggota.
-2. Buka menu **Input Nilai CPMK** dan pilih `DEMO-AKT101 - Praktikum Akuntansi Terintegrasi` kelas `DEMO-A`.
-3. Isi dua nilai untuk ketiga mahasiswa. Gunakan contoh `80` dan `85`, lalu pilih **Simpan Draf**.
+2. Buka menu **Input Nilai CPMK** dan pilih `MKK2462401108 - Data Analitik` kelas `DEMO-A`.
+3. Isi 14 komponen nilai untuk ketiga mahasiswa sesuai RPS Data Analitik, lalu pilih **Simpan Draf**.
 4. Pastikan Nilai Akhir, `CPL-1`, dan `CPL-2` dihitung otomatis.
 5. Pilih **Ajukan Nilai**. Setelah diajukan, input harus terkunci.
 6. Logout, lalu login sebagai koordinator.

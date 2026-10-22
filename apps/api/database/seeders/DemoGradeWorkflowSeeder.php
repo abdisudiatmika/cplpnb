@@ -50,28 +50,50 @@ class DemoGradeWorkflowSeeder extends Seeder
                 ['user_id' => $memberUser->id, 'department_id' => $department->id, 'status' => 'Aktif']
             );
 
+            Course::where('department_id', $department->id)->where('code', 'DEMO-AKT101')->delete();
             $course = Course::updateOrCreate(
-                ['department_id' => $department->id, 'code' => 'DEMO-AKT101'],
-                ['name' => 'Praktikum Akuntansi Terintegrasi', 'sks' => 3, 'semester' => 1]
+                ['department_id' => $department->id, 'code' => 'MKK2462401108'],
+                ['name' => 'Data Analitik', 'sks' => 2, 'semester' => 1]
             );
-            $cpl1 = Cpl::updateOrCreate(
-                ['department_id' => $department->id, 'code' => 'CPL-1'],
-                ['description' => 'Mampu menyusun proses akuntansi secara terintegrasi.', 'target_value' => 75]
-            );
-            $cpl2 = Cpl::updateOrCreate(
-                ['department_id' => $department->id, 'code' => 'CPL-2'],
-                ['description' => 'Mampu menganalisis informasi keuangan untuk pengambilan keputusan.', 'target_value' => 75]
-            );
-            $cpmk1 = Cpmk::updateOrCreate(
-                ['course_id' => $course->id, 'code' => 'CPMK01-01'],
-                ['description' => 'Menyusun siklus akuntansi dasar.', 'curriculum_version' => 'Demo 2026', 'status' => 'Aktif']
-            );
-            $cpmk2 = Cpmk::updateOrCreate(
-                ['course_id' => $course->id, 'code' => 'CPMK02-01'],
-                ['description' => 'Menganalisis hasil laporan keuangan.', 'curriculum_version' => 'Demo 2026', 'status' => 'Aktif']
-            );
-            $cpmk1->cplMappings()->updateOrCreate(['cpl_id' => $cpl1->id], ['contribution_weight' => 100]);
-            $cpmk2->cplMappings()->updateOrCreate(['cpl_id' => $cpl2->id], ['contribution_weight' => 100]);
+
+            $cplDescriptions = [
+                1 => 'Mampu menunjukkan sikap religius, etis, profesional, bertanggung jawab, disiplin, serta menjunjung nilai Pancasila dan etika profesi dalam pelaksanaan pekerjaan di bidang akuntansi.',
+                2 => 'Mampu menguasai konsep dan prinsip akuntansi keuangan, akuntansi manajemen, perpajakan, audit, bisnis, dan ekonomi sebagai dasar penyelesaian pekerjaan di bidang akuntansi.',
+                3 => 'Mampu menganalisis transaksi, informasi keuangan, biaya, penganggaran, dan permasalahan bisnis untuk mendukung pengambilan keputusan organisasi.',
+                4 => 'Mampu menyusun, menyajikan, dan mengungkapkan laporan keuangan entitas jasa, dagang, manufaktur, dan sektor publik sesuai standar akuntansi yang berlaku.',
+                5 => 'Mampu melaksanakan administrasi perpajakan, menghitung kewajiban perpajakan, dan menyusun pelaporan perpajakan sesuai ketentuan yang berlaku di Indonesia.',
+                6 => 'Mampu menerapkan sistem informasi akuntansi, pengendalian internal, dan prosedur audit sesuai standar dan kebutuhan organisasi.',
+                7 => 'Mampu memanfaatkan teknologi informasi, aplikasi digital, dan perangkat lunak akuntansi untuk mendukung penyelesaian pekerjaan secara efektif dan efisien.',
+                8 => 'Mampu berkomunikasi, bekerja sama, dan menyusun laporan atau karya ilmiah secara efektif dalam bahasa Indonesia maupun bahasa Inggris.',
+                9 => 'Mampu melakukan evaluasi, pengembangan kompetensi diri, supervisi pekerjaan, serta pengelolaan data dan dokumen secara akuntabel dan aman.',
+                10 => 'Mampu menyelesaikan permasalahan pekerjaan bidang akuntansi secara logis, inovatif, adaptif, dan mandiri sesuai kebutuhan dunia usaha dan dunia industri.',
+            ];
+            $cpls = collect($cplDescriptions)->mapWithKeys(function ($description, $number) use ($department) {
+                $cpl = Cpl::updateOrCreate(
+                    ['department_id' => $department->id, 'code' => 'CPL-' . $number],
+                    ['description' => $description, 'target_value' => 75]
+                );
+                return [$number => $cpl];
+            });
+
+            $cpmkDefinitions = [
+                ['code' => 'CPMK07-01', 'cpl' => 7, 'weight' => 22.5, 'description' => 'Mahasiswa mampu menggunakan fungsi dan rumus aplikasi pengolah angka untuk mengolah data tabel akuntansi secara manual dan otomatis.'],
+                ['code' => 'CPMK09-01', 'cpl' => 9, 'weight' => 25, 'description' => 'Mahasiswa mampu membersihkan, menyiapkan, dan mengorganisasi data sehingga tersimpan rapi, akurat, dan mudah ditelusuri.'],
+                ['code' => 'CPMK03-01', 'cpl' => 3, 'weight' => 22.5, 'description' => 'Mahasiswa mampu menyajikan ringkasan data, bagan, grafik, dan hasil alat analisis data untuk mendukung analisis dan pengambilan keputusan.'],
+                ['code' => 'CPMK10-01', 'cpl' => 10, 'weight' => 30, 'description' => 'Mahasiswa mampu menyusun otomasi sederhana dengan VBA untuk menyelesaikan pekerjaan pengolahan data berulang secara logis dan mandiri.'],
+            ];
+            $cpmks = collect($cpmkDefinitions)->mapWithKeys(function ($definition) use ($course, $cpls) {
+                $cpmk = Cpmk::updateOrCreate(
+                    ['course_id' => $course->id, 'code' => $definition['code']],
+                    ['description' => $definition['description'], 'curriculum_version' => 'RPS OBE 2025 v02', 'status' => 'Aktif']
+                );
+                $cpmk->cplMappings()->delete();
+                $cpmk->cplMappings()->create([
+                    'cpl_id' => $cpls[$definition['cpl']]->id,
+                    'contribution_weight' => $definition['weight'],
+                ]);
+                return [$definition['code'] => $cpmk];
+            });
 
             $period = AcademicPeriod::updateOrCreate(
                 ['department_id' => $department->id, 'academic_year' => '2026/2027', 'semester' => 'Ganjil'],
@@ -99,14 +121,29 @@ class DemoGradeWorkflowSeeder extends Seeder
                 ['course_offering_id' => $offering->id, 'version' => 1],
                 ['status' => 'Published', 'published_by' => $admin->id, 'published_at' => now()]
             );
-            $item1 = AssessmentItem::updateOrCreate(
-                ['assessment_plan_id' => $plan->id, 'sequence' => 1],
-                ['cpmk_id' => $cpmk1->id, 'category' => 'assignment', 'name' => 'Tugas Siklus Akuntansi', 'weight' => 40, 'is_required' => true]
-            );
-            $item2 = AssessmentItem::updateOrCreate(
-                ['assessment_plan_id' => $plan->id, 'sequence' => 2],
-                ['cpmk_id' => $cpmk2->id, 'category' => 'final', 'name' => 'UAS Analisis Laporan', 'weight' => 60, 'is_required' => true]
-            );
+            $assessmentDefinitions = [
+                ['CPMK07-01', 'assignment', 'Tugas 1', 7.5],
+                ['CPMK07-01', 'quiz', 'Kuis 1', 2.5],
+                ['CPMK07-01', 'midterm', 'UTS CPMK07-01', 12.5],
+                ['CPMK09-01', 'assignment', 'Tugas 2', 7.5],
+                ['CPMK09-01', 'quiz', 'Kuis 2', 2.5],
+                ['CPMK09-01', 'midterm', 'UTS CPMK09-01', 7.5],
+                ['CPMK09-01', 'final', 'UAS CPMK09-01', 7.5],
+                ['CPMK03-01', 'assignment', 'Tugas 3', 7.5],
+                ['CPMK03-01', 'quiz', 'Kuis 3', 2.5],
+                ['CPMK03-01', 'midterm', 'UTS CPMK03-01', 5],
+                ['CPMK03-01', 'final', 'UAS CPMK03-01', 7.5],
+                ['CPMK10-01', 'project', 'Tugas 4 Proyek VBA', 17.5],
+                ['CPMK10-01', 'quiz', 'Kuis 4', 2.5],
+                ['CPMK10-01', 'final', 'UAS CPMK10-01', 10],
+            ];
+            $items = collect($assessmentDefinitions)->map(function ($definition, $index) use ($plan, $cpmks) {
+                return AssessmentItem::updateOrCreate(
+                    ['assessment_plan_id' => $plan->id, 'sequence' => $index + 1],
+                    ['cpmk_id' => $cpmks[$definition[0]]->id, 'category' => $definition[1], 'name' => $definition[2], 'weight' => $definition[3], 'is_required' => true]
+                );
+            });
+            AssessmentItem::where('assessment_plan_id', $plan->id)->where('sequence', '>', count($assessmentDefinitions))->delete();
 
             foreach ([
                 ['nim' => 'DEMO26001', 'name' => 'Ayu Mahasiswa Demo'],
@@ -124,7 +161,7 @@ class DemoGradeWorkflowSeeder extends Seeder
             }
 
             // Re-running the demo seeder restores a clean Draft workflow.
-            $scoreIds = StudentAssessmentScore::whereIn('assessment_item_id', [$item1->id, $item2->id])->pluck('id');
+            $scoreIds = StudentAssessmentScore::whereIn('assessment_item_id', $items->pluck('id'))->pluck('id');
             GradeAuditLog::where('assessment_plan_id', $plan->id)->delete();
             GradeAuditLog::whereIn('score_id', $scoreIds)->delete();
             StudentAssessmentScore::whereIn('id', $scoreIds)->delete();
