@@ -129,6 +129,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/lecturer-gradebooks', [LecturerGradebookController::class, 'index']);
     Route::get('/lecturer-gradebooks/{teachingAssignment}', [LecturerGradebookController::class, 'show']);
     Route::put('/lecturer-gradebooks/{teachingAssignment}/scores', [LecturerGradebookController::class, 'saveScores']);
+    Route::post('/lecturer-gradebooks/{teachingAssignment}/submit', [LecturerGradebookController::class, 'submit']);
+    Route::post('/lecturer-gradebooks/{teachingAssignment}/approve', [LecturerGradebookController::class, 'approve']);
+    Route::post('/lecturer-gradebooks/{teachingAssignment}/lock', [LecturerGradebookController::class, 'lock']);
+    Route::post('/lecturer-gradebooks/{teachingAssignment}/reopen', [LecturerGradebookController::class, 'reopen']);
     Route::post('/teaching-assignments/{teachingAssignment}/sync-enrollments', [LecturerGradebookController::class, 'syncEnrollments']);
     
     // Resource routes

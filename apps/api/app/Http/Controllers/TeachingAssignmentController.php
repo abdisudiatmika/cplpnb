@@ -21,6 +21,7 @@ class TeachingAssignmentController extends Controller
         'courseOffering.course',
         'courseOffering.academicClass',
         'courseOffering.academicPeriod',
+        'courseOffering.assessmentPlans.gradeSubmission',
     ];
 
     public function index(Request $request)
@@ -200,6 +201,10 @@ class TeachingAssignmentController extends Controller
     private function payload(TeachingAssignment $assignment): array
     {
         $offering = $assignment->courseOffering;
+        $publishedPlan = $offering?->assessmentPlans
+            ?->where('status', 'Published')
+            ->sortByDesc('version')
+            ->first();
         return [
             'id' => $assignment->id,
             'courseOfferingId' => $assignment->course_offering_id,
@@ -216,6 +221,7 @@ class TeachingAssignmentController extends Controller
             'academicYear' => $offering?->academicPeriod?->academic_year,
             'semester' => $offering?->academicPeriod?->semester,
             'offeringStatus' => $offering?->status,
+            'gradeStatus' => $publishedPlan?->gradeSubmission?->status ?? ($publishedPlan ? 'Draft' : null),
         ];
     }
 }

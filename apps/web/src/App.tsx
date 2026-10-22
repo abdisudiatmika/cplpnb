@@ -138,6 +138,7 @@ interface TeachingAssignment {
   academicYear: string;
   semester: 'Ganjil' | 'Genap';
   offeringStatus: string;
+  gradeStatus: 'Draft' | 'Submitted' | 'Approved' | 'Locked' | null;
 }
 
 interface CpmkMaster {
@@ -501,8 +502,8 @@ export default function App() {
         const x = ((e.clientX - rect.left) / rect.width) * 100;
         const y = ((e.clientY - rect.top) / rect.height) * 100;
         panel.style.backgroundImage = `
-          radial-gradient(at ${x}% ${y}%, rgba(19, 30, 58, 1) 0%, transparent 60%), 
-          radial-gradient(at 100% 0%, rgba(13, 25, 48, 1) 0%, transparent 50%), 
+          radial-gradient(at ${x}% ${y}%, rgba(19, 30, 58, 1) 0%, transparent 60%),
+          radial-gradient(at 100% 0%, rgba(13, 25, 48, 1) 0%, transparent 50%),
           radial-gradient(at 50% 100%, rgba(15, 23, 42, 1) 0%, transparent 50%)
         `;
       }
@@ -3408,6 +3409,24 @@ export default function App() {
     }
   };
 
+  const runAdminGradebookWorkflow = async (assignment: TeachingAssignment, action: 'approve' | 'lock' | 'reopen') => {
+    let body: Record<string, string> | undefined;
+    if (action === 'reopen') {
+      const reason = window.prompt('Tuliskan alasan pembukaan nilai (minimal 10 karakter):');
+      if (!reason) return;
+      body = { reason };
+    } else if (!window.confirm(action === 'approve' ? 'Setujui nilai yang diajukan?' : 'Kunci nilai? Nilai tidak dapat diubah setelah dikunci.')) {
+      return;
+    }
+    try {
+      await apiCall(`/lecturer-gradebooks/${assignment.id}/${action}`, 'POST', body);
+      setTeachingAssignments(await apiCall('/teaching-assignments'));
+      showToast(action === 'approve' ? 'Nilai disetujui.' : action === 'lock' ? 'Nilai dikunci.' : 'Nilai dibuka kembali menjadi draf.');
+    } catch (error: any) {
+      showToast(error.message || 'Gagal memproses status nilai.');
+    }
+  };
+
   const updateGradebookDraft = (enrollmentId: string, itemId: string, changes: Partial<GradebookScoreDraft>) => {
     const key = `${enrollmentId}:${itemId}`;
     setGradebookScoreDrafts(current => {
@@ -3435,6 +3454,22 @@ export default function App() {
       showToast('Nilai berhasil disimpan sebagai draft.');
     } catch (error: any) {
       showToast(error.message || 'Gagal menyimpan nilai.');
+    } finally {
+      setGradebookSaving(false);
+    }
+  };
+
+  const runGradebookWorkflow = async (action: 'submit' | 'approve') => {
+    if (!selectedGradebookAssignmentId) return;
+    const label = action === 'submit' ? 'mengajukan nilai' : 'menyetujui nilai';
+    if (!window.confirm(`Yakin ingin ${label}?`)) return;
+    setGradebookSaving(true);
+    try {
+      const detail = await apiCall(`/lecturer-gradebooks/${selectedGradebookAssignmentId}/${action}`, 'POST');
+      setGradebookData(detail);
+      showToast(action === 'submit' ? 'Nilai berhasil diajukan kepada koordinator.' : 'Nilai berhasil disetujui.');
+    } catch (error: any) {
+      showToast(error.message || `Gagal ${label}.`);
     } finally {
       setGradebookSaving(false);
     }
@@ -4692,7 +4727,7 @@ export default function App() {
                     <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Kelas</th>
                     <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Periode</th>
                     <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Peran</th>
-                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Status</th>
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Status Nilai</th>
                     <th className="px-md py-md font-label-xs text-on-surface-variant uppercase text-center">Aksi</th>
                   </tr></thead>
                   <tbody className="divide-y divide-outline-variant/50">
@@ -4703,9 +4738,12 @@ export default function App() {
                         <td className="px-md py-md font-body-sm">{assignment.className} · {assignment.cohortYear}</td>
                         <td className="px-md py-md font-body-sm">{assignment.semester} {assignment.academicYear}</td>
                         <td className="px-md py-md font-body-sm">{assignment.role === 'coordinator' ? 'Koordinator' : 'Anggota'}</td>
-                        <td className="px-md py-md"><span className={`font-label-xs font-bold ${assignment.status === 'Aktif' ? 'text-success' : 'text-error'}`}>{assignment.status}</span></td>
+                        <td className="px-md py-md"><span className="font-label-xs font-bold text-primary">{assignment.gradeStatus || 'Belum ada rencana'}</span></td>
                         <td className="px-md py-md"><div className="flex justify-center gap-sm">
                           <button type="button" className="p-xs text-primary" title="Sinkronkan mahasiswa sesuai kelas dan angkatan" onClick={() => syncAssignmentEnrollments(assignment.id)}><span className="material-symbols-outlined text-[20px]">group_add</span></button>
+                          {assignment.gradeStatus === 'Submitted' && <button type="button" className="p-xs text-primary" title="Setujui nilai" onClick={() => runAdminGradebookWorkflow(assignment, 'approve')}><span className="material-symbols-outlined text-[20px]">task_alt</span></button>}
+                          {assignment.gradeStatus === 'Approved' && <button type="button" className="p-xs text-primary" title="Kunci nilai" onClick={() => runAdminGradebookWorkflow(assignment, 'lock')}><span className="material-symbols-outlined text-[20px]">lock</span></button>}
+                          {assignment.gradeStatus === 'Locked' && <button type="button" className="p-xs text-secondary" title="Buka kembali nilai" onClick={() => runAdminGradebookWorkflow(assignment, 'reopen')}><span className="material-symbols-outlined text-[20px]">lock_open</span></button>}
                           <button type="button" className="p-xs text-on-surface-variant hover:text-secondary" title="Ubah penugasan" onClick={() => openEditModal('assignment', assignment)}><span className="material-symbols-outlined text-[20px]">edit</span></button>
                           <button type="button" className="p-xs text-on-surface-variant hover:text-error" title="Hapus penugasan" onClick={() => openDeleteConfirm('assignment', assignment.id, `${assignment.lecturerName} - ${assignment.courseName}`)}><span className="material-symbols-outlined text-[20px]">delete</span></button>
                         </div></td>
@@ -4845,7 +4883,14 @@ export default function App() {
                 <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Input Nilai CPMK</h3>
                 <p className="font-body-sm text-on-surface-variant">Nilai kosong berbeda dengan nilai nol. Nilai akhir dihitung otomatis setelah seluruh komponen wajib terisi.</p>
               </div>
-              {gradebookData && <button type="button" className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={gradebookSaving} onClick={saveGradebookScores}>{gradebookSaving ? 'Menyimpan...' : 'Simpan Nilai'}</button>}
+              {gradebookData && <div className="flex flex-wrap items-center gap-sm">
+                <span className="px-md py-sm rounded-lg bg-surface-container-high font-label-xs font-bold">Status: {gradebookData.submission?.status || 'Draft'}</span>
+                {gradebookData.submission?.status === 'Draft' && <>
+                  <button type="button" className="border border-primary text-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={gradebookSaving} onClick={saveGradebookScores}>{gradebookSaving ? 'Memproses...' : 'Simpan Draf'}</button>
+                  <button type="button" className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={gradebookSaving} onClick={() => runGradebookWorkflow('submit')}>Ajukan Nilai</button>
+                </>}
+                {gradebookData.submission?.status === 'Submitted' && gradebookData.assignment?.role === 'coordinator' && <button type="button" className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={gradebookSaving} onClick={() => runGradebookWorkflow('approve')}>Setujui Nilai</button>}
+              </div>}
             </div>
 
             <section className="glass-panel rounded-xl p-md shadow-md">
@@ -4881,13 +4926,16 @@ export default function App() {
                         const key = `${student.enrollmentId}:${item.id}`;
                         const draft = gradebookScoreDrafts[key] || { score: '', eligibilityStatus: 'eligible', note: '' };
                         return <td key={item.id} className="px-sm py-sm align-top">
-                          <input className="w-full bg-surface-container border border-outline-variant rounded-md px-sm py-xs text-center" type="number" min="0" max="100" step="0.01" value={draft.score} placeholder="Kosong" onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { score: e.target.value })} />
-                          <select className="mt-xs w-full bg-surface-container-low border border-outline-variant rounded-md px-xs py-xs text-[11px]" value={draft.eligibilityStatus} onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { eligibilityStatus: e.target.value as GradebookScoreDraft['eligibilityStatus'] })}>
+                          <input disabled={gradebookData.submission?.status !== 'Draft'} className="w-full bg-surface-container border border-outline-variant rounded-md px-sm py-xs text-center disabled:opacity-60" type="number" min="0" max="100" step="0.01" value={draft.score} placeholder="Kosong" onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { score: e.target.value })} />
+                          <select disabled={gradebookData.submission?.status !== 'Draft'} className="mt-xs w-full bg-surface-container-low border border-outline-variant rounded-md px-xs py-xs text-[11px] disabled:opacity-60" value={draft.eligibilityStatus} onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { eligibilityStatus: e.target.value as GradebookScoreDraft['eligibilityStatus'] })}>
                             <option value="eligible">Berhak</option><option value="not_eligible_attendance">Tidak berhak karena presensi</option><option value="excused">Izin</option><option value="absent">Tidak hadir</option><option value="makeup_exam">Ujian susulan</option>
                           </select>
                         </td>;
                       })}
-                      <td className="px-md py-md text-center font-bold">{student.finalScore === null ? 'Belum lengkap' : student.finalScore.toFixed(2)}</td>
+                      <td className="px-md py-md text-center font-bold">
+                        <p>{student.finalScore === null ? 'Belum lengkap' : Number(student.finalScore).toFixed(2)}</p>
+                        {Object.entries(student.cplScores || {}).map(([code, score]: [string, any]) => <p key={code} className="font-label-xs font-normal text-on-surface-variant">{code}: {score === null ? '-' : Number(score).toFixed(2)}</p>)}
+                      </td>
                     </tr>)}
                   </tbody>
                 </table>

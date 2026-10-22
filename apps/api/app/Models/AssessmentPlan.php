@@ -16,4 +16,6 @@ class AssessmentPlan extends Model
     public function courseOffering() { return $this->belongsTo(CourseOffering::class); }
     public function items() { return $this->hasMany(AssessmentItem::class)->orderBy('sequence'); }
     public function publishedBy() { return $this->belongsTo(User::class, 'published_by'); }
+    public function gradeSubmission() { return $this->hasOne(GradeSubmission::class); }
+    public function auditLogs() { return $this->hasMany(GradeAuditLog::class); }
 }
