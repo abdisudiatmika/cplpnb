@@ -122,6 +122,23 @@ interface Lecturer {
   updatedAt: string;
 }
 
+interface TeachingAssignment {
+  id: string;
+  role: 'coordinator' | 'member';
+  status: 'Aktif' | 'Nonaktif';
+  lecturerId: string;
+  lecturerName: string;
+  employeeNumber: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  className: string;
+  cohortYear: number;
+  academicYear: string;
+  semester: 'Ganjil' | 'Genap';
+  offeringStatus: string;
+}
+
 interface Student {
   id: string;
   nim: string;
@@ -230,6 +247,7 @@ export default function App() {
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
   const [lecturerProfile, setLecturerProfile] = useState<Lecturer | null>(null);
+  const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
 
   // Department Admin
   const [students, setStudents] = useState<Student[]>([]);
@@ -310,7 +328,7 @@ export default function App() {
 
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalType, setModalType] = useState<'department' | 'admin' | 'lecturer' | 'student' | 'course' | 'cpl' | 'mapping' | 'grade'>('student');
+  const [modalType, setModalType] = useState<'department' | 'admin' | 'lecturer' | 'assignment' | 'student' | 'course' | 'cpl' | 'mapping' | 'grade'>('student');
   const [modalAction, setModalAction] = useState<'add' | 'edit'>('add');
   const [modalError, setModalError] = useState('');
 
@@ -337,6 +355,14 @@ export default function App() {
   const [lecturerFormEmployeeNumber, setLecturerFormEmployeeNumber] = useState('');
   const [lecturerFormDeptId, setLecturerFormDeptId] = useState('');
   const [lecturerFormStatus, setLecturerFormStatus] = useState<'Aktif' | 'Nonaktif'>('Aktif');
+  const [assignmentLecturerId, setAssignmentLecturerId] = useState('');
+  const [assignmentCourseId, setAssignmentCourseId] = useState('');
+  const [assignmentClassName, setAssignmentClassName] = useState('A');
+  const [assignmentCohortYear, setAssignmentCohortYear] = useState(String(new Date().getFullYear()));
+  const [assignmentAcademicYear, setAssignmentAcademicYear] = useState(`${new Date().getFullYear()}/${new Date().getFullYear() + 1}`);
+  const [assignmentSemester, setAssignmentSemester] = useState<'Ganjil' | 'Genap'>('Ganjil');
+  const [assignmentRole, setAssignmentRole] = useState<'coordinator' | 'member'>('member');
+  const [assignmentStatus, setAssignmentStatus] = useState<'Aktif' | 'Nonaktif'>('Aktif');
 
   // Student form
   const [studentFormNim, setStudentFormNim] = useState('');
@@ -2141,6 +2167,15 @@ export default function App() {
           } else if (activeTab === 'lecturers') {
             const lecturerList = await apiCall('/lecturers');
             setLecturers(lecturerList);
+          } else if (activeTab === 'teaching_assignments') {
+            const [assignmentList, lecturerList, courseList] = await Promise.all([
+              apiCall('/teaching-assignments'),
+              apiCall('/lecturers'),
+              apiCall('/courses'),
+            ]);
+            setTeachingAssignments(assignmentList);
+            setLecturers(lecturerList);
+            setCourses(courseList);
           }
           
           if (activeTab === 'mahasiswa' && selectedStudentForCpl) {
@@ -2152,8 +2187,12 @@ export default function App() {
             setSelectedStudentAchievements(achs);
           }
         } else if (currentUser.role === 'dosen' && activeTab === 'dashboard') {
-          const profile = await apiCall('/lecturers/me');
+          const [profile, assignmentList] = await Promise.all([
+            apiCall('/lecturers/me'),
+            apiCall('/teaching-assignments/me'),
+          ]);
           setLecturerProfile(profile);
+          setTeachingAssignments(assignmentList);
         }
       } catch (e: any) {
         showToast(e.message || 'Error loading data');
@@ -3270,6 +3309,32 @@ export default function App() {
 
         const list = await apiCall('/lecturers');
         setLecturers(list);
+      } else if (modalType === 'assignment') {
+        if (modalAction === 'add') {
+          if (!assignmentLecturerId || !assignmentCourseId || !assignmentClassName.trim() || !assignmentCohortYear || !assignmentAcademicYear) {
+            setModalError('Dosen, mata kuliah, kelas, angkatan, dan tahun ajaran wajib diisi.');
+            return;
+          }
+          await apiCall('/teaching-assignments', 'POST', {
+            lecturerId: assignmentLecturerId,
+            courseId: assignmentCourseId,
+            className: assignmentClassName.trim(),
+            cohortYear: Number(assignmentCohortYear),
+            academicYear: assignmentAcademicYear.trim(),
+            semester: assignmentSemester,
+            role: assignmentRole,
+            status: assignmentStatus,
+          });
+          showToast('Penugasan dosen berhasil dibuat.');
+        } else {
+          await apiCall(`/teaching-assignments/${editingId}`, 'PUT', {
+            role: assignmentRole,
+            status: assignmentStatus,
+          });
+          showToast('Penugasan dosen berhasil diperbarui.');
+        }
+        const list = await apiCall('/teaching-assignments');
+        setTeachingAssignments(list);
       } else if (modalType === 'student') {
         if (!studentFormNim.trim() || !studentFormName.trim() || !studentFormAngkatan || !studentFormKelas) {
           setModalError('Harap isi semua kolom.');
@@ -3410,6 +3475,10 @@ export default function App() {
         await apiCall(`/lecturers/${id}`, 'DELETE');
         showToast('Akun dosen berhasil dihapus.');
         setLecturers(lecturers.filter(lecturer => lecturer.id !== id));
+      } else if (type === 'assignment') {
+        await apiCall(`/teaching-assignments/${id}`, 'DELETE');
+        showToast('Penugasan dosen berhasil dihapus.');
+        setTeachingAssignments(teachingAssignments.filter(assignment => assignment.id !== id));
       } else if (type === 'student') {
         await apiCall(`/students/${id}`, 'DELETE');
         showToast('Mahasiswa berhasil dihapus.');
@@ -3475,6 +3544,15 @@ export default function App() {
         ? currentUser?.department_id || currentUser?.departmentId || ''
         : departments[0]?.id || '');
       setLecturerFormStatus('Aktif');
+    } else if (type === 'assignment') {
+      setAssignmentLecturerId(lecturers.find(lecturer => lecturer.status === 'Aktif')?.id || '');
+      setAssignmentCourseId(courses[0]?.id || '');
+      setAssignmentClassName('A');
+      setAssignmentCohortYear(String(new Date().getFullYear()));
+      setAssignmentAcademicYear(`${new Date().getFullYear()}/${new Date().getFullYear() + 1}`);
+      setAssignmentSemester('Ganjil');
+      setAssignmentRole('member');
+      setAssignmentStatus('Aktif');
     } else if (type === 'student') {
       setStudentFormNim('');
       setStudentFormName('');
@@ -3523,6 +3601,15 @@ export default function App() {
       setLecturerFormEmployeeNumber(item.employeeNumber || item.employee_number || '');
       setLecturerFormDeptId(item.departmentId || item.department_id || '');
       setLecturerFormStatus(item.status || 'Aktif');
+    } else if (type === 'assignment') {
+      setAssignmentLecturerId(item.lecturerId);
+      setAssignmentCourseId(item.courseId);
+      setAssignmentClassName(item.className);
+      setAssignmentCohortYear(String(item.cohortYear));
+      setAssignmentAcademicYear(item.academicYear);
+      setAssignmentSemester(item.semester);
+      setAssignmentRole(item.role);
+      setAssignmentStatus(item.status);
     } else if (type === 'student') {
       setStudentFormNim(item.nim);
       setStudentFormName(item.name);
@@ -3999,6 +4086,7 @@ export default function App() {
                   <span className="material-symbols-outlined">school</span>
                   <span>Dosen</span>
                 </button>
+
               </>
             ) : currentUser?.role === 'admin_jurusan' ? (
               <>
@@ -4102,6 +4190,18 @@ export default function App() {
                 >
                   <span className="material-symbols-outlined">school</span>
                   <span>Dosen</span>
+                </button>
+
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'teaching_assignments'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => setActiveTab('teaching_assignments')}
+                >
+                  <span className="material-symbols-outlined">assignment_ind</span>
+                  <span>Penugasan Dosen</span>
                 </button>
               </>
             ) : (
@@ -4266,6 +4366,55 @@ export default function App() {
           </div>
         )}
 
+        {currentUser?.role === 'admin_jurusan' && activeTab === 'teaching_assignments' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-md">
+              <div>
+                <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Penugasan Dosen</h3>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">Tentukan dosen pengampu untuk mata kuliah, kelas, dan periode akademik.</p>
+              </div>
+              <button className="flex items-center gap-sm bg-primary text-on-primary px-lg py-md rounded-xl font-label-sm font-bold glow-primary" onClick={() => openAddModal('assignment')}>
+                <span className="material-symbols-outlined">assignment_add</span>
+                Tambah Penugasan
+              </button>
+            </div>
+
+            <div className="glass-panel rounded-xl overflow-x-auto shadow-xl">
+              {dataLoading ? (
+                <div className="p-xl text-center text-on-surface-variant">Memuat penugasan...</div>
+              ) : (
+                <table className="w-full min-w-[980px] text-left border-collapse">
+                  <thead><tr className="border-b border-outline-variant/30 bg-white/[0.02]">
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Dosen</th>
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Mata Kuliah</th>
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Kelas</th>
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Periode</th>
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Peran</th>
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase">Status</th>
+                    <th className="px-md py-md font-label-xs text-on-surface-variant uppercase text-center">Aksi</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-outline-variant/50">
+                    {teachingAssignments.length > 0 ? teachingAssignments.map(assignment => (
+                      <tr key={assignment.id} className="hover-row transition-colors">
+                        <td className="px-md py-md"><p className="font-body-sm font-bold text-on-surface">{assignment.lecturerName}</p><p className="font-label-xs text-on-surface-variant">{assignment.employeeNumber}</p></td>
+                        <td className="px-md py-md"><p className="font-body-sm font-bold text-on-surface">{assignment.courseName}</p><p className="font-label-xs text-primary">{assignment.courseCode}</p></td>
+                        <td className="px-md py-md font-body-sm">{assignment.className} · {assignment.cohortYear}</td>
+                        <td className="px-md py-md font-body-sm">{assignment.semester} {assignment.academicYear}</td>
+                        <td className="px-md py-md font-body-sm">{assignment.role === 'coordinator' ? 'Koordinator' : 'Anggota'}</td>
+                        <td className="px-md py-md"><span className={`font-label-xs font-bold ${assignment.status === 'Aktif' ? 'text-success' : 'text-error'}`}>{assignment.status}</span></td>
+                        <td className="px-md py-md"><div className="flex justify-center gap-sm">
+                          <button type="button" className="p-xs text-on-surface-variant hover:text-secondary" title="Ubah penugasan" onClick={() => openEditModal('assignment', assignment)}><span className="material-symbols-outlined text-[20px]">edit</span></button>
+                          <button type="button" className="p-xs text-on-surface-variant hover:text-error" title="Hapus penugasan" onClick={() => openDeleteConfirm('assignment', assignment.id, `${assignment.lecturerName} - ${assignment.courseName}`)}><span className="material-symbols-outlined text-[20px]">delete</span></button>
+                        </div></td>
+                      </tr>
+                    )) : <tr><td colSpan={7} className="px-lg py-xl text-center text-on-surface-variant">Belum ada penugasan dosen.</td></tr>}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
         {['super_admin', 'admin_jurusan'].includes(currentUser?.role || '') && activeTab === 'lecturers' && (
           <div className="p-gutter space-y-lg flex-1">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-md">
@@ -4352,13 +4501,32 @@ export default function App() {
                   </div>
                 </section>
                 <section className="border-t border-outline-variant pt-lg">
-                  <div className="flex items-start gap-md max-w-3xl">
-                    <span className="material-symbols-outlined text-primary mt-xs">assignment_late</span>
-                    <div>
-                      <h4 className="font-headline-lg font-bold text-on-surface mb-xs">Belum ada penugasan mengajar</h4>
-                      <p className="font-body-sm text-on-surface-variant">Penugasan mata kuliah dan kelas akan tersedia setelah admin menyelesaikan konfigurasi tahap berikutnya.</p>
+                  <h4 className="font-headline-lg font-bold text-on-surface mb-md">Penugasan Mengajar</h4>
+                  {teachingAssignments.length > 0 ? (
+                    <div className="overflow-x-auto border border-outline-variant rounded-lg">
+                      <table className="w-full min-w-[720px] text-left">
+                        <thead><tr className="bg-surface-container border-b border-outline-variant">
+                          <th className="px-md py-sm font-label-xs uppercase text-on-surface-variant">Mata Kuliah</th>
+                          <th className="px-md py-sm font-label-xs uppercase text-on-surface-variant">Kelas</th>
+                          <th className="px-md py-sm font-label-xs uppercase text-on-surface-variant">Periode</th>
+                          <th className="px-md py-sm font-label-xs uppercase text-on-surface-variant">Peran</th>
+                        </tr></thead>
+                        <tbody className="divide-y divide-outline-variant/50">
+                          {teachingAssignments.map(assignment => <tr key={assignment.id}>
+                            <td className="px-md py-md"><p className="font-body-sm font-bold">{assignment.courseName}</p><p className="font-label-xs text-primary">{assignment.courseCode}</p></td>
+                            <td className="px-md py-md font-body-sm">{assignment.className} · {assignment.cohortYear}</td>
+                            <td className="px-md py-md font-body-sm">{assignment.semester} {assignment.academicYear}</td>
+                            <td className="px-md py-md font-body-sm">{assignment.role === 'coordinator' ? 'Koordinator' : 'Anggota'}</td>
+                          </tr>)}
+                        </tbody>
+                      </table>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-start gap-md max-w-3xl">
+                      <span className="material-symbols-outlined text-primary mt-xs">assignment_late</span>
+                      <div><p className="font-body-sm text-on-surface-variant">Belum ada mata kuliah dan kelas yang ditugaskan kepada akun Anda.</p></div>
+                    </div>
+                  )}
                 </section>
               </>
             ) : (
@@ -6509,6 +6677,69 @@ export default function App() {
                       {(['Aktif', 'Nonaktif'] as const).map(status => (
                         <button key={status} type="button" className={`py-sm px-md rounded-lg border font-label-sm font-bold transition-colors ${lecturerFormStatus === status ? 'bg-primary text-on-primary border-primary' : 'bg-surface-container text-on-surface-variant border-outline-variant'}`} onClick={() => setLecturerFormStatus(status)}>{status}</button>
                       ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Teaching Assignment Form Fields */}
+              {modalType === 'assignment' && (
+                <>
+                  {modalAction === 'add' && (
+                    <>
+                      <div className="flex flex-col gap-sm">
+                        <label className="font-label-sm text-on-surface-variant ml-xs">Dosen</label>
+                        <select className="w-full bg-surface-container border border-outline-variant/60 rounded-lg py-md px-md text-on-surface" value={assignmentLecturerId} onChange={(e) => setAssignmentLecturerId(e.target.value)}>
+                          <option value="">-- Pilih Dosen Aktif --</option>
+                          {lecturers.filter(lecturer => lecturer.status === 'Aktif').map(lecturer => <option key={lecturer.id} value={lecturer.id}>{lecturer.name} ({lecturer.employeeNumber})</option>)}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-sm">
+                        <label className="font-label-sm text-on-surface-variant ml-xs">Mata Kuliah</label>
+                        <select className="w-full bg-surface-container border border-outline-variant/60 rounded-lg py-md px-md text-on-surface" value={assignmentCourseId} onChange={(e) => setAssignmentCourseId(e.target.value)}>
+                          <option value="">-- Pilih Mata Kuliah --</option>
+                          {courses.map(course => <option key={course.id} value={course.id}>{course.code} - {course.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-md">
+                        <div className="flex flex-col gap-sm">
+                          <label className="font-label-sm text-on-surface-variant ml-xs">Kelas</label>
+                          <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg py-md px-md text-on-surface" value={assignmentClassName} onChange={(e) => setAssignmentClassName(e.target.value)} placeholder="A atau 2A" />
+                        </div>
+                        <div className="flex flex-col gap-sm">
+                          <label className="font-label-sm text-on-surface-variant ml-xs">Angkatan</label>
+                          <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg py-md px-md text-on-surface" type="number" min="2000" max="2100" value={assignmentCohortYear} onChange={(e) => setAssignmentCohortYear(e.target.value)} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-md">
+                        <div className="flex flex-col gap-sm">
+                          <label className="font-label-sm text-on-surface-variant ml-xs">Tahun Ajaran</label>
+                          <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg py-md px-md text-on-surface" value={assignmentAcademicYear} onChange={(e) => setAssignmentAcademicYear(e.target.value)} placeholder="2025/2026" />
+                        </div>
+                        <div className="flex flex-col gap-sm">
+                          <label className="font-label-sm text-on-surface-variant ml-xs">Semester</label>
+                          <select className="w-full bg-surface-container border border-outline-variant/60 rounded-lg py-md px-md text-on-surface" value={assignmentSemester} onChange={(e) => setAssignmentSemester(e.target.value as 'Ganjil' | 'Genap')}>
+                            <option value="Ganjil">Ganjil</option><option value="Genap">Genap</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {modalAction === 'edit' && (
+                    <div className="bg-surface-container-low border border-outline-variant/40 rounded-lg p-md text-body-sm text-on-surface-variant">
+                      Mata kuliah, dosen, kelas, dan periode tidak diubah pada penugasan yang sudah dibuat. Hapus lalu buat penugasan baru jika struktur tersebut keliru.
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-on-surface-variant ml-xs">Peran Dosen</label>
+                    <div className="grid grid-cols-2 gap-sm">
+                      {(['coordinator', 'member'] as const).map(role => <button key={role} type="button" className={`py-sm px-md rounded-lg border font-label-sm font-bold ${assignmentRole === role ? 'bg-primary text-on-primary border-primary' : 'bg-surface-container text-on-surface-variant border-outline-variant'}`} onClick={() => setAssignmentRole(role)}>{role === 'coordinator' ? 'Koordinator' : 'Anggota'}</button>)}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-sm">
+                    <label className="font-label-sm text-on-surface-variant ml-xs">Status Penugasan</label>
+                    <div className="grid grid-cols-2 gap-sm">
+                      {(['Aktif', 'Nonaktif'] as const).map(status => <button key={status} type="button" className={`py-sm px-md rounded-lg border font-label-sm font-bold ${assignmentStatus === status ? 'bg-primary text-on-primary border-primary' : 'bg-surface-container text-on-surface-variant border-outline-variant'}`} onClick={() => setAssignmentStatus(status)}>{status}</button>)}
                     </div>
                   </div>
                 </>
