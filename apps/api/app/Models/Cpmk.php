@@ -27,4 +27,9 @@ class Cpmk extends Model
     {
         return $this->hasMany(CpmkCplMapping::class);
     }
+
+    public function assessmentItems()
+    {
+        return $this->hasMany(AssessmentItem::class);
+    }
 }

@@ -202,6 +202,7 @@ class TeachingAssignmentController extends Controller
         $offering = $assignment->courseOffering;
         return [
             'id' => $assignment->id,
+            'courseOfferingId' => $assignment->course_offering_id,
             'role' => $assignment->role,
             'status' => $assignment->status,
             'lecturerId' => $assignment->lecturer_id,

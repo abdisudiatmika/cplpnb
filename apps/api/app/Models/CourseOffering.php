@@ -16,4 +16,5 @@ class CourseOffering extends Model
     public function academicClass() { return $this->belongsTo(AcademicClass::class); }
     public function academicPeriod() { return $this->belongsTo(AcademicPeriod::class); }
     public function teachingAssignments() { return $this->hasMany(TeachingAssignment::class); }
+    public function assessmentPlans() { return $this->hasMany(AssessmentPlan::class); }
 }

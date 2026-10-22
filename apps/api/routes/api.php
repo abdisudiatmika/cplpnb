@@ -12,6 +12,7 @@ use App\Http\Controllers\GradeController;
 use App\Http\Controllers\LecturerController;
 use App\Http\Controllers\CpmkController;
 use App\Http\Controllers\TeachingAssignmentController;
+use App\Http\Controllers\AssessmentPlanController;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
@@ -121,6 +122,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('cpmks', CpmkController::class);
     Route::get('/teaching-assignments/me', [TeachingAssignmentController::class, 'me']);
     Route::apiResource('teaching-assignments', TeachingAssignmentController::class)->except(['show']);
+    Route::post('/assessment-plans/{assessmentPlan}/publish', [AssessmentPlanController::class, 'publish']);
+    Route::apiResource('assessment-plans', AssessmentPlanController::class)
+        ->parameters(['assessment-plans' => 'assessmentPlan']);
     
     // Resource routes
     Route::apiResource('departments', DepartmentController::class);

@@ -124,6 +124,7 @@ interface Lecturer {
 
 interface TeachingAssignment {
   id: string;
+  courseOfferingId: string;
   role: 'coordinator' | 'member';
   status: 'Aktif' | 'Nonaktif';
   lecturerId: string;
@@ -137,6 +138,43 @@ interface TeachingAssignment {
   academicYear: string;
   semester: 'Ganjil' | 'Genap';
   offeringStatus: string;
+}
+
+interface CpmkMaster {
+  id: string;
+  code: string;
+  description: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  cplCode: string;
+}
+
+interface AssessmentItemDraft {
+  id?: string;
+  cpmkId: string;
+  cpmkCode?: string;
+  cplCode?: string;
+  category: 'assignment' | 'quiz' | 'midterm' | 'final' | 'project' | 'practice' | 'presentation' | 'other';
+  name: string;
+  weight: number;
+  sequence: number;
+  isRequired: boolean;
+}
+
+interface AssessmentPlan {
+  id: string;
+  courseOfferingId: string;
+  version: number;
+  status: 'Draft' | 'Published' | 'Archived';
+  courseCode: string;
+  courseName: string;
+  className: string;
+  cohortYear: number;
+  academicYear: string;
+  semester: string;
+  totalWeight: number;
+  items: AssessmentItemDraft[];
 }
 
 interface Student {
@@ -248,6 +286,12 @@ export default function App() {
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
   const [lecturerProfile, setLecturerProfile] = useState<Lecturer | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
+  const [cpmkMasters, setCpmkMasters] = useState<CpmkMaster[]>([]);
+  const [assessmentPlans, setAssessmentPlans] = useState<AssessmentPlan[]>([]);
+  const [selectedAssessmentOfferingId, setSelectedAssessmentOfferingId] = useState('');
+  const [assessmentDraftItems, setAssessmentDraftItems] = useState<AssessmentItemDraft[]>([]);
+  const [editingAssessmentPlanId, setEditingAssessmentPlanId] = useState<string | null>(null);
+  const [assessmentSaving, setAssessmentSaving] = useState(false);
 
   // Department Admin
   const [students, setStudents] = useState<Student[]>([]);
@@ -2176,6 +2220,16 @@ export default function App() {
             setTeachingAssignments(assignmentList);
             setLecturers(lecturerList);
             setCourses(courseList);
+          } else if (activeTab === 'assessment_plans') {
+            const [assignmentList, planList, cpmkList] = await Promise.all([
+              apiCall('/teaching-assignments'),
+              apiCall('/assessment-plans'),
+              apiCall('/cpmks'),
+            ]);
+            setTeachingAssignments(assignmentList);
+            setAssessmentPlans(planList);
+            setCpmkMasters(cpmkList);
+            setSelectedAssessmentOfferingId(current => current || assignmentList[0]?.courseOfferingId || '');
           }
           
           if (activeTab === 'mahasiswa' && selectedStudentForCpl) {
@@ -3227,6 +3281,92 @@ export default function App() {
     }
   };
 
+  const startAssessmentDraft = () => {
+    const assignment = teachingAssignments.find(item => item.courseOfferingId === selectedAssessmentOfferingId);
+    if (!assignment) {
+      showToast('Pilih penawaran mata kuliah terlebih dahulu.');
+      return;
+    }
+    const existingDraft = assessmentPlans.find(plan => plan.courseOfferingId === selectedAssessmentOfferingId && plan.status === 'Draft');
+    if (existingDraft) {
+      editAssessmentPlan(existingDraft);
+      return;
+    }
+    const courseCpmks = cpmkMasters.filter(cpmk => cpmk.courseId === assignment.courseId);
+    if (courseCpmks.length === 0) {
+      showToast('Mata kuliah ini belum memiliki CPMK.');
+      return;
+    }
+    const baseWeight = Math.floor((100 / courseCpmks.length) * 100) / 100;
+    let assignedWeight = 0;
+    const items = courseCpmks.map((cpmk, index) => {
+      const weight = index === courseCpmks.length - 1 ? Number((100 - assignedWeight).toFixed(2)) : baseWeight;
+      assignedWeight += weight;
+      return {
+        cpmkId: cpmk.id,
+        cpmkCode: cpmk.code,
+        cplCode: cpmk.cplCode,
+        category: 'assignment' as const,
+        name: `Asesmen ${cpmk.code}`,
+        weight,
+        sequence: index + 1,
+        isRequired: true,
+      };
+    });
+    setEditingAssessmentPlanId(null);
+    setAssessmentDraftItems(items);
+  };
+
+  const editAssessmentPlan = (plan: AssessmentPlan) => {
+    if (plan.status !== 'Draft') {
+      showToast('Rencana yang sudah dipublikasikan tidak dapat diedit.');
+      return;
+    }
+    setSelectedAssessmentOfferingId(plan.courseOfferingId);
+    setEditingAssessmentPlanId(plan.id);
+    setAssessmentDraftItems(plan.items.map((item, index) => ({ ...item, sequence: index + 1 })));
+  };
+
+  const updateAssessmentDraftItem = (index: number, changes: Partial<AssessmentItemDraft>) => {
+    setAssessmentDraftItems(items => items.map((item, itemIndex) => itemIndex === index ? { ...item, ...changes } : item));
+  };
+
+  const saveAssessmentDraft = async () => {
+    if (!selectedAssessmentOfferingId || assessmentDraftItems.length === 0) {
+      showToast('Rencana asesmen belum memiliki komponen.');
+      return;
+    }
+    setAssessmentSaving(true);
+    try {
+      const payload = { items: assessmentDraftItems.map((item, index) => ({ ...item, sequence: index + 1 })) };
+      if (editingAssessmentPlanId) {
+        await apiCall(`/assessment-plans/${editingAssessmentPlanId}`, 'PUT', payload);
+      } else {
+        await apiCall('/assessment-plans', 'POST', { courseOfferingId: selectedAssessmentOfferingId, ...payload });
+      }
+      const plans = await apiCall('/assessment-plans');
+      setAssessmentPlans(plans);
+      setAssessmentDraftItems([]);
+      setEditingAssessmentPlanId(null);
+      showToast('Draft rencana asesmen berhasil disimpan.');
+    } catch (error: any) {
+      showToast(error.message || 'Gagal menyimpan draft rencana asesmen.');
+    } finally {
+      setAssessmentSaving(false);
+    }
+  };
+
+  const publishAssessmentPlan = async (planId: string) => {
+    if (!window.confirm('Publikasikan rencana asesmen ini? Rencana tidak dapat diedit setelah dipublikasikan.')) return;
+    try {
+      await apiCall(`/assessment-plans/${planId}/publish`, 'POST');
+      setAssessmentPlans(await apiCall('/assessment-plans'));
+      showToast('Rencana asesmen berhasil dipublikasikan.');
+    } catch (error: any) {
+      showToast(error.message || 'Rencana asesmen belum memenuhi aturan publikasi.');
+    }
+  };
+
   // CRUD Save helper
   const handleSaveData = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4203,6 +4343,18 @@ export default function App() {
                   <span className="material-symbols-outlined">assignment_ind</span>
                   <span>Penugasan Dosen</span>
                 </button>
+
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'assessment_plans'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => setActiveTab('assessment_plans')}
+                >
+                  <span className="material-symbols-outlined">fact_check</span>
+                  <span>Rencana Asesmen</span>
+                </button>
               </>
             ) : (
               <button
@@ -4363,6 +4515,74 @@ export default function App() {
                 </table>
               )}
             </div>
+          </div>
+        )}
+
+        {currentUser?.role === 'admin_jurusan' && activeTab === 'assessment_plans' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div>
+              <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Rencana Asesmen</h3>
+              <p className="font-body-sm text-on-surface-variant">Susun komponen penilaian dan bobot CPMK sebelum dosen mengisi skor.</p>
+            </div>
+
+            <section className="glass-panel rounded-xl p-lg shadow-md space-y-md">
+              <div className="flex flex-col lg:flex-row lg:items-end gap-md">
+                <div className="flex-1">
+                  <label className="block font-label-xs text-on-surface-variant uppercase mb-xs">Penawaran Mata Kuliah</label>
+                  <select className="w-full bg-surface-container border border-outline-variant rounded-lg px-md py-sm text-on-surface" value={selectedAssessmentOfferingId} onChange={(e) => { setSelectedAssessmentOfferingId(e.target.value); setAssessmentDraftItems([]); setEditingAssessmentPlanId(null); }}>
+                    <option value="">-- Pilih Mata Kuliah dan Kelas --</option>
+                    {Array.from(new Map(teachingAssignments.map(item => [item.courseOfferingId, item])).values()).map(item => (
+                      <option key={item.courseOfferingId} value={item.courseOfferingId}>{item.courseCode} - {item.courseName} · Kelas {item.className} · {item.semester} {item.academicYear}</option>
+                    ))}
+                  </select>
+                </div>
+                <button type="button" className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={!selectedAssessmentOfferingId} onClick={startAssessmentDraft}>
+                  Buat Pembagian Awal
+                </button>
+              </div>
+            </section>
+
+            {assessmentDraftItems.length > 0 && (
+              <section className="space-y-md">
+                <div className="flex flex-wrap justify-between items-center gap-md">
+                  <div>
+                    <h4 className="font-headline-lg font-bold text-on-surface">{editingAssessmentPlanId ? 'Ubah Draft' : 'Draft Baru'}</h4>
+                    <p className={`font-label-sm font-bold ${Math.abs(assessmentDraftItems.reduce((sum, item) => sum + Number(item.weight || 0), 0) - 100) < 0.001 ? 'text-success' : 'text-error'}`}>
+                      Total bobot: {assessmentDraftItems.reduce((sum, item) => sum + Number(item.weight || 0), 0).toFixed(2)}%
+                    </p>
+                  </div>
+                  <button type="button" className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={assessmentSaving} onClick={saveAssessmentDraft}>{assessmentSaving ? 'Menyimpan...' : 'Simpan Draft'}</button>
+                </div>
+                <div className="overflow-x-auto border border-outline-variant rounded-lg">
+                  <table className="w-full min-w-[900px] text-left">
+                    <thead><tr className="bg-surface-container border-b border-outline-variant">
+                      <th className="px-md py-sm font-label-xs uppercase">CPMK</th><th className="px-md py-sm font-label-xs uppercase">Nama Komponen</th><th className="px-md py-sm font-label-xs uppercase">Jenis</th><th className="px-md py-sm font-label-xs uppercase">Bobot</th><th className="px-md py-sm font-label-xs uppercase text-center">Aksi</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-outline-variant/50">
+                      {assessmentDraftItems.map((item, index) => <tr key={`${item.cpmkId}-${index}`}>
+                        <td className="px-md py-sm"><p className="font-body-sm font-bold">{item.cpmkCode || cpmkMasters.find(cpmk => cpmk.id === item.cpmkId)?.code}</p><p className="font-label-xs text-primary">{item.cplCode || cpmkMasters.find(cpmk => cpmk.id === item.cpmkId)?.cplCode}</p></td>
+                        <td className="px-md py-sm"><input className="w-full bg-surface-container border border-outline-variant rounded-md px-sm py-xs" value={item.name} onChange={(e) => updateAssessmentDraftItem(index, { name: e.target.value })} /></td>
+                        <td className="px-md py-sm"><select className="w-full bg-surface-container border border-outline-variant rounded-md px-sm py-xs" value={item.category} onChange={(e) => updateAssessmentDraftItem(index, { category: e.target.value as AssessmentItemDraft['category'] })}><option value="assignment">Tugas</option><option value="quiz">Kuis</option><option value="midterm">UTS</option><option value="final">UAS</option><option value="project">Proyek</option><option value="practice">Praktik</option><option value="presentation">Presentasi</option><option value="other">Lainnya</option></select></td>
+                        <td className="px-md py-sm"><input className="w-24 bg-surface-container border border-outline-variant rounded-md px-sm py-xs" type="number" min="0.01" max="100" step="0.01" value={item.weight} onChange={(e) => updateAssessmentDraftItem(index, { weight: Number(e.target.value) })} /></td>
+                        <td className="px-md py-sm"><div className="flex justify-center gap-xs">
+                          <button type="button" className="p-xs text-primary" title="Tambah komponen untuk CPMK yang sama" onClick={() => setAssessmentDraftItems(items => [...items.slice(0, index + 1), { ...item, id: undefined, name: `${item.name} Lanjutan`, weight: 0, sequence: index + 2 }, ...items.slice(index + 1)].map((entry, i) => ({ ...entry, sequence: i + 1 })))}><span className="material-symbols-outlined">add</span></button>
+                          <button type="button" className="p-xs text-error" title="Hapus komponen" onClick={() => setAssessmentDraftItems(items => items.filter((_, i) => i !== index).map((entry, i) => ({ ...entry, sequence: i + 1 })))}><span className="material-symbols-outlined">delete</span></button>
+                        </div></td>
+                      </tr>)}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            <section className="space-y-md">
+              <h4 className="font-headline-lg font-bold text-on-surface">Riwayat Rencana</h4>
+              <div className="overflow-x-auto border border-outline-variant rounded-lg">
+                <table className="w-full min-w-[820px] text-left"><thead><tr className="bg-surface-container border-b border-outline-variant"><th className="px-md py-sm">Versi</th><th className="px-md py-sm">Mata Kuliah</th><th className="px-md py-sm">Kelas dan Periode</th><th className="px-md py-sm">Bobot</th><th className="px-md py-sm">Status</th><th className="px-md py-sm text-center">Aksi</th></tr></thead>
+                  <tbody className="divide-y divide-outline-variant/50">{assessmentPlans.filter(plan => !selectedAssessmentOfferingId || plan.courseOfferingId === selectedAssessmentOfferingId).map(plan => <tr key={plan.id}><td className="px-md py-md">v{plan.version}</td><td className="px-md py-md"><b>{plan.courseCode}</b> · {plan.courseName}</td><td className="px-md py-md">{plan.className} · {plan.semester} {plan.academicYear}</td><td className="px-md py-md">{plan.totalWeight}%</td><td className="px-md py-md font-bold">{plan.status}</td><td className="px-md py-md"><div className="flex justify-center gap-sm">{plan.status === 'Draft' && <><button type="button" className="text-secondary" onClick={() => editAssessmentPlan(plan)}>Ubah</button><button type="button" className="text-primary font-bold" onClick={() => publishAssessmentPlan(plan.id)}>Publikasikan</button></>}</div></td></tr>)}</tbody>
+                </table>
+              </div>
+            </section>
           </div>
         )}
 
