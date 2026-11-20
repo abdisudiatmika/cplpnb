@@ -1,0 +1,502 @@
+{
+ "source": "Dokumen CPMK dan Pemetaan CPL-CPMK, Prodi D3 Akuntansi, Jurusan Akuntansi PNB, MK semester 1-2, RPS TA 2025/2026",
+ "department": "D3 Akuntansi",
+ "items": [
+  {
+   "courseCode": "MPK2462401101",
+   "courseName": "Pendidikan Pancasila",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menjelaskan Pancasila dalam konteks sejarah, sistem filsafat, etika politik, ideologi nasional, dan ketatanegaraan serta menunjukkan sikap yang mencerminkan nilai-nilai Pancasila",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MPK2462401101",
+   "courseName": "Pendidikan Pancasila",
+   "sks": 2,
+   "code": "CPMK08-01",
+   "description": "Mampu menyampaikan hasil kajian kasus kebangsaan berbasis nilai Pancasila secara lisan dan tertulis dalam kerja kelompok",
+   "cplCode": "CPL-8"
+  },
+  {
+   "courseCode": "MPK2462401101",
+   "courseName": "Pendidikan Pancasila",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu merefleksikan sikap dan perilaku diri sebagai warga negara dan calon profesional berdasarkan nilai Pancasila",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKK2462401102",
+   "courseName": "Hukum Pajak",
+   "sks": 2,
+   "code": "CPMK02-01",
+   "description": "Mampu menjelaskan konsep dasar pajak, meliputi sejarah, pengertian, unsur, ciri, fungsi, manfaat, falsafah, dan pembaharuan perpajakan di Indonesia",
+   "cplCode": "CPL-2"
+  },
+  {
+   "courseCode": "MKK2462401102",
+   "courseName": "Hukum Pajak",
+   "sks": 2,
+   "code": "CPMK05-01",
+   "description": "Mampu menjelaskan ketentuan hukum pajak materiil dan formil, jenis pajak pusat dan daerah, tarif dan utang pajak, serta prosedur penagihan dan penyelesaian sengketa pajak sebagai dasar administrasi perpajakan",
+   "cplCode": "CPL-5"
+  },
+  {
+   "courseCode": "MPK2462401103",
+   "courseName": "Bahasa Indonesia",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menunjukkan sikap jujur dan bertanggung jawab dalam menulis dengan menerapkan etika penulisan, kutipan, dan rujukan untuk menghindari plagiarisme",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MPK2462401103",
+   "courseName": "Bahasa Indonesia",
+   "sks": 2,
+   "code": "CPMK08-01",
+   "description": "Mampu menggunakan bahasa Indonesia ragam formal dan ilmiah secara efektif untuk menyusun karangan, proposal, laporan, dan presentasi ilmiah",
+   "cplCode": "CPL-8"
+  },
+  {
+   "courseCode": "MKK2462401104",
+   "courseName": "Bahasa Inggris",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menunjukkan sikap santun, percaya diri, dan menghargai lawan bicara dalam berkomunikasi lisan berbahasa Inggris",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MKK2462401104",
+   "courseName": "Bahasa Inggris",
+   "sks": 2,
+   "code": "CPMK08-01",
+   "description": "Mampu berkomunikasi lisan dalam bahasa Inggris dasar untuk situasi sehari-hari dan kerja sederhana: memperkenalkan diri, bertanya dan menjawab, meminta dan menanggapi, memberi arah, menyebut angka dan waktu, serta bertransaksi",
+   "cplCode": "CPL-8"
+  },
+  {
+   "courseCode": "MKK2462401105",
+   "courseName": "Matematika Bisnis",
+   "sks": 2,
+   "code": "CPMK10-01",
+   "description": "Mampu menerapkan aljabar, persamaan dan sistem persamaan linier, serta program linier untuk menyelesaikan masalah bisnis sederhana secara logis",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MKK2462401105",
+   "courseName": "Matematika Bisnis",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu menghitung bunga sederhana, bunga majemuk, dan anuitas serta mendokumentasikan langkah perhitungan secara runtut dan dapat ditelusuri",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKK2462401105",
+   "courseName": "Matematika Bisnis",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menunjukkan sikap disiplin dan jujur dalam menyelesaikan tugas perhitungan",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MKB2462401106",
+   "courseName": "Pengantar Akuntansi dan Praktikum",
+   "sks": 4,
+   "code": "CPMK02-01",
+   "description": "Mampu menjelaskan konsep, asumsi dasar, prinsip, dan standar akuntansi yang berlaku di Indonesia beserta peran profesi akuntan dan etikanya",
+   "cplCode": "CPL-2"
+  },
+  {
+   "courseCode": "MKB2462401106",
+   "courseName": "Pengantar Akuntansi dan Praktikum",
+   "sks": 4,
+   "code": "CPMK03-01",
+   "description": "Mampu menganalisis transaksi keuangan perusahaan jasa dan dagang serta pengaruhnya terhadap persamaan dasar akuntansi",
+   "cplCode": "CPL-3"
+  },
+  {
+   "courseCode": "MKB2462401106",
+   "courseName": "Pengantar Akuntansi dan Praktikum",
+   "sks": 4,
+   "code": "CPMK04-01",
+   "description": "Mampu menyusun siklus akuntansi perusahaan jasa dan dagang, dari jurnal hingga laporan laba rugi, perubahan modal, posisi keuangan, dan arus kas sederhana",
+   "cplCode": "CPL-4"
+  },
+  {
+   "courseCode": "MKB2462401106",
+   "courseName": "Pengantar Akuntansi dan Praktikum",
+   "sks": 4,
+   "code": "CPMK06-01",
+   "description": "Mampu menjelaskan peran dokumen sumber dan bagan akun dalam pencatatan transaksi yang tertib dan dapat ditelusuri",
+   "cplCode": "CPL-6"
+  },
+  {
+   "courseCode": "MKB2462401106",
+   "courseName": "Pengantar Akuntansi dan Praktikum",
+   "sks": 4,
+   "code": "CPMK07-01",
+   "description": "Mampu menggunakan lembar kerja atau aplikasi pengolah angka untuk mengerjakan praktikum siklus akuntansi",
+   "cplCode": "CPL-7"
+  },
+  {
+   "courseCode": "MKB2462401106",
+   "courseName": "Pengantar Akuntansi dan Praktikum",
+   "sks": 4,
+   "code": "CPMK10-01",
+   "description": "Mampu menyelesaikan kasus praktikum siklus akuntansi secara logis dan mandiri",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MKK2462401107",
+   "courseName": "Pengantar Bisnis",
+   "sks": 2,
+   "code": "CPMK10-01",
+   "description": "Mampu menjelaskan konsep bisnis, lingkungan bisnis, bentuk badan usaha, dan fungsi-fungsi manajemen (pemasaran, operasi, SDM, keuangan) serta mengidentifikasi masalah bisnis sederhana",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MKK2462401107",
+   "courseName": "Pengantar Bisnis",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menjelaskan prinsip etika bisnis dan tanggung jawab sosial perusahaan serta menunjukkan sikap etis dalam menilai kasus bisnis",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MKK2462401107",
+   "courseName": "Pengantar Bisnis",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu menjelaskan peran kepemimpinan, pengambilan keputusan, dan kewirausahaan serta merefleksikan kompetensi diri yang dibutuhkan dunia usaha",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKK2462401108",
+   "courseName": "Data Analitik",
+   "sks": 2,
+   "code": "CPMK07-01",
+   "description": "Mampu menggunakan fungsi dan rumus Excel untuk mengolah data tabel secara manual dan otomatis",
+   "cplCode": "CPL-7"
+  },
+  {
+   "courseCode": "MKK2462401108",
+   "courseName": "Data Analitik",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu membersihkan, menyiapkan, dan mengorganisasi data sehingga tersimpan rapi, akurat, dan mudah ditelusuri",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKK2462401108",
+   "courseName": "Data Analitik",
+   "sks": 2,
+   "code": "CPMK03-01",
+   "description": "Mampu menyajikan ringkasan data, bagan, grafik, dan hasil alat analisis data untuk mendukung analisis",
+   "cplCode": "CPL-3"
+  },
+  {
+   "courseCode": "MKK2462401108",
+   "courseName": "Data Analitik",
+   "sks": 2,
+   "code": "CPMK10-01",
+   "description": "Mampu menyusun otomasi sederhana dengan VBA untuk menyelesaikan pekerjaan pengolahan data berulang secara logis",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MPK2462401109",
+   "courseName": "Green Tourism",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menunjukkan sikap peduli lingkungan dan tanggung jawab terhadap pelestarian alam sesuai budaya green Politeknik Negeri Bali",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MPK2462401109",
+   "courseName": "Green Tourism",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu menerapkan prinsip penghematan energi, pengelolaan sampah, dan pelestarian air dalam kegiatan kampus serta mendokumentasikan hasilnya secara tertib",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MPK2462401109",
+   "courseName": "Green Tourism",
+   "sks": 2,
+   "code": "CPMK08-01",
+   "description": "Mampu menyusun dan mempresentasikan rencana aksi nyata pelestarian lingkungan secara berkelompok",
+   "cplCode": "CPL-8"
+  },
+  {
+   "courseCode": "MPK2462401210",
+   "courseName": "Pendidikan Kewarganegaraan",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menjelaskan hak dan kewajiban warga negara, hak asasi manusia, wawasan nusantara, ketahanan nasional, dan sistem pertahanan negara serta menunjukkan sikap tanggung jawab sebagai warga negara",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MPK2462401210",
+   "courseName": "Pendidikan Kewarganegaraan",
+   "sks": 2,
+   "code": "CPMK08-01",
+   "description": "Mampu menyajikan kajian isu kewarganegaraan (geopolitik, politik, dan strategi nasional) secara lisan dan tertulis dalam kerja kelompok",
+   "cplCode": "CPL-8"
+  },
+  {
+   "courseCode": "MPK2462401210",
+   "courseName": "Pendidikan Kewarganegaraan",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu merefleksikan peran diri dalam bela negara dan pembangunan nasional sesuai bidang profesi",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKK2462401211",
+   "courseName": "Statistika Bisnis",
+   "sks": 2,
+   "code": "CPMK10-01",
+   "description": "Mampu menerapkan statistika deskriptif, uji hipotesis, dan regresi linier sederhana untuk menjawab masalah bisnis secara logis",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MKK2462401211",
+   "courseName": "Statistika Bisnis",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu mengumpulkan, mengelompokkan, dan menyajikan data dengan teknik sampling yang tepat serta mendokumentasikannya secara tertib",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKK2462401211",
+   "courseName": "Statistika Bisnis",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menunjukkan sikap jujur dalam mengolah dan melaporkan data tanpa manipulasi",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MKB2462401212",
+   "courseName": "Akuntansi Jasa Wisata",
+   "sks": 2,
+   "code": "CPMK02-01",
+   "description": "Mampu menjelaskan karakteristik usaha perhotelan dan biro perjalanan wisata serta standar akuntansi yang berlaku (USALI dan SAK)",
+   "cplCode": "CPL-2"
+  },
+  {
+   "courseCode": "MKB2462401212",
+   "courseName": "Akuntansi Jasa Wisata",
+   "sks": 2,
+   "code": "CPMK03-01",
+   "description": "Mampu menganalisis komponen biaya tetap dan variabel untuk menentukan harga pokok paket wisata",
+   "cplCode": "CPL-3"
+  },
+  {
+   "courseCode": "MKB2462401212",
+   "courseName": "Akuntansi Jasa Wisata",
+   "sks": 2,
+   "code": "CPMK04-01",
+   "description": "Mampu mencatat transaksi departemen hotel dan biro perjalanan wisata serta menyusun laporan laba rugi, posisi keuangan, dan arus kas",
+   "cplCode": "CPL-4"
+  },
+  {
+   "courseCode": "MKB2462401212",
+   "courseName": "Akuntansi Jasa Wisata",
+   "sks": 2,
+   "code": "CPMK06-01",
+   "description": "Mampu menjelaskan alur transaksi serta pengendalian biaya dan persediaan pada sistem akuntansi hotel dan biro perjalanan wisata",
+   "cplCode": "CPL-6"
+  },
+  {
+   "courseCode": "MKB2462401212",
+   "courseName": "Akuntansi Jasa Wisata",
+   "sks": 2,
+   "code": "CPMK07-01",
+   "description": "Mampu menggunakan aplikasi pengolah angka untuk menghitung harga pokok paket dan menyusun laporan",
+   "cplCode": "CPL-7"
+  },
+  {
+   "courseCode": "MKB2462401212",
+   "courseName": "Akuntansi Jasa Wisata",
+   "sks": 2,
+   "code": "CPMK10-01",
+   "description": "Mampu menyusun itinerary dan paket wisata beserta harga pokoknya secara mandiri sesuai kebutuhan industri pariwisata",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MKB2462401213",
+   "courseName": "Pengantar Ekonomi",
+   "sks": 2,
+   "code": "CPMK10-01",
+   "description": "Mampu menerapkan konsep permintaan, penawaran, elastisitas, perilaku konsumen dan produsen, serta struktur pasar untuk menganalisis masalah ekonomi sederhana",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MKB2462401213",
+   "courseName": "Pengantar Ekonomi",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu menghitung pendapatan nasional, konsumsi, tabungan, dan investasi serta menyajikan hasil perhitungan secara runtut",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKB2462401213",
+   "courseName": "Pengantar Ekonomi",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menunjukkan sikap kritis dan bertanggung jawab dalam menilai isu ekonomi masyarakat",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MKB2462401214",
+   "courseName": "Sistem Informasi Akuntansi",
+   "sks": 2,
+   "code": "CPMK02-01",
+   "description": "Mampu menjelaskan konsep sistem, prosedur, komponen sistem akuntansi, siklus hidup sistem, dan hubungannya dengan sistem informasi manajemen",
+   "cplCode": "CPL-2"
+  },
+  {
+   "courseCode": "MKB2462401214",
+   "courseName": "Sistem Informasi Akuntansi",
+   "sks": 2,
+   "code": "CPMK06-01",
+   "description": "Mampu merancang formulir, jurnal, dan kode rekening serta menggambarkan bagan alir sistem akuntansi penjualan, piutang, penerimaan kas, pembelian, pengeluaran kas, dan persediaan",
+   "cplCode": "CPL-6"
+  },
+  {
+   "courseCode": "MKB2462401214",
+   "courseName": "Sistem Informasi Akuntansi",
+   "sks": 2,
+   "code": "CPMK06-02",
+   "description": "Mampu mengidentifikasi unsur dan kelemahan sistem pengendalian intern pada sistem akuntansi perusahaan",
+   "cplCode": "CPL-6"
+  },
+  {
+   "courseCode": "MKK2462401215",
+   "courseName": "Data Visualisasi dan Presentasi",
+   "sks": 2,
+   "code": "CPMK07-01",
+   "description": "Mampu mengoperasikan aplikasi pengolah kata untuk menyusun dokumen profesional dengan format, tabel, gambar, persamaan, daftar isi otomatis, dan mail merge",
+   "cplCode": "CPL-7"
+  },
+  {
+   "courseCode": "MKK2462401215",
+   "courseName": "Data Visualisasi dan Presentasi",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu mengelola struktur dokumen dan rujukan secara tertib menggunakan section, penomoran, header-footer, dan aplikasi manajemen referensi",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKK2462401215",
+   "courseName": "Data Visualisasi dan Presentasi",
+   "sks": 2,
+   "code": "CPMK03-01",
+   "description": "Mampu menyajikan data dan proses dalam bentuk diagram, bagan alir, dan presentasi visual yang mudah dipahami",
+   "cplCode": "CPL-3"
+  },
+  {
+   "courseCode": "MKK2462401215",
+   "courseName": "Data Visualisasi dan Presentasi",
+   "sks": 2,
+   "code": "CPMK10-01",
+   "description": "Mampu menyelesaikan proyek dokumen dan presentasi secara mandiri sesuai kebutuhan dunia kerja",
+   "cplCode": "CPL-10"
+  },
+  {
+   "courseCode": "MKB2462401216",
+   "courseName": "Audit 1",
+   "sks": 2,
+   "code": "CPMK02-01",
+   "description": "Mampu menjelaskan konsep proses audit dan sistem pengendalian internal sesuai standar audit yang berlaku dan prinsip pengauditan laporan keuangan",
+   "cplCode": "CPL-2"
+  },
+  {
+   "courseCode": "MKB2462401216",
+   "courseName": "Audit 1",
+   "sks": 2,
+   "code": "CPMK06-01",
+   "description": "Mampu memilih metode dan melaksanakan prosedur pengauditan sesuai standar pemeriksaan yang berlaku",
+   "cplCode": "CPL-6"
+  },
+  {
+   "courseCode": "MKB2462401216",
+   "courseName": "Audit 1",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menunjukkan integritas, objektivitas, kerahasiaan, dan independensi dalam pelaksanaan audit serta menjunjung kode etik profesi auditor",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MBB2462401217",
+   "courseName": "Pendidikan Agama",
+   "sks": 2,
+   "code": "CPMK01-01",
+   "description": "Mampu menjelaskan ajaran pokok agama serta menunjukkan sikap religius dan etis dalam kehidupan dan pekerjaan",
+   "cplCode": "CPL-1"
+  },
+  {
+   "courseCode": "MBB2462401217",
+   "courseName": "Pendidikan Agama",
+   "sks": 2,
+   "code": "CPMK08-01",
+   "description": "Mampu menyampaikan kajian sejarah dan sumber ajaran agama secara lisan dan tertulis dalam kerja kelompok",
+   "cplCode": "CPL-8"
+  },
+  {
+   "courseCode": "MBB2462401217",
+   "courseName": "Pendidikan Agama",
+   "sks": 2,
+   "code": "CPMK09-01",
+   "description": "Mampu merefleksikan penerapan ajaran agama dalam perilaku diri sehari-hari",
+   "cplCode": "CPL-9"
+  },
+  {
+   "courseCode": "MKB2462401218",
+   "courseName": "Akuntansi Keuangan Menengah 1 dan Praktikum",
+   "sks": 4,
+   "code": "CPMK02-01",
+   "description": "Mampu menjelaskan Kerangka Standar Pelaporan Keuangan Indonesia, konsep dasar dan proses akuntansi, serta karakteristik dan komponen laporan keuangan",
+   "cplCode": "CPL-2"
+  },
+  {
+   "courseCode": "MKB2462401218",
+   "courseName": "Akuntansi Keuangan Menengah 1 dan Praktikum",
+   "sks": 4,
+   "code": "CPMK03-01",
+   "description": "Mampu menganalisis transaksi dan penilaian pos aset (piutang, persediaan, investasi) beserta dampaknya terhadap laporan keuangan",
+   "cplCode": "CPL-3"
+  },
+  {
+   "courseCode": "MKB2462401218",
+   "courseName": "Akuntansi Keuangan Menengah 1 dan Praktikum",
+   "sks": 4,
+   "code": "CPMK04-01",
+   "description": "Mampu menerapkan pengakuan, pengukuran, dan penyajian kas, piutang, persediaan, investasi, dan aset tetap sesuai SAK",
+   "cplCode": "CPL-4"
+  },
+  {
+   "courseCode": "MKB2462401218",
+   "courseName": "Akuntansi Keuangan Menengah 1 dan Praktikum",
+   "sks": 4,
+   "code": "CPMK06-01",
+   "description": "Mampu menerapkan sistem pengendalian intern kas, termasuk kas kecil dan rekonsiliasi bank",
+   "cplCode": "CPL-6"
+  },
+  {
+   "courseCode": "MKB2462401218",
+   "courseName": "Akuntansi Keuangan Menengah 1 dan Praktikum",
+   "sks": 4,
+   "code": "CPMK07-01",
+   "description": "Mampu menggunakan lembar kerja atau aplikasi untuk mengerjakan praktikum akuntansi aset",
+   "cplCode": "CPL-7"
+  },
+  {
+   "courseCode": "MKB2462401218",
+   "courseName": "Akuntansi Keuangan Menengah 1 dan Praktikum",
+   "sks": 4,
+   "code": "CPMK10-01",
+   "description": "Mampu menyelesaikan kasus praktikum akuntansi aset secara mandiri dan logis",
+   "cplCode": "CPL-10"
+  }
+ ]
+}
