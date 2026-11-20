@@ -28,6 +28,10 @@ class ApiError extends Error {
   }
 }
 
+// Kurikulum yang sedang dikelola admin prodi; dikirim ke API lewat header X-Curriculum-Id.
+let activeCurriculumId: string | null = null;
+const curriculumStorageKey = (userId?: string | null) => `sicpl.curriculum.${userId || 'anon'}`;
+
 async function apiCall(path: string, method: string = 'GET', body: any = null) {
   const options: RequestInit = {
     method,
@@ -37,6 +41,9 @@ async function apiCall(path: string, method: string = 'GET', body: any = null) {
   const headers: Record<string, string> = {
     'Accept': 'application/json',
   };
+  if (activeCurriculumId) {
+    headers['X-Curriculum-Id'] = activeCurriculumId;
+  }
 
   const getCookie = (name: string) => {
     const value = `; ${document.cookie}`;
@@ -151,6 +158,29 @@ interface TeachingAssignment {
   periodStatus?: 'Draft' | 'Aktif' | 'Selesai';
   gradeStatus: 'Draft' | 'Submitted' | 'Approved' | 'Locked' | null;
 }
+
+interface CurriculumSummary {
+  id: string;
+  code: string;
+  name: string;
+  cohortFrom: number | null;
+  cohortTo: number | null;
+  status: 'Aktif' | 'Nonaktif';
+  isDefault: boolean;
+  notes: string | null;
+  coursesCount: number | null;
+  cplsCount: number | null;
+  graduateProfilesCount: number | null;
+}
+
+const emptyCurriculumForm = { code: '', name: '', cohortFrom: '', cohortTo: '', status: 'Aktif', notes: '', copyFromId: '' };
+
+const curriculumCohortLabel = (curriculum: Pick<CurriculumSummary, 'cohortFrom' | 'cohortTo'>) => {
+  if (!curriculum.cohortFrom && !curriculum.cohortTo) return 'Semua angkatan';
+  if (curriculum.cohortFrom && !curriculum.cohortTo) return `Angkatan ${curriculum.cohortFrom} dst.`;
+  if (!curriculum.cohortFrom && curriculum.cohortTo) return `s.d. angkatan ${curriculum.cohortTo}`;
+  return curriculum.cohortFrom === curriculum.cohortTo ? `Angkatan ${curriculum.cohortFrom}` : `Angkatan ${curriculum.cohortFrom}–${curriculum.cohortTo}`;
+};
 
 interface AcademicPeriodSummary {
   id: string;
@@ -301,6 +331,7 @@ const TAB_ROUTES: Record<string, string> = {
   departments: 'jurusan',
   admins: 'admin-jurusan',
   mahasiswa: 'mahasiswa',
+  curricula: 'kurikulum',
   matakuliah: 'mata-kuliah',
   graduate_profiles: 'profil-lulusan',
   cpl: 'cpl',
@@ -514,6 +545,12 @@ export default function App() {
   const [lecturerProfile, setLecturerProfile] = useState<Lecturer | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
   const [assignmentPeriods, setAssignmentPeriods] = useState<AcademicPeriodSummary[]>([]);
+  const [curricula, setCurricula] = useState<CurriculumSummary[]>([]);
+  const [selectedCurriculumId, setSelectedCurriculumId] = useState<string | null>(null);
+  const [showCurriculumModal, setShowCurriculumModal] = useState(false);
+  const [editingCurriculumId, setEditingCurriculumId] = useState<string | null>(null);
+  const [curriculumForm, setCurriculumForm] = useState(emptyCurriculumForm);
+  const [curriculumSaving, setCurriculumSaving] = useState(false);
   const [selectedAssignmentPeriod, setSelectedAssignmentPeriod] = useState(() => ({
     academicYear: getActiveAcademicPeriod().academicYear,
     semester: (getActiveAcademicPeriod().isOddSemesterPeriod ? 'Ganjil' : 'Genap') as 'Ganjil' | 'Genap',
@@ -2444,6 +2481,9 @@ export default function App() {
             setCplMatrixAverageIpk(ipkData.averageIpk);
             setCplMatrixAcademicYears(Array.isArray(periodData.academicYears) ? periodData.academicYears : []);
             setCourseSummaries(Array.isArray(courseSummaryData) ? courseSummaryData : []);
+          } else if (activeTab === 'curricula') {
+            const list: CurriculumSummary[] = await apiCall('/curricula');
+            setCurricula(list);
           } else if (activeTab === 'lecturers') {
             const lecturerList = await apiCall('/lecturers');
             setLecturers(lecturerList);
@@ -2529,7 +2569,7 @@ export default function App() {
     };
 
     loadData();
-  }, [isLoggedIn, currentUser, activeTab, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear, selectedStudentForCpl, studentCplSemesterType, studentCplAcademicYear, dashboardAngkatan, dashboardKelas, selectedGradebookAssignmentId]);
+  }, [isLoggedIn, currentUser, activeTab, selectedCurriculumId, selectedStudentId, cplMatrixAngkatan, cplMatrixKelas, cplMatrixSemesterType, cplMatrixAcademicYear, selectedStudentForCpl, studentCplSemesterType, studentCplAcademicYear, dashboardAngkatan, dashboardKelas, selectedGradebookAssignmentId]);
 
   // Fetch course summary when course report modal is open
   useEffect(() => {
@@ -2623,6 +2663,32 @@ export default function App() {
     setExpandedCourseId(courseId);
   };
 
+  // Konteks kerja admin prodi: kurikulum yang dikelola dan periode akademik.
+  useEffect(() => {
+    if (!isLoggedIn || currentUser?.role !== 'admin_jurusan') {
+      activeCurriculumId = null;
+      setCurricula([]);
+      setSelectedCurriculumId(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [list, periods] = await Promise.all([apiCall('/curricula'), apiCall('/teaching-assignment-periods')]);
+        if (cancelled) return;
+        setCurricula(list);
+        applyCurriculumSelection(list);
+        setAssignmentPeriods(periods);
+        const activePeriod = (periods as AcademicPeriodSummary[]).find(period => period.status === 'Aktif');
+        if (activePeriod) setSelectedAssignmentPeriod({ academicYear: activePeriod.academicYear, semester: activePeriod.semester });
+      } catch (error) {
+        console.error('Gagal memuat konteks kurikulum/periode:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, currentUser?.id, currentUser?.role]);
+
   // Logout handler
   const handleLogout = async () => {
     const confirmed = await requestConfirmation({
@@ -2639,6 +2705,9 @@ export default function App() {
     } finally {
       setIsLoggedIn(false);
       setCurrentUser(null);
+      activeCurriculumId = null;
+      setCurricula([]);
+      setSelectedCurriculumId(null);
       setSelectedStudentId('');
       setSelectedStudentAchievements([]);
       setShowLanding(true);
@@ -3838,7 +3907,7 @@ export default function App() {
     setEditingCpmkId(null);
     setCpmkFormError('');
     const usedWeight = cpmkMasters.filter(item => item.courseId === courseId).reduce((total, item) => total + Number(item.contributionWeight || 0), 0);
-    setCpmkForm({ courseId, code: '', description: '', cplCode: '', curriculumVersion: '2026', contributionWeight: String(Math.max(0, Number((100 - usedWeight).toFixed(2)))), status: 'Aktif' });
+    setCpmkForm({ courseId, code: '', description: '', cplCode: '', curriculumVersion: selectedCurriculum?.code || '2026', contributionWeight: String(Math.max(0, Number((100 - usedWeight).toFixed(2)))), status: 'Aktif' });
   };
 
   const addCpmkForCourse = (courseId: string) => {
@@ -3848,7 +3917,7 @@ export default function App() {
 
   const resetGraduateProfileForm = () => {
     setEditingGraduateProfileId(null);
-    setGraduateProfileForm({ code: '', name: '', englishName: '', summary: '', curriculumVersion: '2026', status: 'Aktif', sequence: String(graduateProfiles.length + 1) });
+    setGraduateProfileForm({ code: '', name: '', englishName: '', summary: '', curriculumVersion: selectedCurriculum?.code || '2026', status: 'Aktif', sequence: String(graduateProfiles.length + 1) });
   };
 
   const editGraduateProfile = (profile: GraduateProfile) => {
@@ -3909,6 +3978,109 @@ export default function App() {
     catch (error: any) { showToast(error.message || 'Profil lulusan tidak dapat dihapus.'); }
   };
 
+  // ================= KURIKULUM =================
+  const selectedCurriculum = curricula.find(item => item.id === selectedCurriculumId) || null;
+
+  const applyCurriculumSelection = (list: CurriculumSummary[], preferredId?: string | null) => {
+    let stored: string | null = null;
+    try { stored = window.localStorage.getItem(curriculumStorageKey(currentUser?.id)); } catch { stored = null; }
+    const candidate = [preferredId, stored].find(id => id && list.some(item => item.id === id));
+    const chosen = candidate || list.find(item => item.isDefault)?.id || list[0]?.id || null;
+    activeCurriculumId = chosen;
+    setSelectedCurriculumId(chosen);
+    return chosen;
+  };
+
+  const loadCurricula = async (preferredId?: string | null) => {
+    const list: CurriculumSummary[] = await apiCall('/curricula');
+    setCurricula(list);
+    applyCurriculumSelection(list, preferredId ?? selectedCurriculumId);
+    return list;
+  };
+
+  const changeCurriculum = (curriculumId: string) => {
+    activeCurriculumId = curriculumId || null;
+    try { window.localStorage.setItem(curriculumStorageKey(currentUser?.id), curriculumId); } catch { /* penyimpanan lokal opsional */ }
+    setSelectedCurriculumId(curriculumId || null);
+    const chosen = curricula.find(item => item.id === curriculumId);
+    if (chosen) showToast(`Sekarang mengelola ${chosen.name}.`);
+  };
+
+  const openCurriculumModal = (curriculum?: CurriculumSummary) => {
+    setEditingCurriculumId(curriculum?.id || null);
+    setCurriculumForm(curriculum ? {
+      code: curriculum.code,
+      name: curriculum.name,
+      cohortFrom: curriculum.cohortFrom ? String(curriculum.cohortFrom) : '',
+      cohortTo: curriculum.cohortTo ? String(curriculum.cohortTo) : '',
+      status: curriculum.status,
+      notes: curriculum.notes || '',
+      copyFromId: '',
+    } : { ...emptyCurriculumForm, copyFromId: selectedCurriculumId || '' });
+    setShowCurriculumModal(true);
+  };
+
+  const saveCurriculum = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!curriculumForm.code.trim() || !curriculumForm.name.trim()) { showToast('Kode dan nama kurikulum wajib diisi.'); return; }
+    setCurriculumSaving(true);
+    try {
+      const payload = {
+        code: curriculumForm.code.trim().toUpperCase(),
+        name: curriculumForm.name.trim(),
+        cohortFrom: curriculumForm.cohortFrom ? Number(curriculumForm.cohortFrom) : null,
+        cohortTo: curriculumForm.cohortTo ? Number(curriculumForm.cohortTo) : null,
+        status: curriculumForm.status,
+        notes: curriculumForm.notes.trim() || null,
+      };
+      if (editingCurriculumId) {
+        await apiCall(`/curricula/${editingCurriculumId}`, 'PUT', payload);
+        await loadCurricula();
+        showToast('Kurikulum diperbarui.');
+      } else {
+        const created = await apiCall('/curricula', 'POST', { ...payload, copyFromId: curriculumForm.copyFromId || null });
+        await loadCurricula(created.id);
+        try { window.localStorage.setItem(curriculumStorageKey(currentUser?.id), created.id); } catch { /* opsional */ }
+        showToast(curriculumForm.copyFromId ? `${created.name} dibuat dan struktur kurikulum lama disalin.` : `${created.name} dibuat.`);
+      }
+      setShowCurriculumModal(false);
+    } catch (error: any) {
+      showToast(error.message || 'Kurikulum gagal disimpan.');
+    } finally {
+      setCurriculumSaving(false);
+    }
+  };
+
+  const activateCurriculum = async (curriculum: CurriculumSummary) => {
+    if (!await requestConfirmation({
+      title: 'Jadikan kurikulum aktif?',
+      message: `${curriculum.name} akan menjadi kurikulum aktif prodi. Kurikulum ini otomatis terpilih saat admin prodi masuk.`,
+      confirmLabel: 'Jadikan Aktif',
+    })) return;
+    try {
+      const list: CurriculumSummary[] = await apiCall(`/curricula/${curriculum.id}/activate`, 'POST');
+      setCurricula(list);
+      changeCurriculum(curriculum.id);
+    } catch (error: any) { showToast(error.message || 'Kurikulum gagal diaktifkan.'); }
+  };
+
+  const deleteCurriculum = async (curriculum: CurriculumSummary) => {
+    if (!await requestConfirmation({ title: 'Hapus kurikulum?', message: `${curriculum.name} akan dihapus. Hanya kurikulum yang belum berisi mata kuliah, CPL, atau profil lulusan yang dapat dihapus.`, confirmLabel: 'Hapus', tone: 'danger' })) return;
+    try {
+      await apiCall(`/curricula/${curriculum.id}`, 'DELETE');
+      await loadCurricula(selectedCurriculumId === curriculum.id ? null : selectedCurriculumId);
+      showToast('Kurikulum dihapus.');
+    } catch (error: any) { showToast(error.message || 'Kurikulum tidak dapat dihapus.'); }
+  };
+
+  const periodOptions = React.useMemo(() => {
+    const options = [...assignmentPeriods];
+    if (!options.some(period => period.academicYear === selectedAssignmentPeriod.academicYear && period.semester === selectedAssignmentPeriod.semester)) {
+      options.push({ id: 'baru', academicYear: selectedAssignmentPeriod.academicYear, semester: selectedAssignmentPeriod.semester, status: 'Draft', offeringCount: 0 });
+    }
+    return options.sort((first, second) => second.academicYear.localeCompare(first.academicYear) || (first.semester === 'Genap' ? -1 : 1));
+  }, [assignmentPeriods, selectedAssignmentPeriod]);
+
   const loadAccountingGraduateProfiles = async () => {
     if (graduateProfiles.length > 0 && !await requestConfirmation({ title: 'Tambahkan profil contoh?', message: 'Profil lulusan sudah tersedia. Sistem hanya akan menambahkan profil contoh yang belum ada.', confirmLabel: 'Tambahkan' })) return;
     const definitions = [
@@ -3928,7 +4100,7 @@ export default function App() {
       for (let index = 0; index < definitions.length; index += 1) {
         const [code, name, englishName, summary, coreCodes, supportingCodes] = definitions[index];
         if (existingCodes.has(code)) continue;
-        await apiCall('/graduate-profiles', 'POST', { code, name, englishName, summary, curriculumVersion: '2026', status: 'Aktif', sequence: index + 1, cplMappings: [...coreCodes.map(cplCode => ({ cplId: byCode.get(cplCode), type: 'core' })), ...supportingCodes.map(cplCode => ({ cplId: byCode.get(cplCode), type: 'supporting' }))] });
+        await apiCall('/graduate-profiles', 'POST', { code, name, englishName, summary, curriculumVersion: selectedCurriculum?.code || '2026', status: 'Aktif', sequence: index + 1, cplMappings: [...coreCodes.map(cplCode => ({ cplId: byCode.get(cplCode), type: 'core' })), ...supportingCodes.map(cplCode => ({ cplId: byCode.get(cplCode), type: 'supporting' }))] });
       }
       setGraduateProfiles(await apiCall('/graduate-profiles')); showToast('Enam Profil Lulusan D3 Akuntansi berhasil dimuat.');
     } catch (error: any) { showToast(error.message || 'Gagal memuat data Profil Lulusan.'); }
@@ -5166,6 +5338,33 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-sm lg:gap-md">
+          {currentUser?.role === 'admin_jurusan' && (
+            <div className="hidden md:flex items-center gap-sm" aria-label="Konteks kerja">
+              <label className="flex items-center gap-xs rounded-lg border border-outline-variant bg-surface-container-low px-sm py-[3px]" title={selectedCurriculum ? `${selectedCurriculum.name} · ${curriculumCohortLabel(selectedCurriculum)}` : 'Kurikulum yang sedang dikelola'}>
+                <span className="material-symbols-outlined text-[18px] text-primary">menu_book</span>
+                <span className="flex flex-col leading-tight">
+                  <span className="font-label-xs text-on-surface-variant">Kurikulum</span>
+                  <select aria-label="Pilih kurikulum yang dikelola" className="max-w-[170px] bg-transparent font-label-sm font-bold text-on-surface focus:outline-none" value={selectedCurriculumId || ''} onChange={event => changeCurriculum(event.target.value)} disabled={curricula.length === 0}>
+                    {curricula.length === 0 && <option value="">Belum ada</option>}
+                    {curricula.map(curriculum => <option key={curriculum.id} value={curriculum.id}>{curriculum.name}{curriculum.isDefault ? ' (aktif)' : ''}{curriculum.status === 'Nonaktif' ? ' – nonaktif' : ''}</option>)}
+                  </select>
+                </span>
+              </label>
+              <label className="flex items-center gap-xs rounded-lg border border-outline-variant bg-surface-container-low px-sm py-[3px]" title="Periode akademik untuk penugasan dosen dan penilaian">
+                <span className="material-symbols-outlined text-[18px] text-primary">calendar_month</span>
+                <span className="flex flex-col leading-tight">
+                  <span className="font-label-xs text-on-surface-variant">Periode</span>
+                  <select aria-label="Pilih periode akademik" className="max-w-[170px] bg-transparent font-label-sm font-bold text-on-surface focus:outline-none" value={`${selectedAssignmentPeriod.academicYear}|${selectedAssignmentPeriod.semester}`} onChange={event => {
+                    const [academicYear, semester] = event.target.value.split('|');
+                    setSelectedAssignmentPeriod({ academicYear, semester: semester as 'Ganjil' | 'Genap' });
+                    setExpandedAssignmentLecturerId(null);
+                  }}>
+                    {periodOptions.map(period => <option key={`${period.academicYear}|${period.semester}`} value={`${period.academicYear}|${period.semester}`}>{period.semester} {period.academicYear}{period.status === 'Aktif' ? ' • aktif' : period.status === 'Selesai' ? ' • arsip' : period.id === 'baru' ? ' • belum dibuat' : ''}</option>)}
+                  </select>
+                </span>
+              </label>
+            </div>
+          )}
           <div className="hidden md:flex items-center gap-sm px-sm py-xs rounded-lg bg-surface-container-low">
             <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary grid place-items-center"><span className="material-symbols-outlined text-[18px]">person</span></div>
             <div className="leading-tight"><p className="font-label-sm font-bold text-on-surface">{currentUser?.name}</p><p className="font-label-xs text-on-surface-variant">{currentUser?.role === 'admin_jurusan' ? 'Admin Jurusan' : currentUser?.role === 'dosen' ? 'Dosen' : 'Super Admin'}</p></div>
@@ -5252,6 +5451,15 @@ export default function App() {
                 >
                   <span className="material-symbols-outlined">group</span>
                   <span>Mahasiswa</span>
+                </button>
+
+                {/* Kurikulum */}
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${activeTab === 'curricula' ? 'text-primary font-bold bg-primary/5' : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'}`}
+                  onClick={() => navigateToTab('curricula')}
+                >
+                  <span className="material-symbols-outlined">menu_book</span>
+                  <span>Kurikulum</span>
                 </button>
 
                 {/* Mata Kuliah */}
@@ -5517,6 +5725,107 @@ export default function App() {
                 </table>
               )}
             </div>
+          </div>
+        )}
+
+        {currentUser?.role === 'admin_jurusan' && activeTab === 'curricula' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-md">
+              <div>
+                <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Kurikulum</h3>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">Mata kuliah, CPL, CPMK, dan profil lulusan disimpan per kurikulum. Pilih kurikulum yang dikelola di bilah atas.</p>
+              </div>
+              <button type="button" onClick={() => openCurriculumModal()} className="inline-flex items-center gap-xs bg-primary text-on-primary px-md py-sm rounded-md font-label-sm font-bold"><span className="material-symbols-outlined text-[18px]">add</span>Tambah Kurikulum</button>
+            </div>
+
+            {selectedCurriculum && (
+              <section className="app-card p-lg flex flex-col md:flex-row md:items-center justify-between gap-md">
+                <div className="flex items-center gap-md">
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><span className="material-symbols-outlined">menu_book</span></div>
+                  <div>
+                    <p className="font-label-xs text-on-surface-variant">Sedang dikelola</p>
+                    <p className="font-headline-lg font-bold text-on-surface">{selectedCurriculum.name}</p>
+                    <p className="font-label-sm text-on-surface-variant">{curriculumCohortLabel(selectedCurriculum)}{selectedCurriculum.isDefault ? ' · Kurikulum aktif prodi' : ''}</p>
+                  </div>
+                </div>
+                <label className="md:hidden font-label-sm font-bold text-on-surface">Ganti kurikulum
+                  <select className="mt-xs w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm font-body-sm" value={selectedCurriculumId || ''} onChange={event => changeCurriculum(event.target.value)}>
+                    {curricula.map(curriculum => <option key={curriculum.id} value={curriculum.id}>{curriculum.name}</option>)}
+                  </select>
+                </label>
+              </section>
+            )}
+
+            <section className="app-card overflow-hidden">
+              {dataLoading && curricula.length === 0 ? <div className="p-xl text-center text-on-surface-variant">Memuat kurikulum...</div> : curricula.length === 0 ? (
+                <div className="p-xl text-center text-on-surface-variant">Belum ada kurikulum. Tambahkan kurikulum pertama untuk prodi ini.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[860px] text-left">
+                    <thead><tr className="bg-surface-container border-b border-outline-variant">
+                      <th className="px-md py-sm font-label-xs uppercase">Kurikulum</th>
+                      <th className="px-md py-sm font-label-xs uppercase">Berlaku</th>
+                      <th className="px-md py-sm font-label-xs uppercase">Isi</th>
+                      <th className="px-md py-sm font-label-xs uppercase">Status</th>
+                      <th className="px-md py-sm font-label-xs uppercase text-right">Aksi</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-outline-variant/60">
+                      {curricula.map(curriculum => (
+                        <tr key={curriculum.id} className={curriculum.id === selectedCurriculumId ? 'bg-primary/[0.04]' : ''}>
+                          <td className="px-md py-sm"><p className="font-body-sm font-bold text-on-surface">{curriculum.name}</p><p className="font-label-xs text-primary">{curriculum.code}</p>{curriculum.notes && <p className="font-label-xs text-on-surface-variant mt-[2px] max-w-[280px] truncate" title={curriculum.notes}>{curriculum.notes}</p>}</td>
+                          <td className="px-md py-sm font-body-sm">{curriculumCohortLabel(curriculum)}</td>
+                          <td className="px-md py-sm font-label-sm text-on-surface-variant">{curriculum.coursesCount ?? 0} MK · {curriculum.cplsCount ?? 0} CPL · {curriculum.graduateProfilesCount ?? 0} PL</td>
+                          <td className="px-md py-sm">
+                            <div className="flex flex-wrap gap-xs">
+                              {curriculum.isDefault && <span className="rounded-full bg-primary/10 px-sm py-[2px] font-label-xs font-bold text-primary">Kurikulum aktif</span>}
+                              <span className={`rounded-full px-sm py-[2px] font-label-xs font-bold ${curriculum.status === 'Aktif' ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>{curriculum.status === 'Aktif' ? 'Berlaku' : 'Nonaktif'}</span>
+                            </div>
+                          </td>
+                          <td className="px-md py-sm">
+                            <div className="flex flex-wrap justify-end gap-xs">
+                              <button type="button" disabled={curriculum.id === selectedCurriculumId} onClick={() => changeCurriculum(curriculum.id)} className="inline-flex items-center gap-1 rounded-md border border-primary/30 px-sm py-xs font-label-xs font-bold text-primary disabled:cursor-default disabled:opacity-40"><span className="material-symbols-outlined text-[17px]">edit_note</span>{curriculum.id === selectedCurriculumId ? 'Sedang dikelola' : 'Kelola'}</button>
+                              {!curriculum.isDefault && <button type="button" onClick={() => activateCurriculum(curriculum)} className="inline-flex items-center gap-1 rounded-md border border-outline-variant px-sm py-xs font-label-xs font-bold text-on-surface"><span className="material-symbols-outlined text-[17px]">check_circle</span>Jadikan aktif</button>}
+                              <button type="button" title="Ubah kurikulum" onClick={() => openCurriculumModal(curriculum)} className="p-xs text-on-surface-variant hover:text-secondary"><span className="material-symbols-outlined text-[20px]">edit</span></button>
+                              {!curriculum.isDefault && <button type="button" title="Hapus kurikulum" onClick={() => deleteCurriculum(curriculum)} className="p-xs text-on-surface-variant hover:text-error"><span className="material-symbols-outlined text-[20px]">delete</span></button>}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+            <p className="font-label-xs text-on-surface-variant">Capaian CPL mahasiswa otomatis dihitung dengan kurikulum yang berlaku untuk angkatannya. Kurikulum aktif adalah kurikulum yang terpilih otomatis saat admin prodi masuk.</p>
+
+            {showCurriculumModal && <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-md" role="dialog" aria-modal="true" aria-labelledby="curriculum-modal-title" onMouseDown={event => { if (event.target === event.currentTarget && !curriculumSaving) setShowCurriculumModal(false); }}>
+              <form onSubmit={saveCurriculum} className="w-full max-w-[560px] max-h-[90vh] overflow-y-auto bg-surface rounded-lg shadow-xl border border-outline">
+                <div className="sticky top-0 z-10 flex items-center justify-between px-lg py-md bg-surface border-b border-outline"><div><p className="font-label-xs text-primary font-bold">KURIKULUM</p><h4 id="curriculum-modal-title" className="font-headline-xl font-bold text-on-surface">{editingCurriculumId ? 'Ubah Kurikulum' : 'Tambah Kurikulum'}</h4></div><button type="button" disabled={curriculumSaving} onClick={() => setShowCurriculumModal(false)} className="w-8 h-8 grid place-items-center rounded-md text-on-surface-variant hover:bg-surface-container" aria-label="Tutup"><span className="material-symbols-outlined text-[20px]">close</span></button></div>
+                <div className="p-lg space-y-md">
+                  <div className="grid grid-cols-[130px_1fr] gap-md">
+                    <label className="font-label-sm text-on-surface">Kode<input autoFocus className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.code} placeholder="2026" maxLength={20} onChange={event => setCurriculumForm(current => ({ ...current, code: event.target.value.toUpperCase() }))} /></label>
+                    <label className="font-label-sm text-on-surface">Nama Kurikulum<input className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.name} placeholder="Kurikulum 2026" maxLength={100} onChange={event => setCurriculumForm(current => ({ ...current, name: event.target.value }))} /></label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-md">
+                    <label className="font-label-sm text-on-surface">Berlaku mulai angkatan<input type="number" min="1990" max="2100" className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.cohortFrom} placeholder="2026" onChange={event => setCurriculumForm(current => ({ ...current, cohortFrom: event.target.value }))} /></label>
+                    <label className="font-label-sm text-on-surface">Sampai angkatan<input type="number" min="1990" max="2100" className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.cohortTo} placeholder="Kosongkan bila masih berlaku" onChange={event => setCurriculumForm(current => ({ ...current, cohortTo: event.target.value }))} /></label>
+                  </div>
+                  {editingCurriculumId ? (
+                    <label className="block font-label-sm text-on-surface">Status<select className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.status} onChange={event => setCurriculumForm(current => ({ ...current, status: event.target.value }))}><option value="Aktif">Berlaku</option><option value="Nonaktif">Nonaktif</option></select></label>
+                  ) : (
+                    <label className="block font-label-sm text-on-surface">Salin struktur dari
+                      <select className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.copyFromId} onChange={event => setCurriculumForm(current => ({ ...current, copyFromId: event.target.value }))}>
+                        <option value="">Tidak menyalin (kurikulum kosong)</option>
+                        {curricula.map(curriculum => <option key={curriculum.id} value={curriculum.id}>{curriculum.name}</option>)}
+                      </select>
+                      <span className="mt-xs block font-label-xs text-on-surface-variant">Menyalin mata kuliah, CPL, pemetaan MK–CPL, CPMK, dan profil lulusan. Nilai dan penugasan tidak ikut disalin.</span>
+                    </label>
+                  )}
+                  <label className="block font-label-sm text-on-surface">Catatan<textarea className="mt-xs w-full min-h-[80px] border border-outline-variant rounded-md px-sm py-sm resize-y" value={curriculumForm.notes} maxLength={2000} onChange={event => setCurriculumForm(current => ({ ...current, notes: event.target.value }))} /></label>
+                </div>
+                <div className="sticky bottom-0 flex justify-end gap-sm px-lg py-md bg-surface border-t border-outline"><button type="button" disabled={curriculumSaving} onClick={() => setShowCurriculumModal(false)} className="px-lg py-sm text-on-surface-variant font-label-sm font-bold">Batal</button><button disabled={curriculumSaving} className="bg-primary text-on-primary px-lg py-sm rounded-md font-label-sm font-bold disabled:opacity-50">{curriculumSaving ? 'Menyimpan...' : 'Simpan Kurikulum'}</button></div>
+              </form>
+            </div>}
           </div>
         )}
 

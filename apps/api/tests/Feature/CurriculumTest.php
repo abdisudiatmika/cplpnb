@@ -124,4 +124,10 @@ class CurriculumTest extends TestCase
         $this->postJson("/api/curricula/{$foreign->id}/activate")->assertNotFound();
         $this->getJson('/api/curricula')->assertOk()->assertJsonCount(1);
     }
+
+    public function test_master_data_created_without_curriculum_falls_into_active_curriculum(): void
+    {
+        $course = Course::create(['code' => 'SEED1', 'name' => 'Dibuat seeder', 'sks' => 2, 'department_id' => $this->department->id]);
+        $this->assertSame($this->old->id, $course->curriculum_id);
+    }
 }

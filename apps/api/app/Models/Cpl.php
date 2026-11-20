@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCurriculum;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Cpl extends Model
 {
-    use HasFactory, HasUuids;
+    use BelongsToCurriculum, HasFactory, HasUuids;
 
     protected $fillable = ['code', 'description', 'target_value', 'department_id', 'curriculum_id'];
 
@@ -17,11 +18,6 @@ class Cpl extends Model
     public function getTargetValueAttribute()
     {
         return $this->attributes['target_value'] ?? null;
-    }
-
-    public function curriculum()
-    {
-        return $this->belongsTo(Curriculum::class);
     }
 
     public function department()

@@ -2,20 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCurriculum;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Course extends Model
 {
-    use HasFactory, HasUuids;
+    use BelongsToCurriculum, HasFactory, HasUuids;
 
     protected $fillable = ['code', 'name', 'sks', 'semester', 'department_id', 'curriculum_id'];
-
-    public function curriculum()
-    {
-        return $this->belongsTo(Curriculum::class);
-    }
 
     public function department()
     {
