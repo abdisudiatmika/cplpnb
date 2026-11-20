@@ -1,27 +1,27 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AssessmentPlanController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\DepartmentController;
-use App\Http\Controllers\StudentController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\CplController;
-use App\Http\Controllers\MappingController;
-use App\Http\Controllers\GradeController;
-use App\Http\Controllers\LecturerController;
 use App\Http\Controllers\CpmkController;
-use App\Http\Controllers\TeachingAssignmentController;
-use App\Http\Controllers\AssessmentPlanController;
+use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\GradeController;
+use App\Http\Controllers\GraduateProfileController;
+use App\Http\Controllers\LecturerController;
 use App\Http\Controllers\LecturerGradebookController;
+use App\Http\Controllers\MappingController;
 use App\Http\Controllers\ObeDashboardController;
+use App\Http\Controllers\StudentController;
+use App\Http\Controllers\TeachingAssignmentController;
+use Illuminate\Support\Facades\Route;
 
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
 Route::post('/register', [AuthController::class, 'register']);
 
 Route::get('/reset-superadmin', function () {
     $user = \App\Models\User::where('role', 'super_admin')->first();
-    if (!$user) {
+    if (! $user) {
         $user = \App\Models\User::create([
             'id' => (string) \Illuminate\Support\Str::uuid(),
             'name' => 'Super Admin PNB',
@@ -29,18 +29,20 @@ Route::get('/reset-superadmin', function () {
             'password' => \Illuminate\Support\Facades\Hash::make('password'),
             'role' => 'super_admin',
         ]);
+
         return response()->json(['message' => 'Superadmin created successfully with password: password']);
     }
     $user->password = \Illuminate\Support\Facades\Hash::make('password');
     $user->save();
+
     return response()->json(['message' => 'Superadmin password reset successfully to: password']);
 });
 
 Route::get('/debug-auth', function () {
     $sessionPath = storage_path('framework/sessions');
     $isWriteable = is_writable($sessionPath);
-    $sessionFiles = glob($sessionPath . '/*');
-    
+    $sessionFiles = glob($sessionPath.'/*');
+
     $logPath = storage_path('logs/laravel.log');
     $logLines = [];
     if (file_exists($logPath)) {
@@ -54,7 +56,7 @@ Route::get('/debug-auth', function () {
     try {
         $dbConnection = \Illuminate\Support\Facades\DB::connection()->getName();
         $dbName = \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
-        
+
         $tables = ['users', 'departments', 'students', 'courses', 'cpls', 'course_cpl_mappings', 'student_grades'];
         foreach ($tables as $table) {
             if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
@@ -66,7 +68,7 @@ Route::get('/debug-auth', function () {
     } catch (\Exception $e) {
         $dbError = $e->getMessage();
     }
-    
+
     return response()->json([
         'session_path' => $sessionPath,
         'session_path_is_writable' => $isWriteable,
@@ -89,18 +91,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/report-settings', [DepartmentController::class, 'reportSettings']);
     Route::put('/report-settings', [DepartmentController::class, 'updateReportSettings']);
-    
+
     // Frontend compatibility and custom routes MUST be before resource routes
     Route::get('/cpl/averages', [CplController::class, 'averages']);
     Route::get('/cpl/achievements-bulk', [CplController::class, 'achievementsBulk']);
     Route::get('/cpl/achievements/{id}', [CplController::class, 'achievements']);
+    Route::get('/cpl/transcript/{id}', [CplController::class, 'transcript']);
     Route::get('/cpl/course-breakdown/{cplId}', [CplController::class, 'courseBreakdown']);
     Route::get('/cpl/course-summary', [CplController::class, 'courseSummary']);
     Route::get('/cpl', [CplController::class, 'index']);
     Route::post('/cpl', [CplController::class, 'store']);
     Route::put('/cpl/{id}', [CplController::class, 'update']);
     Route::delete('/cpl/{id}', [CplController::class, 'destroy']);
-    
+
     // Bulk endpoints
     Route::post('/cpl/bulk', [CplController::class, 'bulk']);
     Route::post('/courses/bulk', [CourseController::class, 'bulk']);
@@ -108,11 +111,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/mappings/bulk', [MappingController::class, 'bulk']);
     Route::post('/students/bulk', [StudentController::class, 'bulk']);
     Route::post('/grades/bulk', [GradeController::class, 'bulk']);
-    
+
     Route::post('/students/bulk-delete', [StudentController::class, 'bulkDelete']);
     Route::post('/courses/bulk-delete', [CourseController::class, 'bulkDelete']);
     Route::get('/students/stats', [StudentController::class, 'stats']);
     Route::get('/students/ipk-average', [StudentController::class, 'ipkAverage']);
+    Route::get('/students/{id}/academic-summary', [StudentController::class, 'academicSummary']);
     Route::get('/grades/periods', [GradeController::class, 'periods']);
     Route::get('/grades/export/all', [GradeController::class, 'exportAll']);
     Route::get('/grades/student/{studentId}', [GradeController::class, 'byStudent']);
@@ -122,6 +126,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('lecturers', LecturerController::class);
     Route::post('/cpmks/bulk', [CpmkController::class, 'bulk']);
     Route::apiResource('cpmks', CpmkController::class);
+    Route::apiResource('graduate-profiles', GraduateProfileController::class)->except(['show']);
+    Route::get('/teaching-assignment-periods', [TeachingAssignmentController::class, 'periods']);
+    Route::post('/teaching-assignment-periods/activate', [TeachingAssignmentController::class, 'activatePeriod']);
+    Route::post('/teaching-assignment-periods/archive', [TeachingAssignmentController::class, 'archivePeriod']);
     Route::get('/teaching-assignments/me', [TeachingAssignmentController::class, 'me']);
     Route::apiResource('teaching-assignments', TeachingAssignmentController::class)->except(['show']);
     Route::post('/assessment-plans/{assessmentPlan}/publish', [AssessmentPlanController::class, 'publish']);
@@ -130,13 +138,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/lecturer-gradebooks', [LecturerGradebookController::class, 'index']);
     Route::get('/lecturer-gradebooks/{teachingAssignment}', [LecturerGradebookController::class, 'show']);
     Route::put('/lecturer-gradebooks/{teachingAssignment}/scores', [LecturerGradebookController::class, 'saveScores']);
+    Route::put('/lecturer-gradebooks/{teachingAssignment}/analysis', [LecturerGradebookController::class, 'saveAnalysis']);
     Route::post('/lecturer-gradebooks/{teachingAssignment}/submit', [LecturerGradebookController::class, 'submit']);
     Route::post('/lecturer-gradebooks/{teachingAssignment}/approve', [LecturerGradebookController::class, 'approve']);
     Route::post('/lecturer-gradebooks/{teachingAssignment}/lock', [LecturerGradebookController::class, 'lock']);
     Route::post('/lecturer-gradebooks/{teachingAssignment}/reopen', [LecturerGradebookController::class, 'reopen']);
     Route::post('/teaching-assignments/{teachingAssignment}/sync-enrollments', [LecturerGradebookController::class, 'syncEnrollments']);
     Route::get('/dashboard/obe-summary', [ObeDashboardController::class, 'summary']);
-    
+
     // Resource routes
     Route::apiResource('departments', DepartmentController::class);
     Route::apiResource('students', StudentController::class);
@@ -144,7 +153,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('cpls', CplController::class);
     Route::apiResource('mappings', MappingController::class);
     Route::apiResource('grades', GradeController::class);
-    
+
     // User admins compatibility
     Route::get('/user-admins', [AuthController::class, 'getAdmins']);
     Route::post('/user-admins', [AuthController::class, 'createAdmin']);

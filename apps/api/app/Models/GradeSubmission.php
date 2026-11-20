@@ -10,7 +10,7 @@ class GradeSubmission extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = ['assessment_plan_id', 'status', 'submitted_by', 'submitted_at', 'approved_by', 'approved_at', 'locked_by', 'locked_at', 'reopen_reason'];
+    protected $fillable = ['assessment_plan_id', 'status', 'submitted_by', 'submitted_at', 'approved_by', 'approved_at', 'locked_by', 'locked_at', 'reopen_reason', 'cpmk_analysis'];
     protected $casts = ['submitted_at' => 'datetime', 'approved_at' => 'datetime', 'locked_at' => 'datetime'];
 
     public function assessmentPlan() { return $this->belongsTo(AssessmentPlan::class); }

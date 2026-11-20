@@ -52,10 +52,60 @@ class TeachingAssignmentController extends Controller
         $assignments = TeachingAssignment::with($this->relations)
             ->where('lecturer_id', $user->lecturer->id)
             ->where('status', 'Aktif')
+            ->whereHas('courseOffering.academicPeriod', fn ($period) => $period->where('status', 'Aktif'))
             ->orderByDesc('created_at')
             ->get();
 
         return response()->json($assignments->map(fn (TeachingAssignment $assignment) => $this->payload($assignment)));
+    }
+
+    public function periods(Request $request)
+    {
+        $user = $request->user();
+        $this->authorizeAdministrator($user);
+        $departmentId = $this->departmentId($request, $user);
+
+        return response()->json($this->periodPayloads($departmentId));
+    }
+
+    public function activatePeriod(Request $request)
+    {
+        $user = $request->user();
+        $this->authorizeAdministrator($user);
+        $departmentId = $this->departmentId($request, $user);
+        $validated = $request->validate($this->periodRules());
+
+        DB::transaction(function () use ($departmentId, $validated) {
+            AcademicPeriod::where('department_id', $departmentId)
+                ->where('status', 'Aktif')
+                ->update(['status' => 'Selesai']);
+
+            AcademicPeriod::updateOrCreate(
+                [
+                    'department_id' => $departmentId,
+                    'academic_year' => $validated['academicYear'],
+                    'semester' => $validated['semester'],
+                ],
+                ['status' => 'Aktif']
+            );
+        });
+
+        return response()->json($this->periodPayloads($departmentId));
+    }
+
+    public function archivePeriod(Request $request)
+    {
+        $user = $request->user();
+        $this->authorizeAdministrator($user);
+        $departmentId = $this->departmentId($request, $user);
+        $validated = $request->validate($this->periodRules());
+
+        AcademicPeriod::where('department_id', $departmentId)
+            ->where('academic_year', $validated['academicYear'])
+            ->where('semester', $validated['semester'])
+            ->update(['status' => 'Selesai']);
+
+        return response()->json($this->periodPayloads($departmentId));
     }
 
     public function store(Request $request)
@@ -80,6 +130,9 @@ class TeachingAssignmentController extends Controller
                 ],
                 ['status' => 'Aktif']
             );
+            if ($period->status !== 'Aktif') {
+                throw ValidationException::withMessages(['academicYear' => ['Periode ini sudah diarsipkan. Aktifkan kembali periode sebelum menambah penugasan.']]);
+            }
 
             $academicClass = AcademicClass::firstOrCreate(
                 [
@@ -106,16 +159,10 @@ class TeachingAssignmentController extends Controller
                 throw ValidationException::withMessages(['lecturerId' => ['Dosen sudah ditugaskan pada mata kuliah, kelas, dan periode tersebut.']]);
             }
 
-            if (($validated['role'] ?? 'member') === 'coordinator') {
-                TeachingAssignment::where('course_offering_id', $offering->id)
-                    ->where('role', 'coordinator')
-                    ->update(['role' => 'member']);
-            }
-
             return TeachingAssignment::create([
                 'course_offering_id' => $offering->id,
                 'lecturer_id' => $lecturer->id,
-                'role' => $validated['role'] ?? 'member',
+                'role' => 'member',
                 'status' => $validated['status'] ?? 'Aktif',
                 'assigned_by' => $user->id,
             ]);
@@ -132,19 +179,10 @@ class TeachingAssignmentController extends Controller
         $this->ensureDepartment($teachingAssignment, $departmentId);
 
         $validated = $request->validate([
-            'role' => ['sometimes', 'required', Rule::in(['coordinator', 'member'])],
             'status' => ['sometimes', 'required', Rule::in(['Aktif', 'Nonaktif'])],
         ]);
 
-        DB::transaction(function () use ($validated, $teachingAssignment) {
-            if (($validated['role'] ?? null) === 'coordinator') {
-                TeachingAssignment::where('course_offering_id', $teachingAssignment->course_offering_id)
-                    ->whereKeyNot($teachingAssignment->id)
-                    ->where('role', 'coordinator')
-                    ->update(['role' => 'member']);
-            }
-            $teachingAssignment->update($validated);
-        });
+        $teachingAssignment->update([...$validated, 'role' => 'member']);
 
         return response()->json($this->payload($teachingAssignment->fresh($this->relations)));
     }
@@ -168,10 +206,34 @@ class TeachingAssignmentController extends Controller
             'cohortYear' => 'required|integer|min:2000|max:2100',
             'academicYear' => ['required', 'string', 'max:20', 'regex:/^[0-9]{4}\/[0-9]{4}$/'],
             'semester' => ['required', Rule::in(['Ganjil', 'Genap'])],
-            'role' => ['nullable', Rule::in(['coordinator', 'member'])],
             'status' => ['nullable', Rule::in(['Aktif', 'Nonaktif'])],
             'departmentId' => 'nullable|uuid|exists:departments,id',
         ];
+    }
+
+    private function periodRules(): array
+    {
+        return [
+            'academicYear' => ['required', 'string', 'max:20', 'regex:/^[0-9]{4}\/[0-9]{4}$/'],
+            'semester' => ['required', Rule::in(['Ganjil', 'Genap'])],
+            'departmentId' => 'nullable|uuid|exists:departments,id',
+        ];
+    }
+
+    private function periodPayloads(string $departmentId)
+    {
+        return AcademicPeriod::where('department_id', $departmentId)
+            ->withCount('offerings')
+            ->orderByDesc('academic_year')
+            ->orderBy('semester')
+            ->get()
+            ->map(fn (AcademicPeriod $period) => [
+                'id' => $period->id,
+                'academicYear' => $period->academic_year,
+                'semester' => $period->semester,
+                'status' => $period->status,
+                'offeringCount' => $period->offerings_count,
+            ]);
     }
 
     private function authorizeAdministrator(?User $user): void
@@ -205,6 +267,7 @@ class TeachingAssignmentController extends Controller
             ?->where('status', 'Published')
             ->sortByDesc('version')
             ->first();
+
         return [
             'id' => $assignment->id,
             'courseOfferingId' => $assignment->course_offering_id,
@@ -220,6 +283,7 @@ class TeachingAssignmentController extends Controller
             'cohortYear' => $offering?->academicClass?->cohort_year,
             'academicYear' => $offering?->academicPeriod?->academic_year,
             'semester' => $offering?->academicPeriod?->semester,
+            'periodStatus' => $offering?->academicPeriod?->status,
             'offeringStatus' => $offering?->status,
             'gradeStatus' => $publishedPlan?->gradeSubmission?->status ?? ($publishedPlan ? 'Draft' : null),
         ];

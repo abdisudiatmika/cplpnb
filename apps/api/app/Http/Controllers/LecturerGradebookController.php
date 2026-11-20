@@ -31,16 +31,18 @@ class LecturerGradebookController extends Controller
         $assignments = TeachingAssignment::with($this->assignmentRelations)
             ->where('lecturer_id', $user->lecturer->id)
             ->where('status', 'Aktif')
+            ->whereHas('courseOffering.academicPeriod', fn ($period) => $period->where('status', 'Aktif'))
             ->whereHas('courseOffering.assessmentPlans', fn ($plan) => $plan->where('status', 'Published'))
             ->orderByDesc('created_at')
             ->get();
 
-        return response()->json($assignments->map(fn (TeachingAssignment $assignment) => $this->assignmentPayload($assignment)));
+        return response()->json($assignments->map(fn (TeachingAssignment $assignment) => $this->assignmentSummaryPayload($assignment)));
     }
 
     public function show(Request $request, TeachingAssignment $teachingAssignment)
     {
         $this->authorizeAssignment($request->user(), $teachingAssignment);
+
         return response()->json($this->gradebookPayload($teachingAssignment));
     }
 
@@ -114,7 +116,7 @@ class LecturerGradebookController extends Controller
                 $oldScore = $score->exists ? $score->score : null;
                 $oldEligibility = $score->exists ? $score->eligibility_status : null;
                 $oldNote = $score->exists ? $score->note : null;
-                if (!$score->exists) {
+                if (! $score->exists) {
                     $score->entered_by = $user->id;
                     $score->entered_at = now();
                 }
@@ -155,7 +157,8 @@ class LecturerGradebookController extends Controller
         $requiredItemIds = $plan->items()->where('is_required', true)->pluck('id');
         $incomplete = $enrollments->contains(function ($enrollment) use ($requiredItemIds) {
             $scores = $enrollment->scores->keyBy('assessment_item_id');
-            return $requiredItemIds->contains(fn ($itemId) => !$this->scoreIsComplete($scores->get($itemId)));
+
+            return $requiredItemIds->contains(fn ($itemId) => ! $this->scoreIsComplete($scores->get($itemId)));
         });
         abort_if($incomplete, 422, 'Nilai wajib belum lengkap untuk seluruh mahasiswa.');
 
@@ -163,6 +166,20 @@ class LecturerGradebookController extends Controller
             $submission->update(['status' => 'Submitted', 'submitted_by' => $user->id, 'submitted_at' => now(), 'reopen_reason' => null]);
             $this->audit($plan, 'submitted', $user);
         });
+
+        return response()->json($this->gradebookPayload($teachingAssignment->fresh()));
+    }
+
+    public function saveAnalysis(Request $request, TeachingAssignment $teachingAssignment)
+    {
+        $user = $request->user();
+        $this->authorizeAssignment($user, $teachingAssignment, true);
+        $validated = $request->validate(['analysis' => 'nullable|string|max:10000']);
+        $plan = $this->publishedPlan($teachingAssignment);
+        $submission = GradeSubmission::firstOrCreate(['assessment_plan_id' => $plan->id], ['status' => 'Draft']);
+        abort_unless($submission->status === 'Draft', 409, 'Analisis tidak dapat diubah karena nilai sudah diajukan atau dikunci.');
+        $submission->update(['cpmk_analysis' => $validated['analysis'] ?? null]);
+        $this->audit($plan, 'analysis_updated', $user);
 
         return response()->json($this->gradebookPayload($teachingAssignment->fresh()));
     }
@@ -262,6 +279,7 @@ class LecturerGradebookController extends Controller
         $scores = $enrollment->scores->keyBy('assessment_item_id');
         $scorePayload = $plan->items->mapWithKeys(function ($item) use ($scores) {
             $score = $scores->get($item->id);
+
             return [$item->id => [
                 'score' => $score?->score,
                 'eligibilityStatus' => $score?->eligibility_status ?? 'eligible',
@@ -278,8 +296,11 @@ class LecturerGradebookController extends Controller
 
         $cpmkScores = $plan->items->groupBy('cpmk_id')->map(function ($items) use ($scores) {
             $complete = $items->where('is_required', true)->every(fn ($item) => $this->scoreIsComplete($scores->get($item->id)));
-            if (!$complete) return null;
+            if (! $complete) {
+                return null;
+            }
             $weight = (float) $items->sum('weight');
+
             return $weight > 0
                 ? round((float) $items->sum(fn ($item) => ((float) ($scores->get($item->id)?->score ?? 0)) * (float) $item->weight) / $weight, 2)
                 : null;
@@ -290,13 +311,18 @@ class LecturerGradebookController extends Controller
             $cpmkScore = $cpmkScores->get($cpmkId);
             foreach ($items->first()?->cpmk?->cplMappings ?? [] as $mapping) {
                 $code = $mapping->cpl?->code;
-                if (!$code) continue;
+                if (! $code) {
+                    continue;
+                }
                 $cplBuckets[$code][] = ['score' => $cpmkScore, 'weight' => (float) $mapping->contribution_weight];
             }
         }
         $cplScores = collect($cplBuckets)->map(function ($entries) {
-            if (collect($entries)->contains(fn ($entry) => $entry['score'] === null)) return null;
+            if (collect($entries)->contains(fn ($entry) => $entry['score'] === null)) {
+                return null;
+            }
             $weight = collect($entries)->sum('weight');
+
             return $weight > 0
                 ? round(collect($entries)->sum(fn ($entry) => (float) $entry['score'] * $entry['weight']) / $weight, 2)
                 : null;
@@ -325,7 +351,15 @@ class LecturerGradebookController extends Controller
     {
         abort_unless($user, 403, 'Unauthorized');
         if ($user->role === 'dosen') {
-            abort_unless($user->lecturer && $assignment->lecturer_id === $user->lecturer->id && $assignment->status === 'Aktif', 403, 'Anda tidak ditugaskan pada kelas ini.');
+            abort_unless(
+                $user->lecturer
+                && $assignment->lecturer_id === $user->lecturer->id
+                && $assignment->status === 'Aktif'
+                && $assignment->courseOffering?->academicPeriod?->status === 'Aktif',
+                403,
+                'Penugasan ini tidak aktif pada periode berjalan.'
+            );
+
             return;
         }
         abort_unless(in_array($user->role, ['super_admin', 'admin_jurusan'], true), 403, 'Unauthorized');
@@ -336,12 +370,6 @@ class LecturerGradebookController extends Controller
 
     private function authorizeApprover(?User $user, TeachingAssignment $assignment): void
     {
-        abort_unless($user, 403, 'Unauthorized');
-        if ($user->role === 'dosen') {
-            abort_unless($user->lecturer && TeachingAssignment::where('course_offering_id', $assignment->course_offering_id)
-                ->where('lecturer_id', $user->lecturer->id)->where('role', 'coordinator')->where('status', 'Aktif')->exists(), 403, 'Hanya koordinator mata kuliah yang dapat menyetujui nilai.');
-            return;
-        }
         $this->authorizeAdmin($user, $assignment);
     }
 
@@ -367,19 +395,26 @@ class LecturerGradebookController extends Controller
             'approvedAt' => $submission?->approved_at?->toISOString(),
             'lockedAt' => $submission?->locked_at?->toISOString(),
             'reopenReason' => $submission?->reopen_reason,
+            'cpmkAnalysis' => $submission?->cpmk_analysis,
         ];
     }
 
     private function scoreIsComplete(?StudentAssessmentScore $score): bool
     {
-        if (!$score) return false;
-        if (in_array($score->eligibility_status, ['not_eligible_attendance', 'absent'], true)) return true;
+        if (! $score) {
+            return false;
+        }
+        if (in_array($score->eligibility_status, ['not_eligible_attendance', 'absent'], true)) {
+            return true;
+        }
+
         return $score->eligibility_status === 'eligible' && $score->score !== null;
     }
 
     private function assignmentPayload(TeachingAssignment $assignment): array
     {
         $offering = $assignment->courseOffering;
+
         return [
             'id' => $assignment->id,
             'courseOfferingId' => $assignment->course_offering_id,
@@ -390,6 +425,30 @@ class LecturerGradebookController extends Controller
             'cohortYear' => $offering?->academicClass?->cohort_year,
             'academicYear' => $offering?->academicPeriod?->academic_year,
             'semester' => $offering?->academicPeriod?->semester,
+        ];
+    }
+
+    private function assignmentSummaryPayload(TeachingAssignment $assignment): array
+    {
+        $payload = $this->assignmentPayload($assignment);
+        $plan = $this->publishedPlan($assignment);
+        $enrollments = CourseEnrollment::with('scores')
+            ->where('course_offering_id', $assignment->course_offering_id)
+            ->where('enrollment_status', 'active')
+            ->get();
+        $requiredItemIds = $plan->items()->where('is_required', true)->pluck('id');
+        $completedStudents = $enrollments->filter(function ($enrollment) use ($requiredItemIds) {
+            $scores = $enrollment->scores->keyBy('assessment_item_id');
+
+            return $requiredItemIds->every(fn ($itemId) => $this->scoreIsComplete($scores->get($itemId)));
+        })->count();
+
+        return [
+            ...$payload,
+            'gradeStatus' => $plan->gradeSubmission?->status ?? 'Draft',
+            'studentCount' => $enrollments->count(),
+            'completedStudents' => $completedStudents,
+            'assessmentItemCount' => $plan->items()->count(),
         ];
     }
 }

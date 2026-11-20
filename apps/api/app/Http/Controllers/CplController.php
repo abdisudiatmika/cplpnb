@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Cpl;
+use App\Models\GraduateProfile;
+use App\Services\StudentCplAchievementService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -10,6 +12,8 @@ use Illuminate\Validation\Rule;
 
 class CplController extends Controller
 {
+    public function __construct(private StudentCplAchievementService $studentCplAchievements) {}
+
     public function index(Request $request)
     {
         $user = $request->user();
@@ -17,6 +21,7 @@ class CplController extends Controller
         if ($user && $user->role === 'admin_jurusan') {
             $query->where('department_id', $user->department_id);
         }
+
         return response()->json($query->get());
     }
 
@@ -48,19 +53,21 @@ class CplController extends Controller
             'department_id' => 'required|exists:departments,id',
         ]);
 
-        if (!isset($validated['target_value']) || $validated['target_value'] === null) {
+        if (! isset($validated['target_value']) || $validated['target_value'] === null) {
             $validated['target_value'] = 75;
         }
 
         $validated['id'] = (string) Str::uuid();
 
         $cpl = Cpl::create($validated);
+
         return response()->json($cpl->load('department'), 201);
     }
 
     public function show(string $id)
     {
         $cpl = Cpl::with('department')->findOrFail($id);
+
         return response()->json($cpl);
     }
 
@@ -72,9 +79,15 @@ class CplController extends Controller
         $departmentId = $request->input('departmentId', $request->input('department_id'));
 
         $effectiveDepartmentId = $departmentId ?? $cpl->department_id;
-        if ($request->has('code')) $request->merge(['code' => strtoupper(trim((string) $request->input('code')))]);
-        if ($targetValue !== null) $request->merge(['target_value' => $targetValue]);
-        if ($departmentId !== null) $request->merge(['department_id' => $departmentId]);
+        if ($request->has('code')) {
+            $request->merge(['code' => strtoupper(trim((string) $request->input('code')))]);
+        }
+        if ($targetValue !== null) {
+            $request->merge(['target_value' => $targetValue]);
+        }
+        if ($departmentId !== null) {
+            $request->merge(['department_id' => $departmentId]);
+        }
 
         $validated = $request->validate([
             'code' => [
@@ -95,6 +108,7 @@ class CplController extends Controller
         }
 
         $cpl->update($validated);
+
         return response()->json($cpl->load('department'));
     }
 
@@ -102,6 +116,7 @@ class CplController extends Controller
     {
         $cpl = Cpl::findOrFail($id);
         $cpl->delete();
+
         return response()->json(null, 204);
     }
 
@@ -159,7 +174,7 @@ class CplController extends Controller
             ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
             ->select('course_cpl_mappings.course_id', 'course_cpl_mappings.weight', 'courses.code as course_code', 'courses.name as course_name', 'courses.sks')
             ->where('course_cpl_mappings.cpl_id', $cplId)
-            ->when($departmentId, function($q) use ($departmentId) {
+            ->when($departmentId, function ($q) use ($departmentId) {
                 return $q->where('courses.department_id', $departmentId);
             })->get();
 
@@ -169,13 +184,19 @@ class CplController extends Controller
 
         // Get filtered students
         $studentQuery = \App\Models\Student::query();
-        if ($departmentId) $studentQuery->where('department_id', $departmentId);
-        if ($angkatan) $studentQuery->where('angkatan', $angkatan);
-        if ($kelas) $studentQuery->where('kelas', $kelas);
+        if ($departmentId) {
+            $studentQuery->where('department_id', $departmentId);
+        }
+        if ($angkatan) {
+            $studentQuery->where('angkatan', $angkatan);
+        }
+        if ($kelas) {
+            $studentQuery->where('kelas', $kelas);
+        }
         $students = $studentQuery->pluck('id');
 
         if ($students->isEmpty()) {
-            return response()->json($mappings->map(function($map) {
+            return response()->json($mappings->map(function ($map) {
                 return [
                     'course_code' => $map->course_code,
                     'course_name' => $map->course_name,
@@ -209,7 +230,9 @@ class CplController extends Controller
             $count = 0;
 
             foreach ($grades as $g) {
-                if ($g->grade === 'Belum Diambil') continue;
+                if ($g->grade === 'Belum Diambil') {
+                    continue;
+                }
 
                 $scoreVal = 0;
                 if (isset($g->score) && $g->score !== null && $g->score > 0) {
@@ -262,26 +285,40 @@ class CplController extends Controller
         $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
         $averages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType, $academicYear);
+
         return response()->json($averages);
     }
 
     private function calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType = null, $academicYear = null)
     {
         $cplQuery = Cpl::query();
-        if ($departmentId) $cplQuery->where('department_id', $departmentId);
+        if ($departmentId) {
+            $cplQuery->where('department_id', $departmentId);
+        }
         $allCpls = $cplQuery->get();
 
         $studentQuery = \App\Models\Student::query();
-        if ($departmentId) $studentQuery->where('department_id', $departmentId);
-        if ($angkatan) $studentQuery->where('angkatan', $angkatan);
-        if ($kelas) $studentQuery->where('kelas', $kelas);
-        
+        if ($departmentId) {
+            $studentQuery->where('department_id', $departmentId);
+        }
+        if ($angkatan) {
+            $studentQuery->where('angkatan', $angkatan);
+        }
+        if ($kelas) {
+            $studentQuery->where('kelas', $kelas);
+        }
+
         $studentsList = $studentQuery->get();
+
+        // Nilai OBE resmi berasal dari rencana asesmen yang sudah dikunci.
+        // Data student_grades tetap dipakai sebagai fallback untuk data historis.
+        $obeScoresByStudent = $this->studentCplAchievements
+            ->calculate($studentsList, $semesterType, $academicYear);
 
         $allMappings = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
             ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
             ->select('course_cpl_mappings.cpl_id', 'course_cpl_mappings.course_id', 'course_cpl_mappings.weight', 'courses.sks')
-            ->when($departmentId, function($q) use ($departmentId) {
+            ->when($departmentId, function ($q) use ($departmentId) {
                 return $q->where('courses.department_id', $departmentId);
             })->get();
 
@@ -290,13 +327,13 @@ class CplController extends Controller
         $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
             ->join('students', 'student_grades.student_id', '=', 'students.id')
             ->select('student_grades.student_id', 'student_grades.course_id', 'student_grades.grade', 'student_grades.score', 'student_grades.semester')
-            ->when($departmentId, function($q) use ($departmentId) {
+            ->when($departmentId, function ($q) use ($departmentId) {
                 return $q->where('students.department_id', $departmentId);
             })
-            ->when($angkatan, function($q) use ($angkatan) {
+            ->when($angkatan, function ($q) use ($angkatan) {
                 return $q->where('students.angkatan', $angkatan);
             })
-            ->when($kelas, function($q) use ($kelas) {
+            ->when($kelas, function ($q) use ($kelas) {
                 return $q->where('students.kelas', $kelas);
             })
             ->get();
@@ -304,7 +341,7 @@ class CplController extends Controller
 
         $gradesMap = [];
         foreach ($allGrades as $g) {
-            $gradesMap[$g->student_id . '_' . $g->course_id] = [
+            $gradesMap[$g->student_id.'_'.$g->course_id] = [
                 'grade' => $g->grade,
                 'score' => $g->score,
             ];
@@ -315,7 +352,7 @@ class CplController extends Controller
         foreach ($allCpls as $cpl) {
             $mappings = $allMappings->where('cpl_id', $cpl->id);
 
-            if ($mappings->isEmpty() || $studentsList->isEmpty()) {
+            if ($studentsList->isEmpty()) {
                 $averages[] = [
                     'id' => $cpl->id,
                     'code' => $cpl->code,
@@ -325,6 +362,7 @@ class CplController extends Controller
                     'status' => 'Belum Diukur',
                     'target' => $cpl->target_value ?? 70,
                 ];
+
                 continue;
             }
 
@@ -332,12 +370,20 @@ class CplController extends Controller
             $studentsMeasured = 0;
 
             foreach ($studentsList as $student) {
+                $studentObeScores = $obeScoresByStudent->get($student->id, collect());
+                if ($studentObeScores->has($cpl->id)) {
+                    $totalCplSum += (float) $studentObeScores->get($cpl->id);
+                    $studentsMeasured++;
+
+                    continue;
+                }
+
                 $totalScoreWeight = 0;
                 $totalWeight = 0;
                 $takenCoursesCount = 0;
 
                 foreach ($mappings as $map) {
-                    $key = $student->id . '_' . $map->course_id;
+                    $key = $student->id.'_'.$map->course_id;
                     $gObj = $gradesMap[$key] ?? null;
 
                     if ($gObj && $gObj['grade'] !== 'Belum Diambil') {
@@ -374,17 +420,17 @@ class CplController extends Controller
             } else {
                 $value = round($totalCplSum / $studentsMeasured);
                 $target = $cpl->target_value ?? 75;
-                
+
                 if ($value >= 85) {
                     $status = 'Sangat kompeten (Exemplary)';
-                } else if ($value >= 75) {
+                } elseif ($value >= 75) {
                     $status = 'Kompeten (Competent)';
-                } else if ($value >= 60) {
+                } elseif ($value >= 60) {
                     $status = 'Berkembang (Developing)';
                 } else {
                     $status = 'Tidak memuaskan (Unsatisfactory)';
                 }
-                
+
                 $averages[] = [
                     'id' => $cpl->id,
                     'code' => $cpl->code,
@@ -410,13 +456,21 @@ class CplController extends Controller
         $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
         $coursesQuery = \App\Models\Course::query();
-        if ($departmentId) $coursesQuery->where('department_id', $departmentId);
+        if ($departmentId) {
+            $coursesQuery->where('department_id', $departmentId);
+        }
         $courses = $coursesQuery->get();
 
         $studentQuery = \App\Models\Student::query();
-        if ($departmentId) $studentQuery->where('department_id', $departmentId);
-        if ($angkatan) $studentQuery->where('angkatan', $angkatan);
-        if ($kelas) $studentQuery->where('kelas', $kelas);
+        if ($departmentId) {
+            $studentQuery->where('department_id', $departmentId);
+        }
+        if ($angkatan) {
+            $studentQuery->where('angkatan', $angkatan);
+        }
+        if ($kelas) {
+            $studentQuery->where('kelas', $kelas);
+        }
         $studentIds = $studentQuery->pluck('id');
 
         $allMappings = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
@@ -445,7 +499,9 @@ class CplController extends Controller
             $gradedCount = 0;
 
             foreach ($courseGrades as $g) {
-                if ($g->grade === 'Belum Diambil') continue;
+                if ($g->grade === 'Belum Diambil') {
+                    continue;
+                }
                 $scoreVal = 0;
                 if (isset($g->score) && $g->score !== null && $g->score > 0) {
                     $scoreVal = $g->score <= 10 ? $g->score * 10 : $g->score;
@@ -489,12 +545,13 @@ class CplController extends Controller
 
     private function filterGradesForAcademicPeriod($grades, $studentsById, $semesterType = null, $academicYear = null)
     {
-        if (!$semesterType && !$academicYear) {
+        if (! $semesterType && ! $academicYear) {
             return $grades;
         }
 
         return $grades->filter(function ($grade) use ($studentsById, $semesterType, $academicYear) {
             $student = $studentsById->get($grade->student_id);
+
             return $this->gradeMatchesAcademicPeriod($grade->semester ?? null, $student->angkatan ?? null, $semesterType, $academicYear);
         })->values();
     }
@@ -514,17 +571,18 @@ class CplController extends Controller
             return false;
         }
 
-        if (!$academicYear) {
+        if (! $academicYear) {
             return true;
         }
 
         $currentSemester = $this->currentSemesterForCohort($angkatan, $academicYear, $period);
+
         return $currentSemester === null || $semesterNumber === $currentSemester;
     }
 
     private function currentSemesterForCohort($angkatan, $academicYear, $semesterType = null)
     {
-        if (!$angkatan || !preg_match('/^\d{4}/', (string) $academicYear, $matches)) {
+        if (! $angkatan || ! preg_match('/^\d{4}/', (string) $academicYear, $matches)) {
             return null;
         }
 
@@ -536,6 +594,7 @@ class CplController extends Controller
 
         $period = strtolower(trim((string) $semesterType));
         $semesterOffset = $period === 'ganjil' ? 1 : 2;
+
         return max(0, (($academicStartYear - $cohortYear) * 2) + $semesterOffset);
     }
 
@@ -576,14 +635,17 @@ class CplController extends Controller
         $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
         $allCpls = Cpl::where('department_id', $departmentId)->get();
+        $obeScores = $this->studentCplAchievements
+            ->calculate(collect([$student]), $semesterType, $academicYear)
+            ->get($student->id, collect());
 
-        $allMappings = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
+        $allMappings = DB::table('course_cpl_mappings')
             ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
             ->select('course_cpl_mappings.cpl_id', 'course_cpl_mappings.course_id', 'course_cpl_mappings.weight', 'courses.sks')
             ->where('courses.department_id', $departmentId)
             ->get();
 
-        $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
+        $allGrades = DB::table('student_grades')
             ->where('student_id', $studentId)
             ->get();
         $allGrades = $this->filterGradesForAcademicPeriod(
@@ -604,18 +666,17 @@ class CplController extends Controller
         $achievements = [];
 
         foreach ($allCpls as $cpl) {
+            if ($obeScores->has($cpl->id)) {
+                $achievements[] = $this->achievementPayload($cpl, (float) $obeScores->get($cpl->id));
+
+                continue;
+            }
+
             $mappings = $allMappings->where('cpl_id', $cpl->id);
 
             if ($mappings->isEmpty()) {
-                $achievements[] = [
-                    'id' => $cpl->id,
-                    'code' => $cpl->code,
-                    'name' => $cpl->name,
-                    'description' => $cpl->description,
-                    'value' => 0,
-                    'status' => 'Belum Diukur',
-                    'target' => $cpl->target_value ?? 75,
-                ];
+                $achievements[] = $this->achievementPayload($cpl, null);
+
                 continue;
             }
 
@@ -642,42 +703,72 @@ class CplController extends Controller
             }
 
             if ($takenCoursesCount === 0 || $totalWeight == 0) {
-                $achievements[] = [
-                    'id' => $cpl->id,
-                    'code' => $cpl->code,
-                    'name' => $cpl->name,
-                    'description' => $cpl->description,
-                    'value' => 0,
-                    'status' => 'Belum Diukur',
-                    'target' => $cpl->target_value ?? 75,
-                ];
+                $achievements[] = $this->achievementPayload($cpl, null);
             } else {
-                $value = round($totalScoreWeight / $totalWeight);
-                $target = $cpl->target_value ?? 75;
-                
-                if ($value >= 85) {
-                    $status = 'Sangat kompeten (Exemplary)';
-                } else if ($value >= 75) {
-                    $status = 'Kompeten (Competent)';
-                } else if ($value >= 60) {
-                    $status = 'Berkembang (Developing)';
-                } else {
-                    $status = 'Tidak memuaskan (Unsatisfactory)';
-                }
-
-                $achievements[] = [
-                    'id' => $cpl->id,
-                    'code' => $cpl->code,
-                    'name' => $cpl->name,
-                    'description' => $cpl->description,
-                    'value' => $value,
-                    'status' => $status,
-                    'target' => $target,
-                ];
+                $achievements[] = $this->achievementPayload($cpl, round($totalScoreWeight / $totalWeight, 2));
             }
         }
-        
+
         return response()->json($achievements);
+    }
+
+    public function transcript(Request $request, string $studentId)
+    {
+        $student = \App\Models\Student::with('department')->findOrFail($studentId);
+        $user = $request->user();
+        if ($user && $user->role === 'admin_jurusan' && $student->department_id !== $user->department_id) {
+            abort(403, 'Unauthorized');
+        }
+
+        $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
+        $academicYear = $request->query('academicYear', $request->query('academic_year'));
+        $achievements = $this->achievements($request, $studentId)->getData(true);
+        $details = $this->studentCplAchievements->details(collect([$student]), $semesterType, $academicYear)->get($student->id, collect())->values();
+        $profiles = GraduateProfile::with('cplMappings.cpl')
+            ->where('department_id', $student->department_id)->where('status', 'Aktif')->orderBy('sequence')->get()
+            ->map(function ($profile) use ($achievements) {
+                $values = collect($profile->cplMappings)->map(fn ($mapping) => collect($achievements)->firstWhere('id', $mapping->cpl_id))
+                    ->filter(fn ($cpl) => $cpl && (float) ($cpl['value'] ?? 0) > 0)->pluck('value');
+                $score = $values->isEmpty() ? null : round((float) $values->avg(), 2);
+                return ['id' => $profile->id, 'code' => $profile->code, 'name' => $profile->name, 'englishName' => $profile->english_name,
+                    'summary' => $profile->summary, 'score' => $score, 'status' => $score === null ? 'Belum Diukur' : ($score >= 75 ? 'Tercapai' : 'Belum Tercapai'),
+                    'cpls' => $profile->cplMappings->map(fn ($mapping) => ['code' => $mapping->cpl?->code, 'type' => $mapping->contribution_type])->filter(fn ($mapping) => $mapping['code'])->values()->all()];
+            })->values();
+        $measured = collect($achievements)->filter(fn ($item) => (float) ($item['value'] ?? 0) > 0);
+        return response()->json(['student' => ['id' => $student->id, 'nim' => $student->nim, 'name' => $student->name, 'angkatan' => $student->angkatan, 'kelas' => $student->kelas, 'status' => $student->status, 'programStudi' => $student->department?->name],
+            'summary' => ['totalCpl' => count($achievements), 'measuredCpl' => $measured->count(), 'competentCpl' => $measured->filter(fn ($item) => (float) $item['value'] >= 75)->count(), 'averageCpl' => $measured->isEmpty() ? null : round((float) $measured->avg('value'), 2), 'target' => 75],
+            'profiles' => $profiles, 'cpls' => $achievements, 'cpmks' => $details]);
+    }
+
+    private function achievementPayload(Cpl $cpl, ?float $value): array
+    {
+        return [
+            'id' => $cpl->id,
+            'code' => $cpl->code,
+            'name' => $cpl->name,
+            'description' => $cpl->description,
+            'value' => $value === null ? 0 : round($value, 2),
+            'status' => $this->achievementStatus($value),
+            'target' => $cpl->target_value ?? 75,
+        ];
+    }
+
+    private function achievementStatus(?float $value): string
+    {
+        if ($value === null) {
+            return 'Belum Diukur';
+        }
+        if ($value >= 85) {
+            return 'Sangat kompeten (Exemplary)';
+        }
+        if ($value >= 75) {
+            return 'Kompeten (Competent)';
+        }
+        if ($value >= 60) {
+            return 'Berkembang (Developing)';
+        }
+
+        return 'Tidak memuaskan (Unsatisfactory)';
     }
 
     public function achievementsBulk(Request $request)
@@ -729,8 +820,9 @@ class CplController extends Controller
             $semesterType,
             $academicYear
         )->groupBy('student_id');
+        $obeScoresByStudent = $this->studentCplAchievements->calculate($students, $semesterType, $academicYear);
 
-        $result = $students->map(function ($student) use ($allCpls, $mappingsByCpl, $gradesByStudent) {
+        $result = $students->map(function ($student) use ($allCpls, $mappingsByCpl, $gradesByStudent, $obeScoresByStudent) {
             $gradesMap = [];
             foreach ($gradesByStudent->get($student->id, collect()) as $grade) {
                 $gradesMap[$grade->course_id] = [
@@ -738,15 +830,20 @@ class CplController extends Controller
                     'score' => $grade->score,
                 ];
             }
+            $obeScores = $obeScoresByStudent->get($student->id, collect());
 
-            $achievements = $allCpls->map(function ($cpl) use ($mappingsByCpl, $gradesMap) {
+            $achievements = $allCpls->map(function ($cpl) use ($mappingsByCpl, $gradesMap, $obeScores) {
+                if ($obeScores->has($cpl->id)) {
+                    return $this->achievementPayload($cpl, (float) $obeScores->get($cpl->id));
+                }
+
                 $mappings = $mappingsByCpl->get($cpl->id, collect());
                 $totalScoreWeight = 0;
                 $totalWeight = 0;
 
                 foreach ($mappings as $mapping) {
                     $grade = $gradesMap[$mapping->course_id] ?? null;
-                    if (!$grade || $grade['grade'] === 'Belum Diambil') {
+                    if (! $grade || $grade['grade'] === 'Belum Diambil') {
                         continue;
                     }
 
@@ -758,28 +855,10 @@ class CplController extends Controller
                     $totalWeight += $weight;
                 }
 
-                $value = $totalWeight > 0 ? round($totalScoreWeight / $totalWeight) : 0;
-                if ($value >= 85) {
-                    $status = 'Sangat kompeten (Exemplary)';
-                } elseif ($value >= 75) {
-                    $status = 'Kompeten (Competent)';
-                } elseif ($value >= 60) {
-                    $status = 'Berkembang (Developing)';
-                } elseif ($value > 0) {
-                    $status = 'Tidak memuaskan (Unsatisfactory)';
-                } else {
-                    $status = 'Belum Diukur';
-                }
-
-                return [
-                    'id' => $cpl->id,
-                    'code' => $cpl->code,
-                    'name' => $cpl->name,
-                    'description' => $cpl->description,
-                    'value' => $value,
-                    'status' => $status,
-                    'target' => $cpl->target_value ?? 75,
-                ];
+                return $this->achievementPayload(
+                    $cpl,
+                    $totalWeight > 0 ? round($totalScoreWeight / $totalWeight, 2) : null
+                );
             })->values();
 
             return [

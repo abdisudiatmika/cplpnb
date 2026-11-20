@@ -4,10 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\AcademicClass;
 use App\Models\AcademicPeriod;
-use App\Models\Cpl;
-use App\Models\Cpmk;
 use App\Models\Course;
 use App\Models\CourseOffering;
+use App\Models\Cpl;
+use App\Models\Cpmk;
 use App\Models\Department;
 use App\Models\Lecturer;
 use App\Models\TeachingAssignment;
@@ -66,8 +66,8 @@ class AssessmentPlanTest extends TestCase
         $context = $this->context();
         $plan = $this->createPublishedPlan($context);
 
-        $this->actingAs($context['admin'])->putJson('/api/assessment-plans/' . $plan['id'], ['items' => []])->assertUnprocessable();
-        $this->actingAs($context['admin'])->deleteJson('/api/assessment-plans/' . $plan['id'])->assertUnprocessable();
+        $this->actingAs($context['admin'])->putJson('/api/assessment-plans/'.$plan['id'], ['items' => []])->assertUnprocessable();
+        $this->actingAs($context['admin'])->deleteJson('/api/assessment-plans/'.$plan['id'])->assertUnprocessable();
     }
 
     public function test_assessment_item_rejects_cpmk_from_another_course(): void
@@ -116,7 +116,7 @@ class AssessmentPlanTest extends TestCase
             ])->assertCreated();
         } else {
             $draft = \App\Models\AssessmentPlan::where('course_offering_id', $context['offering']->id)->where('status', 'Draft')->firstOrFail();
-            $this->actingAs($context['admin'])->putJson('/api/assessment-plans/' . $draft->id, ['items' => [
+            $this->actingAs($context['admin'])->putJson('/api/assessment-plans/'.$draft->id, ['items' => [
                 ['cpmkId' => $context['cpmk1']->id, 'category' => 'assignment', 'name' => 'Tugas', 'weight' => 40, 'sequence' => 1],
                 ['cpmkId' => $context['cpmk2']->id, 'category' => 'final', 'name' => 'UAS', 'weight' => 60, 'sequence' => 2],
             ]])->assertOk();
@@ -124,7 +124,8 @@ class AssessmentPlanTest extends TestCase
         }
 
         $id = is_array($response) ? $response['id'] : $response->json('id');
-        $this->actingAs($context['admin'])->postJson('/api/assessment-plans/' . $id . '/publish')->assertOk();
+        $this->actingAs($context['admin'])->postJson('/api/assessment-plans/'.$id.'/publish')->assertOk();
+
         return ['id' => $id];
     }
 
@@ -144,7 +145,7 @@ class AssessmentPlanTest extends TestCase
         $period = AcademicPeriod::create(['department_id' => $department->id, 'academic_year' => '2025/2026', 'semester' => 'Ganjil', 'status' => 'Aktif']);
         $class = AcademicClass::create(['department_id' => $department->id, 'name' => 'A', 'cohort_year' => 2025, 'status' => 'Aktif']);
         $offering = CourseOffering::create(['course_id' => $course->id, 'academic_class_id' => $class->id, 'academic_period_id' => $period->id, 'status' => 'Aktif']);
-        TeachingAssignment::create(['course_offering_id' => $offering->id, 'lecturer_id' => $lecturer->id, 'role' => 'coordinator', 'status' => 'Aktif', 'assigned_by' => $admin->id]);
+        TeachingAssignment::create(['course_offering_id' => $offering->id, 'lecturer_id' => $lecturer->id, 'role' => 'member', 'status' => 'Aktif', 'assigned_by' => $admin->id]);
 
         return compact('department', 'admin', 'lecturerUser', 'lecturer', 'course', 'cpmk1', 'cpmk2', 'offering');
     }

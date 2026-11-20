@@ -6,11 +6,11 @@ use App\Models\AcademicClass;
 use App\Models\AcademicPeriod;
 use App\Models\AssessmentItem;
 use App\Models\AssessmentPlan;
-use App\Models\Cpl;
-use App\Models\Cpmk;
 use App\Models\Course;
 use App\Models\CourseEnrollment;
 use App\Models\CourseOffering;
+use App\Models\Cpl;
+use App\Models\Cpmk;
 use App\Models\Department;
 use App\Models\Lecturer;
 use App\Models\Student;
@@ -52,8 +52,8 @@ class GradeSubmissionWorkflowTest extends TestCase
             ->postJson("/api/lecturer-gradebooks/{$context['memberAssignment']->id}/approve")
             ->assertForbidden();
 
-        $this->actingAs($context['coordinatorUser'])
-            ->postJson("/api/lecturer-gradebooks/{$context['coordinatorAssignment']->id}/approve")
+        $this->actingAs($context['admin'])
+            ->postJson("/api/lecturer-gradebooks/{$context['memberAssignment']->id}/approve")
             ->assertOk()->assertJsonPath('submission.status', 'Approved');
 
         $this->actingAs($context['admin'])
@@ -65,6 +65,17 @@ class GradeSubmissionWorkflowTest extends TestCase
             ->assertJsonPath('gradeStatuses.Locked', 1)
             ->assertJsonFragment(['code' => 'CPL-1', 'value' => 70, 'status' => 'Belum Kompeten'])
             ->assertJsonFragment(['code' => 'CPL-2', 'value' => 80, 'status' => 'Kompeten']);
+
+        $this->actingAs($context['admin'])->getJson('/api/cpl/achievements/'.$context['student']->id)
+            ->assertOk()
+            ->assertJsonFragment(['code' => 'CPL-1', 'value' => 70, 'status' => 'Berkembang (Developing)'])
+            ->assertJsonFragment(['code' => 'CPL-2', 'value' => 80, 'status' => 'Kompeten (Competent)']);
+
+        $this->actingAs($context['admin'])->getJson('/api/cpl/achievements-bulk')
+            ->assertOk()
+            ->assertJsonFragment(['nim' => '25099', 'name' => 'Mahasiswa Workflow'])
+            ->assertJsonFragment(['code' => 'CPL-1', 'value' => 70, 'status' => 'Berkembang (Developing)'])
+            ->assertJsonFragment(['code' => 'CPL-2', 'value' => 80, 'status' => 'Kompeten (Competent)']);
 
         $this->actingAs($context['admin'])
             ->postJson("/api/lecturer-gradebooks/{$context['memberAssignment']->id}/reopen", ['reason' => 'Perbaikan nilai berdasarkan berita acara.'])
@@ -81,10 +92,14 @@ class GradeSubmissionWorkflowTest extends TestCase
         $response = $this->saveCompleteScores($context, $context['memberAssignment']);
 
         $response->assertJsonPath('students.0.finalScore', 76)
-            ->assertJsonPath('students.0.cpmkScores.' . $context['cpmk1']->id, 70)
-            ->assertJsonPath('students.0.cpmkScores.' . $context['cpmk2']->id, 80)
+            ->assertJsonPath('students.0.cpmkScores.'.$context['cpmk1']->id, 70)
+            ->assertJsonPath('students.0.cpmkScores.'.$context['cpmk2']->id, 80)
             ->assertJsonPath('students.0.cplScores.CPL-1', 70)
             ->assertJsonPath('students.0.cplScores.CPL-2', 80);
+
+        $this->actingAs($context['admin'])->getJson('/api/cpl/achievements/'.$context['student']->id)
+            ->assertOk()
+            ->assertJsonFragment(['code' => 'CPL-1', 'value' => 0, 'status' => 'Belum Diukur']);
     }
 
     private function saveCompleteScores(array $context, TeachingAssignment $assignment)
@@ -100,9 +115,7 @@ class GradeSubmissionWorkflowTest extends TestCase
         $department = Department::create(['id' => (string) Str::uuid(), 'code' => 'AK', 'name' => 'Akuntansi']);
         $admin = $this->user('admin_jurusan', $department->id, 'admin-workflow@example.test', 'Admin');
         $lecturerUser = $this->user('dosen', $department->id, 'member-workflow@example.test', 'Dosen Anggota');
-        $coordinatorUser = $this->user('dosen', $department->id, 'coordinator-workflow@example.test', 'Koordinator');
         $lecturer = Lecturer::create(['user_id' => $lecturerUser->id, 'department_id' => $department->id, 'employee_number' => 'NIP-W1', 'status' => 'Aktif']);
-        $coordinator = Lecturer::create(['user_id' => $coordinatorUser->id, 'department_id' => $department->id, 'employee_number' => 'NIP-W2', 'status' => 'Aktif']);
         $course = Course::create(['id' => (string) Str::uuid(), 'department_id' => $department->id, 'code' => 'MKB-W', 'name' => 'Akuntansi Lanjut', 'sks' => 3, 'semester' => 1]);
         $cpmk1 = Cpmk::create(['course_id' => $course->id, 'code' => 'CPMK01-01', 'description' => 'CPMK 1', 'status' => 'Aktif']);
         $cpmk2 = Cpmk::create(['course_id' => $course->id, 'code' => 'CPMK02-01', 'description' => 'CPMK 2', 'status' => 'Aktif']);
@@ -114,14 +127,13 @@ class GradeSubmissionWorkflowTest extends TestCase
         $class = AcademicClass::create(['department_id' => $department->id, 'name' => 'A', 'cohort_year' => 2025, 'status' => 'Aktif']);
         $offering = CourseOffering::create(['course_id' => $course->id, 'academic_class_id' => $class->id, 'academic_period_id' => $period->id, 'status' => 'Aktif']);
         $memberAssignment = TeachingAssignment::create(['course_offering_id' => $offering->id, 'lecturer_id' => $lecturer->id, 'role' => 'member', 'status' => 'Aktif', 'assigned_by' => $admin->id]);
-        $coordinatorAssignment = TeachingAssignment::create(['course_offering_id' => $offering->id, 'lecturer_id' => $coordinator->id, 'role' => 'coordinator', 'status' => 'Aktif', 'assigned_by' => $admin->id]);
         $plan = AssessmentPlan::create(['course_offering_id' => $offering->id, 'version' => 1, 'status' => 'Published', 'published_by' => $admin->id, 'published_at' => now()]);
         $item1 = AssessmentItem::create(['assessment_plan_id' => $plan->id, 'cpmk_id' => $cpmk1->id, 'category' => 'assignment', 'name' => 'Tugas', 'weight' => 40, 'sequence' => 1, 'is_required' => true]);
         $item2 = AssessmentItem::create(['assessment_plan_id' => $plan->id, 'cpmk_id' => $cpmk2->id, 'category' => 'final', 'name' => 'UAS', 'weight' => 60, 'sequence' => 2, 'is_required' => true]);
         $student = Student::create(['id' => (string) Str::uuid(), 'department_id' => $department->id, 'nim' => '25099', 'name' => 'Mahasiswa Workflow', 'angkatan' => '2025', 'kelas' => 'A', 'status' => 'Aktif']);
         $enrollment = CourseEnrollment::create(['course_offering_id' => $offering->id, 'student_id' => $student->id, 'enrollment_status' => 'active']);
 
-        return compact('admin', 'lecturerUser', 'coordinatorUser', 'memberAssignment', 'coordinatorAssignment', 'plan', 'item1', 'item2', 'cpmk1', 'cpmk2', 'enrollment');
+        return compact('admin', 'lecturerUser', 'memberAssignment', 'plan', 'item1', 'item2', 'cpmk1', 'cpmk2', 'student', 'enrollment');
     }
 
     private function user(string $role, string $departmentId, string $email, string $name): User

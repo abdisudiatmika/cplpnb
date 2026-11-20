@@ -26,7 +26,6 @@ class TeachingAssignmentTest extends TestCase
             'cohortYear' => 2025,
             'academicYear' => '2025/2026',
             'semester' => 'Ganjil',
-            'role' => 'coordinator',
         ]);
 
         $response->assertCreated()
@@ -34,7 +33,7 @@ class TeachingAssignmentTest extends TestCase
             ->assertJsonPath('courseCode', 'MPK2462401101')
             ->assertJsonPath('className', 'A')
             ->assertJsonPath('academicYear', '2025/2026')
-            ->assertJsonPath('role', 'coordinator');
+            ->assertJsonPath('role', 'member');
 
         $this->assertDatabaseCount('academic_periods', 1);
         $this->assertDatabaseCount('academic_classes', 1);
@@ -52,7 +51,6 @@ class TeachingAssignmentTest extends TestCase
             'cohortYear' => 2025,
             'academicYear' => '2025/2026',
             'semester' => 'Ganjil',
-            'role' => 'member',
         ];
 
         $this->actingAs($admin)->postJson('/api/teaching-assignments', $payload)->assertCreated();
@@ -93,7 +91,6 @@ class TeachingAssignmentTest extends TestCase
             'cohortYear' => 2024,
             'academicYear' => '2025/2026',
             'semester' => 'Genap',
-            'role' => 'coordinator',
         ])->assertCreated();
 
         $this->actingAs($lecturerUser)->getJson('/api/teaching-assignments/me')
@@ -105,22 +102,52 @@ class TeachingAssignmentTest extends TestCase
         $this->actingAs($lecturerUser)->getJson('/api/teaching-assignments')->assertForbidden();
     }
 
+    public function test_archived_period_is_hidden_from_lecturer_and_can_be_activated_again(): void
+    {
+        [$department, $admin, $lecturer, $course, $lecturerUser] = $this->context();
+        $payload = [
+            'lecturerId' => $lecturer->id,
+            'courseId' => $course->id,
+            'className' => 'A',
+            'cohortYear' => 2025,
+            'academicYear' => '2025/2026',
+            'semester' => 'Ganjil',
+        ];
+
+        $this->actingAs($admin)->postJson('/api/teaching-assignments', $payload)->assertCreated();
+        $this->actingAs($lecturerUser)->getJson('/api/teaching-assignments/me')->assertJsonCount(1);
+
+        $this->actingAs($admin)->postJson('/api/teaching-assignment-periods/archive', [
+            'academicYear' => '2025/2026',
+            'semester' => 'Ganjil',
+        ])->assertOk()->assertJsonPath('0.status', 'Selesai');
+
+        $this->actingAs($lecturerUser)->getJson('/api/teaching-assignments/me')->assertJsonCount(0);
+
+        $this->actingAs($admin)->postJson('/api/teaching-assignment-periods/activate', [
+            'academicYear' => '2025/2026',
+            'semester' => 'Ganjil',
+        ])->assertOk()->assertJsonPath('0.status', 'Aktif');
+
+        $this->actingAs($lecturerUser)->getJson('/api/teaching-assignments/me')->assertJsonCount(1);
+    }
+
     private function context(string $code = 'AK', string $name = 'Akuntansi', string $adminEmail = 'admin@example.test'): array
     {
         $department = Department::create(['id' => (string) Str::uuid(), 'code' => $code, 'name' => $name]);
         $admin = $this->user('admin_jurusan', $department->id, $adminEmail, 'Admin');
-        $lecturerUser = $this->user('dosen', $department->id, 'dosen-' . strtolower($code) . '@example.test', 'Dosen Satu');
+        $lecturerUser = $this->user('dosen', $department->id, 'dosen-'.strtolower($code).'@example.test', 'Dosen Satu');
         $lecturer = Lecturer::create([
             'user_id' => $lecturerUser->id,
             'department_id' => $department->id,
-            'employee_number' => 'NIP-' . $code,
+            'employee_number' => 'NIP-'.$code,
             'status' => 'Aktif',
         ]);
         $course = Course::create([
             'id' => (string) Str::uuid(),
             'department_id' => $department->id,
-            'code' => $code === 'AK' ? 'MPK2462401101' : 'MK-' . $code,
-            'name' => $code === 'AK' ? 'Pendidikan Pancasila' : 'Mata Kuliah ' . $name,
+            'code' => $code === 'AK' ? 'MPK2462401101' : 'MK-'.$code,
+            'name' => $code === 'AK' ? 'Pendidikan Pancasila' : 'Mata Kuliah '.$name,
             'sks' => 2,
             'semester' => 1,
         ]);

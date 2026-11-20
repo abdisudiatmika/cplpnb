@@ -272,6 +272,28 @@ class StudentController extends Controller
         return response()->json(['averageIpk' => $averageIpk]);
     }
 
+    public function academicSummary(Request $request, string $studentId)
+    {
+        $student = Student::findOrFail($studentId);
+        $user = $request->user();
+        if ($user && $user->role === 'admin_jurusan' && $student->department_id !== $user->department_id) abort(403, 'Unauthorized');
+        $grades = DB::table('student_grades')->join('courses', 'student_grades.course_id', '=', 'courses.id')
+            ->where('student_grades.student_id', $studentId)->select('student_grades.grade', 'student_grades.semester', 'courses.sks')->get();
+        $points = ['A'=>4.0,'A-'=>3.7,'B+'=>3.3,'B'=>3.0,'B-'=>2.7,'C+'=>2.3,'C'=>2.0,'D'=>1.0,'E'=>0.0];
+        $totalSks = 0; $passedSks = 0; $quality = 0; $semester = [];
+        foreach ($grades as $grade) {
+            if (!isset($points[$grade->grade])) continue;
+            $sks = (float) $grade->sks; $totalSks += $sks; $quality += $points[$grade->grade] * $sks;
+            if ($points[$grade->grade] >= 2.0) $passedSks += $sks;
+            $semester[$grade->semester ?? 'Tidak diketahui'][] = [$points[$grade->grade], $sks];
+        }
+        $semesterIpk = collect($semester)->mapWithKeys(function ($items, $key) {
+            $sks = collect($items)->sum(fn ($item) => $item[1]); $quality = collect($items)->sum(fn ($item) => $item[0] * $item[1]);
+            return [$key => $sks > 0 ? round($quality / $sks, 2) : null];
+        });
+        return response()->json(['ips' => $semesterIpk->sortKeysDesc()->first(), 'ipk' => $totalSks > 0 ? round($quality / $totalSks, 2) : null, 'totalSks' => $totalSks, 'passedSks' => $passedSks]);
+    }
+
     private function filterGradesForAcademicPeriod($grades, $semesterType = null, $academicYear = null)
     {
         if (!$semesterType && !$academicYear) {

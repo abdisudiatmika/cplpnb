@@ -90,11 +90,13 @@ class CpmkManagementTest extends TestCase
 
         $this->assertDatabaseCount('cpmks', 3);
         $this->assertDatabaseCount('cpmk_cpl_mappings', 3);
+        $this->assertDatabaseCount('course_cpl_mappings', 3);
 
         // Import ulang harus memperbarui data yang sama, bukan menggandakannya.
         $payload['items'][0]['description'] = 'Rumusan CPMK Pancasila yang diperbarui.';
         $this->actingAs($admin)->postJson('/api/cpmks/bulk', $payload)->assertOk();
         $this->assertDatabaseCount('cpmks', 3);
+        $this->assertDatabaseCount('course_cpl_mappings', 3);
         $this->assertDatabaseHas('cpmks', ['description' => 'Rumusan CPMK Pancasila yang diperbarui.']);
     }
 

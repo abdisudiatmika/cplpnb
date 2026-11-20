@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Course;
+use App\Models\CourseCplMapping;
 use App\Models\Cpl;
 use App\Models\Cpmk;
 use App\Models\CpmkCplMapping;
-use App\Models\Course;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -48,7 +48,12 @@ class CpmkController extends Controller
         $departmentId = $this->resolveWritableDepartment($request);
         $data = $this->validatedItem($request->all());
 
-        $cpmk = DB::transaction(fn () => $this->persistItem($data, $departmentId));
+        $cpmk = DB::transaction(function () use ($data, $departmentId) {
+            $cpmk = $this->persistItem($data, $departmentId);
+            $this->syncCourseMappings($cpmk->course_id);
+
+            return $cpmk;
+        });
 
         return response()->json($this->payload($cpmk->load(['course.department', 'cplMappings.cpl'])), 201);
     }
@@ -74,6 +79,7 @@ class CpmkController extends Controller
         throw_if($duplicate, ValidationException::withMessages(['code' => ['Kode CPMK sudah digunakan pada mata kuliah ini.']]));
 
         DB::transaction(function () use ($validated, $cpmk, $course, $departmentId, $code) {
+            $previousCourseId = $cpmk->course_id;
             $cpmk->update([
                 'course_id' => $course->id,
                 'code' => $code,
@@ -82,14 +88,22 @@ class CpmkController extends Controller
                 'status' => $validated['status'] ?? $cpmk->status,
             ]);
 
-            if (isset($validated['cplCode'])) {
-                $cpl = Cpl::where('department_id', $departmentId)->where('code', strtoupper($validated['cplCode']))->firstOrFail();
+            if (isset($validated['cplCode']) || isset($validated['contributionWeight'])) {
+                $currentMapping = $cpmk->cplMappings()->first();
+                $cplCode = $validated['cplCode'] ?? $currentMapping?->cpl?->code;
+                throw_unless($cplCode, ValidationException::withMessages(['cplCode' => ['CPL untuk CPMK ini belum ditentukan.']]));
+                $cpl = Cpl::where('department_id', $departmentId)->where('code', strtoupper($cplCode))->firstOrFail();
                 $cpmk->cplMappings()->delete();
                 CpmkCplMapping::create([
                     'cpmk_id' => $cpmk->id,
                     'cpl_id' => $cpl->id,
-                    'contribution_weight' => $validated['contributionWeight'] ?? 100,
+                    'contribution_weight' => $validated['contributionWeight'] ?? $currentMapping?->contribution_weight ?? 100,
                 ]);
+            }
+
+            $this->syncCourseMappings($previousCourseId);
+            if ($course->id !== $previousCourseId) {
+                $this->syncCourseMappings($course->id);
             }
         });
 
@@ -101,7 +115,11 @@ class CpmkController extends Controller
         $this->authorizeAdministrator($request->user());
         $departmentId = $this->resolveWritableDepartment($request);
         abort_unless($cpmk->course()->where('department_id', $departmentId)->exists(), 403, 'CPMK tidak berada pada jurusan Anda.');
-        $cpmk->delete();
+        DB::transaction(function () use ($cpmk) {
+            $courseId = $cpmk->course_id;
+            $cpmk->delete();
+            $this->syncCourseMappings($courseId);
+        });
 
         return response()->json(null, 204);
     }
@@ -121,16 +139,20 @@ class CpmkController extends Controller
             'items.*.contributionWeight' => 'nullable|numeric|min:0.01|max:100',
         ]);
 
-        $keys = collect($validated['items'])->map(fn (array $item) => strtoupper(trim($item['courseCode'])) . '/' . strtoupper(trim($item['code'])));
+        $keys = collect($validated['items'])->map(fn (array $item) => strtoupper(trim($item['courseCode'])).'/'.strtoupper(trim($item['code'])));
         if ($keys->duplicates()->isNotEmpty()) {
             throw ValidationException::withMessages(['items' => ['Terdapat pasangan mata kuliah dan kode CPMK yang duplikat.']]);
         }
 
         $created = DB::transaction(function () use ($validated, $departmentId) {
-            return collect($validated['items'])->map(fn (array $item) => $this->persistItem($this->validatedItem($item), $departmentId));
+            $created = collect($validated['items'])->map(fn (array $item) => $this->persistItem($this->validatedItem($item), $departmentId));
+            $created->pluck('course_id')->unique()->each(fn (string $courseId) => $this->syncCourseMappings($courseId));
+
+            return $created;
         });
 
         $ids = $created->pluck('id');
+
         return response()->json(
             Cpmk::with(['course.department', 'cplMappings.cpl'])->whereIn('id', $ids)->get()->map(fn (Cpmk $cpmk) => $this->payload($cpmk)),
             200
@@ -142,7 +164,7 @@ class CpmkController extends Controller
         $course = Course::where('department_id', $departmentId)->where('code', $data['courseCode'])->first();
         $cpl = Cpl::where('department_id', $departmentId)->where('code', $data['cplCode'])->first();
 
-        if (!$course || !$cpl) {
+        if (! $course || ! $cpl) {
             throw ValidationException::withMessages([
                 'items' => [sprintf('Mata kuliah %s atau %s tidak ditemukan pada jurusan ini.', $data['courseCode'], $data['cplCode'])],
             ]);
@@ -188,6 +210,26 @@ class CpmkController extends Controller
         }
 
         return $item;
+    }
+
+    private function syncCourseMappings(string $courseId): void
+    {
+        $derivedMappings = CpmkCplMapping::query()
+            ->join('cpmks', 'cpmk_cpl_mappings.cpmk_id', '=', 'cpmks.id')
+            ->where('cpmks.course_id', $courseId)
+            ->where('cpmks.status', 'Aktif')
+            ->groupBy('cpmk_cpl_mappings.cpl_id')
+            ->selectRaw('cpmk_cpl_mappings.cpl_id, SUM(cpmk_cpl_mappings.contribution_weight) AS weight')
+            ->get();
+
+        CourseCplMapping::where('course_id', $courseId)->delete();
+        foreach ($derivedMappings as $mapping) {
+            CourseCplMapping::create([
+                'course_id' => $courseId,
+                'cpl_id' => $mapping->cpl_id,
+                'weight' => (float) $mapping->weight,
+            ]);
+        }
     }
 
     private function resolveReadableDepartment(Request $request): string

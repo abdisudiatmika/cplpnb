@@ -2,24 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-primary: #2155a3;
+  --soft-shadow: 0 2px 8px rgba(30, 41, 59, 0.055);
+  --soft-shadow-raised: 0 8px 24px rgba(30, 41, 59, 0.09);
+}
+
+@layer components {
+  .app-card {
+    @apply bg-white border border-slate-200 rounded-lg;
+    box-shadow: var(--soft-shadow);
+  }
+
+  .app-card-header {
+    @apply flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-100;
+  }
+
+  .metric-card {
+    @apply bg-white border border-slate-200 rounded-lg p-4 flex items-center gap-3;
+    box-shadow: var(--soft-shadow);
+  }
+
+  .metric-icon {
+    @apply w-10 h-10 rounded-lg grid place-items-center shrink-0;
+  }
+
+  .soft-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium transition-colors;
+  }
+}
+
 @layer utilities {
   .glass-card {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    box-shadow: var(--soft-shadow);
     border-radius: 0.5rem;
   }
   
   .glass-panel {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-    border-radius: 0.5rem;
+    box-shadow: var(--soft-shadow);
+    border-radius: 0.5rem !important;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
   
   .glass-panel:hover {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--soft-shadow-raised);
   }
   
   .primary-glow {
@@ -74,9 +104,10 @@
 }
 
 body {
-  background-color: #F8FAFC;
+  background-color: #F5F7FB;
   min-height: 100vh;
   color: #1E293B;
+  font-family: "Roboto", "Helvetica", "Arial", sans-serif;
 }
 
 .material-symbols-outlined {
@@ -102,7 +133,207 @@ body {
 }
 
 input:focus {
-  box-shadow: 0 0 0 2px rgba(192, 193, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(33, 85, 163, 0.12);
+}
+
+input, select, textarea, button {
+  font-family: "Roboto", "Helvetica", "Arial", sans-serif;
+  letter-spacing: 0;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #38BDF8;
+  outline-offset: 2px;
+}
+
+table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+table tbody tr:hover {
+  background-color: #F8FAFC;
+}
+
+.app-shell button:not(.rounded-full),
+.app-shell input,
+.app-shell select,
+.app-shell textarea {
+  border-radius: 8px !important;
+}
+
+.app-shell table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #FFFFFF;
+}
+
+.app-shell thead {
+  color: #94A3B8;
+}
+
+.app-shell thead th {
+  background: #FFFFFF !important;
+  color: #94A3B8;
+  padding: 13px 16px !important;
+  border-bottom: 1px solid #E2E8F0;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.app-shell tbody td {
+  padding: 13px 16px !important;
+  border-bottom: 1px solid #EDF1F5;
+  color: #64748B;
+  font-size: 13px;
+  line-height: 19px;
+  vertical-align: middle;
+}
+
+.app-shell tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.app-shell tbody td strong:not([class*="text-"]),
+.app-shell tbody td b:not([class*="text-"]),
+.app-shell tbody td.font-bold:not([class*="text-"]),
+.app-shell tbody td .font-bold:not([class*="text-"]):not([class*="bg-"]) {
+  color: #334155;
+}
+
+.app-shell table button {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.gradebook-page {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.gradebook-toolbar button,
+.gradebook-toolbar span {
+  white-space: nowrap;
+}
+
+.gradebook-grid {
+  width: 100%;
+  max-width: 100%;
+  scrollbar-color: #CBD5E1 #F8FAFC;
+  scrollbar-width: thin;
+}
+
+.gradebook-grid::-webkit-scrollbar {
+  height: 8px;
+}
+
+.gradebook-grid::-webkit-scrollbar-track {
+  background: #F8FAFC;
+}
+
+.gradebook-grid::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 8px;
+}
+
+.app-shell .gradebook-table thead th {
+  padding: 10px 12px !important;
+  background: #F8FAFC !important;
+  font-size: 10px;
+  line-height: 14px;
+  vertical-align: middle;
+}
+
+.app-shell .gradebook-table thead th.gradebook-assessment-head {
+  padding: 9px 10px !important;
+  border-left: 1px solid #E8EDF3;
+  white-space: normal;
+}
+
+.app-shell .gradebook-table tbody td {
+  height: 58px;
+  padding: 10px 12px !important;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.gradebook-table .gradebook-nim {
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
+}
+
+.gradebook-table .gradebook-name {
+  width: 190px;
+  min-width: 190px;
+  max-width: 190px;
+  box-shadow: 6px 0 8px -8px rgba(15, 23, 42, 0.45);
+}
+
+.gradebook-score-input {
+  min-width: 88px;
+  height: 34px;
+  color: #334155;
+}
+
+.gradebook-score-input::placeholder {
+  color: #94A3B8;
+}
+
+.app-shell .material-symbols-outlined {
+  flex: 0 0 auto;
+  max-width: 28px;
+  overflow: hidden;
+}
+
+aside nav > button {
+  min-height: 40px;
+  border-left: 3px solid transparent;
+}
+
+aside nav > button.bg-primary\/5 {
+  border-left-color: #2155A3;
+  background: #EFF6FF;
+}
+
+aside nav > button .material-symbols-outlined {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 18px;
+  background: #F1F5F9;
+  color: #64748B;
+}
+
+aside nav > button.bg-primary\/5 .material-symbols-outlined {
+  color: #FFFFFF;
+  background: #2155A3;
+  box-shadow: 0 4px 10px rgba(33, 85, 163, 0.22);
+}
+
+@media (max-width: 900px) {
+  aside {
+    width: 76px !important;
+  }
+
+  aside > div {
+    display: none;
+  }
+
+  aside nav > button {
+    justify-content: center;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  aside nav > button > span:not(.material-symbols-outlined) {
+    display: none;
+  }
 }
 
 /* Dynamic Hover Micro-interaction on table rows */
@@ -135,3 +366,284 @@ tr.hover-row:hover {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 }
+
+/* =====================================================================
+   SOFT UI THEME (gaya Soft UI Dashboard, palet Politeknik Negeri Bali)
+   Ditambahkan 23-10-2026. Semua aturan di-scope ke .app-shell agar
+   halaman landing & login tidak terpengaruh. Hapus blok ini untuk
+   kembali ke tampilan lama (cadangan: apps/web/_backup_pre_softui/).
+   ===================================================================== */
+:root {
+  --sui-text: #344767;
+  --sui-muted: #67748E;
+  --sui-head: #8392AB;
+  --sui-bg: #F8F9FA;
+  --sui-border: #E9ECEF;
+  --sui-input-border: #D2D6DA;
+  --sui-card-shadow: 0 20px 27px 0 rgba(0, 0, 0, 0.05);
+  --sui-xs-shadow: 0 0.3125rem 0.625rem 0 rgba(0, 0, 0, 0.12);
+  --sui-btn-shadow: 0 4px 7px -1px rgba(0, 0, 0, 0.11), 0 2px 4px -1px rgba(0, 0, 0, 0.07);
+  --sui-grad-primary: linear-gradient(310deg, #14246B 0%, #2B63C9 100%);
+  --sui-grad-gold: linear-gradient(310deg, #F59E0B 0%, #FCD34D 100%);
+  --sui-grad-info: linear-gradient(310deg, #2152FF 0%, #21D4FD 100%);
+  --sui-grad-success: linear-gradient(310deg, #17AD37 0%, #98EC2D 100%);
+  --sui-grad-error: linear-gradient(310deg, #EA0606 0%, #FF667C 100%);
+  --sui-grad-dark: linear-gradient(310deg, #141727 0%, #3A416F 100%);
+}
+
+.app-shell,
+.app-shell main {
+  background-color: var(--sui-bg) !important;
+  color: var(--sui-text);
+}
+
+/* ---------- Top navbar: melayang, transparan, tanpa garis ---------- */
+.app-shell > header {
+  background: rgba(248, 249, 250, 0.82) !important;
+  backdrop-filter: saturate(200%) blur(30px);
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+}
+.app-shell > header img {
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: var(--sui-xs-shadow);
+}
+.app-shell > header h1 { color: var(--sui-text); }
+.app-shell > header .bg-surface-container-low {
+  background: #FFFFFF !important;
+  border-radius: 12px;
+  box-shadow: var(--sui-card-shadow);
+}
+.app-shell > header .bg-primary\/10 {
+  background: var(--sui-grad-primary) !important;
+  color: #FFFFFF !important;
+}
+.app-shell > header button[title="Keluar"] {
+  border: 0 !important;
+  background: #FFFFFF;
+  box-shadow: var(--sui-xs-shadow);
+}
+
+/* ---------- Sidebar: menempel, item aktif = kartu putih melayang ---------- */
+.app-shell aside {
+  align-self: flex-start;
+  background: transparent !important;
+  border-right: 0 !important;
+  padding-left: 12px;
+  padding-right: 4px;
+}
+.app-shell aside > div:first-child {
+  border-bottom: 0 !important;
+}
+.app-shell aside > div:first-child p {
+  color: var(--sui-text);
+  opacity: 0.6;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.app-shell aside nav > button {
+  min-height: 48px;
+  margin: 2px 0;
+  padding: 8px 12px !important;
+  border-left: 0 !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  color: var(--sui-muted) !important;
+  font-size: 14px;
+  font-weight: 500 !important;
+}
+.app-shell aside nav > button:hover {
+  background: rgba(255, 255, 255, 0.65) !important;
+  color: var(--sui-text) !important;
+}
+.app-shell aside nav > button .material-symbols-outlined {
+  width: 32px;
+  height: 32px;
+  max-width: 32px;
+  border-radius: 8px;
+  font-size: 18px;
+  background: #FFFFFF;
+  color: var(--sui-text);
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075), 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+.app-shell aside nav > button.bg-primary\/5 {
+  background: #FFFFFF !important;
+  color: var(--sui-text) !important;
+  font-weight: 700 !important;
+  box-shadow: var(--sui-card-shadow);
+}
+.app-shell aside nav > button.bg-primary\/5 .material-symbols-outlined {
+  background: var(--sui-grad-primary);
+  color: #FFFFFF;
+  box-shadow: var(--sui-xs-shadow);
+}
+
+/* ---------- Kartu ---------- */
+.app-shell .glass-panel,
+.app-shell .app-card,
+.app-shell .metric-card,
+.app-shell main div[class~="rounded-xl"][class*="border"]:not([class*="bg-white/"]),
+.app-shell main div[class~="bg-surface"][class~="rounded-lg"][class*="border"],
+.app-shell main div[class~="bg-white"][class~="rounded-lg"][class*="border"] {
+  background-color: #FFFFFF;
+  border: 0 !important;
+  border-radius: 16px !important;
+  box-shadow: var(--sui-card-shadow) !important;
+}
+.app-shell .glass-panel:hover { box-shadow: var(--sui-card-shadow) !important; }
+
+/* kartu di dalam kartu: tetap ringan, tanpa bayangan */
+.app-shell .glass-panel div[class~="rounded-xl"][class*="border"],
+.app-shell .app-card div[class~="rounded-xl"][class*="border"],
+.app-shell .app-card div[class~="rounded-lg"][class*="border"],
+.app-shell .glass-panel div[class~="rounded-lg"][class*="border"] {
+  box-shadow: none !important;
+  border: 1px solid var(--sui-border) !important;
+  border-radius: 12px !important;
+}
+
+/* Kartu statistik ala Soft UI: teks kiri, ikon gradien kanan */
+.app-shell .metric-card {
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  padding: 16px 20px;
+}
+.app-shell .metric-card p:first-child {
+  color: var(--sui-muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+}
+.app-shell .metric-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  color: #FFFFFF !important;
+  background: var(--sui-grad-primary) !important;
+  box-shadow: var(--sui-btn-shadow);
+}
+.app-shell .metric-icon.bg-secondary\/10 { background: var(--sui-grad-info) !important; }
+.app-shell .metric-icon.bg-tertiary\/10 { background: var(--sui-grad-dark) !important; }
+.app-shell .metric-icon.bg-surface-tint\/10 { background: var(--sui-grad-gold) !important; }
+.app-shell .metric-icon .material-symbols-outlined { color: #FFFFFF; }
+
+/* ---------- Tombol ---------- */
+.app-shell button.bg-primary,
+.app-shell a.bg-primary,
+.app-shell button.bg-secondary,
+.app-shell button.bg-error {
+  background-image: var(--sui-grad-primary);
+  border: 0 !important;
+  color: #FFFFFF !important;
+  box-shadow: var(--sui-btn-shadow);
+  font-weight: 700 !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.app-shell button.bg-secondary { background-image: var(--sui-grad-info); }
+.app-shell button.bg-error { background-image: var(--sui-grad-error); }
+.app-shell button.bg-primary:hover:not(:disabled),
+.app-shell button.bg-secondary:hover:not(:disabled),
+.app-shell button.bg-error:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+.app-shell button[class*="border-primary"]:not(.bg-primary) {
+  background: transparent;
+  font-weight: 700;
+}
+.app-shell button[class*="border-primary"]:not(.bg-primary):hover {
+  background: rgba(43, 99, 201, 0.06);
+}
+
+/* tombol aksi utama (berikon) memakai huruf kapital ala Soft UI */
+.app-shell button.bg-primary:has(> .material-symbols-outlined),
+.app-shell button.bg-secondary:has(> .material-symbols-outlined) {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 12px !important;
+}
+
+/* ---------- Input ---------- */
+.app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.app-shell select,
+.app-shell textarea {
+  background-color: #FFFFFF;
+  border: 1px solid var(--sui-input-border);
+  color: #495057;
+  box-shadow: none;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.app-shell input:not([type="checkbox"]):not([type="radio"]):focus,
+.app-shell select:focus,
+.app-shell textarea:focus {
+  border-color: #6F9AE8 !important;
+  box-shadow: 0 0 0 2px rgba(43, 99, 201, 0.22) !important;
+  outline: none;
+}
+.app-shell input::placeholder,
+.app-shell textarea::placeholder { color: #ADB5BD; }
+.app-shell label { color: var(--sui-text); }
+
+/* ---------- Tabel ---------- */
+.app-shell table { background: transparent; }
+.app-shell thead th {
+  background: transparent !important;
+  color: var(--sui-head) !important;
+  font-size: 10.5px !important;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
+  padding: 12px 16px !important;
+  border-bottom: 1px solid var(--sui-border) !important;
+}
+.app-shell tbody td {
+  padding: 12px 16px !important;
+  color: var(--sui-muted);
+  font-size: 14px;
+  border-bottom: 1px solid var(--sui-border);
+}
+.app-shell tbody tr:hover { background-color: #F8F9FA; }
+.app-shell main div[class*="overflow-x-auto"][class*="border"] { border: 0 !important; }
+/* tabel input nilai tetap rapat */
+.app-shell .gradebook-table thead th { padding: 10px 12px !important; background: #F8F9FA !important; }
+.app-shell .gradebook-table tbody td { padding: 10px 12px !important; font-size: 13px; }
+
+/* ---------- Badge status ---------- */
+.app-shell span.inline-flex.rounded-full,
+.app-shell td span.rounded-full[class*="px-"] {
+  border-radius: 6px !important;
+  font-size: 10.5px !important;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* ---------- Modal ---------- */
+.app-shell div[class*="fixed"][class*="inset-0"] > div {
+  border: 0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 23px 45px -11px rgba(20, 20, 20, 0.25) !important;
+}
+
+/* ---------- Toast ---------- */
+.app-shell .fixed.top-20.right-6 {
+  animation: none !important;
+  background: #FFFFFF !important;
+  color: var(--sui-text) !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: var(--sui-card-shadow), 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+.app-shell .fixed.top-20.right-6 .material-symbols-outlined {
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 8px; font-size: 18px; color: #FFFFFF;
+  background: var(--sui-grad-primary);
+}
+
+/* ---------- Judul halaman ---------- */
+.app-shell main h3,
+.app-shell main h4 { color: var(--sui-text); }
+
+/* ---------- Footer ---------- */
+.app-shell main footer { border-top: 0 !important; background: transparent !important; }

@@ -6,35 +6,46 @@ interface BarChartProps {
     code: string;
     value: number;
   }>;
+  title?: string;
 }
 
-export const BarChart: React.FC<BarChartProps> = ({ measuredCpls }) => {
+export const BarChart: React.FC<BarChartProps> = ({ measuredCpls, title = 'Rata-rata Nilai per CPL' }) => {
+  const chartLeft = 58;
+  const chartRight = 980;
+  const chartBottom = 260;
+  const plotWidth = chartRight - chartLeft;
+  const targetY = chartBottom - (75 / 100) * 240;
+
   return (
     <div className="glass-panel rounded-xl p-lg flex flex-col justify-between shadow-md">
       <div className="flex items-center justify-between mb-lg">
-        <h4 className="font-headline-lg text-headline-lg text-on-surface font-bold">Rata-rata Nilai per CPL</h4>
+        <h4 className="font-headline-lg text-headline-lg text-on-surface font-bold">{title}</h4>
         <span className="material-symbols-outlined text-outline">bar_chart</span>
       </div>
       
-      <div className="h-[300px] flex items-center justify-center relative bg-white/[0.01] rounded-xl border border-slate-200 shadow-inner">
-        <svg className="w-full h-[260px] max-w-[800px]" viewBox="0 -35 800 335" preserveAspectRatio="xMidYMid meet">
+      <div className="h-[330px] flex items-center justify-center relative bg-white rounded-xl border border-slate-200 shadow-inner px-md">
+        {measuredCpls.length === 0 ? <p className="text-on-surface-variant">Belum ada CPL terukur.</p> : <svg className="w-full h-[290px]" viewBox="0 -35 1000 335" preserveAspectRatio="xMidYMid meet" aria-label="Grafik rata-rata nilai CPL dengan target 75">
           {/* Grid Lines */}
           {[20, 80, 140, 200, 260].map((yVal, idx) => (
             <g key={yVal}>
-              <line x1="40" y1={yVal} x2="780" y2={yVal} stroke="#E2E8F0" strokeWidth="1" />
-              <text x="5" y={yVal + 4} fill="#64748B" fontSize="12" textAnchor="start">
+              <line x1={chartLeft} y1={yVal} x2={chartRight} y2={yVal} stroke="#E2E8F0" strokeWidth="1" />
+              <text x="12" y={yVal + 4} fill="#64748B" fontSize="12" textAnchor="start">
                 {100 - idx * 25}
               </text>
             </g>
           ))}
 
+          <line x1={chartLeft} y1={targetY} x2={chartRight} y2={targetY} stroke="#DC2626" strokeWidth="1.5" strokeDasharray="7 5" />
+          <text x={chartRight - 4} y={targetY - 7} fill="#DC2626" fontSize="11" fontWeight="bold" textAnchor="end">Target 75</text>
+          <text x="14" y="145" fill="#64748B" fontSize="11" fontWeight="bold" textAnchor="middle" transform="rotate(-90 14 145)">Nilai (%)</text>
+
           {/* Bars */}
           {measuredCpls.map((cpl, i) => {
-            const barWidth = Math.max(12, (700 / measuredCpls.length) * 0.6);
-            const spacing = 740 / measuredCpls.length;
-            const barX = 40 + i * spacing + (spacing - barWidth) / 2;
+            const spacing = plotWidth / measuredCpls.length;
+            const barWidth = Math.max(28, Math.min(78, spacing * 0.58));
+            const barX = chartLeft + i * spacing + (spacing - barWidth) / 2;
             const barHeight = (cpl.value / 100) * 240;
-            const barY = 260 - barHeight;
+            const barY = chartBottom - barHeight;
             
             let fillCol = '#10b981'; // Sangat kompeten (Exemplary)
             if (cpl.value === 0) fillCol = '#64748b'; // Belum Diukur (slate)
@@ -56,34 +67,13 @@ export const BarChart: React.FC<BarChartProps> = ({ measuredCpls }) => {
                 <text x={barX + barWidth / 2} y="280" fill="#64748B" fontSize="10" fontWeight="bold" textAnchor="middle">
                   {cpl.code}
                 </text>
-                
-                {/* Custom Hover Tooltip */}
-                <g className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                  <rect
-                    x={barX + barWidth / 2 - 22}
-                    y={barY - 26}
-                    width="44"
-                    height="18"
-                    rx="4"
-                    fill="#1E293B"
-                  />
-                  <text
-                    x={barX + barWidth / 2}
-                    y={barY - 13}
-                    fill="#FFFFFF"
-                    fontSize="10"
-                    fontWeight="bold"
-                    textAnchor="middle"
-                  >
-                    {cpl.value}%
-                  </text>
-                </g>
+                <text x={barX + barWidth / 2} y={Math.max(-2, barY - 8)} fill="#334155" fontSize="11" fontWeight="bold" textAnchor="middle">{cpl.value}</text>
 
                 <title>{`${cpl.code}: ${cpl.value}%`}</title>
               </g>
             );
           })}
-        </svg>
+        </svg>}
       </div>
     </div>
   );
