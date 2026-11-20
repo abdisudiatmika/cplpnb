@@ -23,6 +23,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:lo
 Route::middleware(['auth:sanctum', 'role:super_admin,admin_jurusan,dosen'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me/password', [AuthController::class, 'changePassword'])->middleware('throttle:10,1');
     Route::get('/lecturers/me', [LecturerController::class, 'me']);
     Route::get('/teaching-assignments/me', [TeachingAssignmentController::class, 'me']);
     Route::get('/cpmks', [CpmkController::class, 'index']);

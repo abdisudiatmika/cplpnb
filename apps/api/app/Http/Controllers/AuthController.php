@@ -69,6 +69,32 @@ class AuthController extends Controller
         return response()->json(['message' => 'Logged out successfully']);
     }
 
+    public function changePassword(Request $request)
+    {
+        $validated = $request->validate([
+            'currentPassword' => 'required|string',
+            'password' => 'required|string|min:10|max:255|confirmed|different:currentPassword',
+        ], [
+            'password.min' => 'Kata sandi baru minimal 10 karakter.',
+            'password.confirmed' => 'Konfirmasi kata sandi baru tidak sama.',
+            'password.different' => 'Kata sandi baru harus berbeda dari kata sandi lama.',
+        ]);
+
+        $user = $request->user();
+        if (! Hash::check($validated['currentPassword'], $user->password)) {
+            throw ValidationException::withMessages(['currentPassword' => ['Kata sandi lama tidak sesuai.']]);
+        }
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
+
+        return response()->json(['message' => 'Kata sandi berhasil diganti.']);
+    }
+
     public function me(Request $request)
     {
         $user = $request->user()->load(['department', 'lecturer']);

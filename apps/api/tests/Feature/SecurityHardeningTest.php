@@ -86,4 +86,29 @@ class SecurityHardeningTest extends TestCase
         $this->putJson('/api/user-admins/'.$otherSuper->id, ['password' => 'diambilalih1'])->assertNotFound();
         $this->postJson('/api/departments', ['name' => 'Baru', 'code' => 'BR'])->assertSuccessful();
     }
+
+    public function test_user_can_change_own_password_with_current_password(): void
+    {
+        $department = Department::create(['name' => 'D3 Akuntansi', 'code' => 'AK']);
+        $admin = $this->makeUser('admin_jurusan', $department->id);
+        Sanctum::actingAs($admin);
+
+        $this->putJson('/api/me/password', ['currentPassword' => 'salah', 'password' => 'KataSandiBaru#2026', 'password_confirmation' => 'KataSandiBaru#2026'])
+            ->assertStatus(422)->assertJsonValidationErrors('currentPassword');
+        $this->putJson('/api/me/password', ['currentPassword' => 'rahasia-panjang', 'password' => 'pendek', 'password_confirmation' => 'pendek'])
+            ->assertStatus(422)->assertJsonValidationErrors('password');
+        $this->putJson('/api/me/password', ['currentPassword' => 'rahasia-panjang', 'password' => 'KataSandiBaru#2026', 'password_confirmation' => 'KataSandiBaru#2026'])
+            ->assertOk();
+
+        $this->assertTrue(Hash::check('KataSandiBaru#2026', $admin->fresh()->password));
+    }
+
+    public function test_lecturer_can_also_change_password(): void
+    {
+        $department = Department::create(['name' => 'D3 Akuntansi', 'code' => 'AK']);
+        Sanctum::actingAs($this->makeUser('dosen', $department->id));
+
+        $this->putJson('/api/me/password', ['currentPassword' => 'rahasia-panjang', 'password' => 'KataSandiDosen#2026', 'password_confirmation' => 'KataSandiDosen#2026'])
+            ->assertOk();
+    }
 }

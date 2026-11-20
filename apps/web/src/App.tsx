@@ -551,6 +551,10 @@ export default function App() {
   const [editingCurriculumId, setEditingCurriculumId] = useState<string | null>(null);
   const [curriculumForm, setCurriculumForm] = useState(emptyCurriculumForm);
   const [curriculumSaving, setCurriculumSaving] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', password: '', passwordConfirmation: '' });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
   const [selectedAssignmentPeriod, setSelectedAssignmentPeriod] = useState(() => ({
     academicYear: getActiveAcademicPeriod().academicYear,
     semester: (getActiveAcademicPeriod().isOddSemesterPeriod ? 'Ganjil' : 'Genap') as 'Ganjil' | 'Genap',
@@ -3978,6 +3982,34 @@ export default function App() {
     catch (error: any) { showToast(error.message || 'Profil lulusan tidak dapat dihapus.'); }
   };
 
+  // ================= GANTI KATA SANDI =================
+  const openPasswordModal = () => {
+    setPasswordForm({ currentPassword: '', password: '', passwordConfirmation: '' });
+    setPasswordError('');
+    setShowPasswordModal(true);
+  };
+
+  const savePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPasswordError('');
+    if (passwordForm.password.length < 10) { setPasswordError('Kata sandi baru minimal 10 karakter.'); return; }
+    if (passwordForm.password !== passwordForm.passwordConfirmation) { setPasswordError('Konfirmasi kata sandi baru tidak sama.'); return; }
+    setPasswordSaving(true);
+    try {
+      await apiCall('/me/password', 'PUT', {
+        currentPassword: passwordForm.currentPassword,
+        password: passwordForm.password,
+        password_confirmation: passwordForm.passwordConfirmation,
+      });
+      setShowPasswordModal(false);
+      showToast('Kata sandi berhasil diganti.');
+    } catch (error: any) {
+      setPasswordError(error.message || 'Kata sandi gagal diganti.');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   // ================= KURIKULUM =================
   const selectedCurriculum = curricula.find(item => item.id === selectedCurriculumId) || null;
 
@@ -5369,6 +5401,14 @@ export default function App() {
             <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary grid place-items-center"><span className="material-symbols-outlined text-[18px]">person</span></div>
             <div className="leading-tight"><p className="font-label-sm font-bold text-on-surface">{currentUser?.name}</p><p className="font-label-xs text-on-surface-variant">{currentUser?.role === 'admin_jurusan' ? 'Admin Jurusan' : currentUser?.role === 'dosen' ? 'Dosen' : 'Super Admin'}</p></div>
           </div>
+          <button
+            onClick={openPasswordModal}
+            title="Ganti kata sandi"
+            aria-label="Ganti kata sandi"
+            className="w-9 h-9 grid place-items-center border border-outline rounded-lg text-on-surface-variant hover:text-primary hover:bg-primary/5 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[19px]">key</span>
+          </button>
           <button 
             onClick={handleLogout} 
             title="Keluar"
@@ -8302,6 +8342,21 @@ export default function App() {
           </div>
         </main>
       </div>
+
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-md" role="dialog" aria-modal="true" aria-labelledby="password-modal-title" onMouseDown={event => { if (event.target === event.currentTarget && !passwordSaving) setShowPasswordModal(false); }}>
+          <form onSubmit={savePassword} className="w-full max-w-[440px] bg-surface rounded-lg shadow-xl border border-outline">
+            <div className="flex items-center justify-between px-lg py-md border-b border-outline"><div><p className="font-label-xs text-primary font-bold">AKUN</p><h4 id="password-modal-title" className="font-headline-xl font-bold text-on-surface">Ganti Kata Sandi</h4></div><button type="button" disabled={passwordSaving} onClick={() => setShowPasswordModal(false)} className="w-8 h-8 grid place-items-center rounded-md text-on-surface-variant hover:bg-surface-container" aria-label="Tutup"><span className="material-symbols-outlined text-[20px]">close</span></button></div>
+            <div className="p-lg space-y-md">
+              <label className="block font-label-sm text-on-surface">Kata sandi lama<input type="password" autoComplete="current-password" autoFocus required className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={passwordForm.currentPassword} onChange={event => setPasswordForm(current => ({ ...current, currentPassword: event.target.value }))} /></label>
+              <label className="block font-label-sm text-on-surface">Kata sandi baru<input type="password" autoComplete="new-password" required minLength={10} className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={passwordForm.password} onChange={event => setPasswordForm(current => ({ ...current, password: event.target.value }))} /><span className="mt-xs block font-label-xs text-on-surface-variant">Minimal 10 karakter; gunakan gabungan huruf, angka, dan simbol.</span></label>
+              <label className="block font-label-sm text-on-surface">Ulangi kata sandi baru<input type="password" autoComplete="new-password" required className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={passwordForm.passwordConfirmation} onChange={event => setPasswordForm(current => ({ ...current, passwordConfirmation: event.target.value }))} /></label>
+              {passwordError && <p role="alert" className="rounded-md bg-error-container px-sm py-xs font-label-sm text-error">{passwordError}</p>}
+            </div>
+            <div className="flex justify-end gap-sm px-lg py-md border-t border-outline"><button type="button" disabled={passwordSaving} onClick={() => setShowPasswordModal(false)} className="px-lg py-sm text-on-surface-variant font-label-sm font-bold">Batal</button><button disabled={passwordSaving} className="bg-primary text-on-primary px-lg py-sm rounded-md font-label-sm font-bold disabled:opacity-50">{passwordSaving ? 'Menyimpan...' : 'Simpan Kata Sandi'}</button></div>
+          </form>
+        </div>
+      )}
 
       {/* ================= APPLICATION DIALOG ================= */}
       {appDialog.open && (

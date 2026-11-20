@@ -31,8 +31,8 @@ Total target: 12-15 menit.
 
 | Peran | Email | Kata sandi |
 | --- | --- | --- |
-| Admin jurusan | `admin.demo@cpl.local` | `masung2` |
-| Dosen pengampu | `dosen.demo@cpl.local` | `masung2` |
+| Admin jurusan | `admin.demo@cpl.local` | `demo-sicpl-2026` |
+| Dosen pengampu | `dosen.demo@cpl.local` | `demo-sicpl-2026` |
 
 Tidak ada peran dosen koordinator dalam skenario ini. Dosen mengajukan nilai, sedangkan admin jurusan menyetujui dan menguncinya.
 

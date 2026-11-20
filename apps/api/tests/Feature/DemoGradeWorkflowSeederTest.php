@@ -42,7 +42,7 @@ class DemoGradeWorkflowSeederTest extends TestCase
         $this->assertSame(6, GraduateProfile::where('status', 'Aktif')->count());
 
         foreach (['admin.demo@cpl.local', 'dosen.demo@cpl.local'] as $email) {
-            $this->postJson('/api/login', ['email' => $email, 'password' => 'masung2'])
+            $this->postJson('/api/login', ['email' => $email, 'password' => 'demo-sicpl-2026'])
                 ->assertOk();
             auth()->logout();
         }

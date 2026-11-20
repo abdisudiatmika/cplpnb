@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
 
 class DemoGradeWorkflowSeeder extends Seeder
 {
-    private const PASSWORD = 'masung2';
+    private const PASSWORD = 'demo-sicpl-2026';
 
     public function run(): void
     {
