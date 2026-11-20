@@ -19,11 +19,11 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => array_values(array_unique([
-        env('FRONTEND_URL', 'http://localhost:5173'),
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-    ])),
+    // Origin localhost hanya diizinkan di luar production.
+    'allowed_origins' => array_values(array_unique(array_merge(
+        [env('FRONTEND_URL', 'http://localhost:5173')],
+        env('APP_ENV') === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    ))),
 
     'allowed_origins_patterns' => [],
 

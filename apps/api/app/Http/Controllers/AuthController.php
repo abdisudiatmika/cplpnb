@@ -78,29 +78,6 @@ class AuthController extends Controller
     }
 
     // Register is optional depending on requirements, but here is a simple one
-    public function register(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
-        ]);
-
-        $user = User::create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => 'user',
-        ]);
-
-        Auth::login($user);
-
-        return response()->json([
-            'user' => $user
-        ]);
-    }
-
     public function getAdmins(Request $request)
     {
         $admins = User::with('department')->orderBy('created_at', 'desc')->get()->map(function ($admin) {
@@ -136,7 +113,7 @@ class AuthController extends Controller
 
     public function updateAdmin(Request $request, string $id)
     {
-        $user = User::findOrFail($id);
+        $user = User::where('role', 'admin_jurusan')->findOrFail($id);
         
         $departmentId = $request->input('departmentId', $request->input('department_id'));
         if ($departmentId !== null) {
@@ -164,7 +141,7 @@ class AuthController extends Controller
 
     public function deleteAdmin(string $id)
     {
-        $user = User::findOrFail($id);
+        $user = User::where('role', 'admin_jurusan')->findOrFail($id);
         $user->delete();
         return response()->json(null, 204);
     }

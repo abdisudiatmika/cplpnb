@@ -27,6 +27,7 @@ class CplController extends Controller
 
     public function store(Request $request)
     {
+        $this->pinDepartment($request);
         $targetValue = $request->input('targetValue', $request->input('target_value'));
         $departmentId = $request->input('departmentId', $request->input('department_id'));
 
@@ -64,9 +65,10 @@ class CplController extends Controller
         return response()->json($cpl->load('department'), 201);
     }
 
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $cpl = Cpl::with('department')->findOrFail($id);
+        $this->ensureSameDepartment($request, $cpl->department_id);
 
         return response()->json($cpl);
     }
@@ -74,6 +76,8 @@ class CplController extends Controller
     public function update(Request $request, string $id)
     {
         $cpl = Cpl::findOrFail($id);
+        $this->ensureSameDepartment($request, $cpl->department_id);
+        $this->pinDepartment($request);
 
         $targetValue = $request->input('targetValue', $request->input('target_value'));
         $departmentId = $request->input('departmentId', $request->input('department_id'));
@@ -112,9 +116,10 @@ class CplController extends Controller
         return response()->json($cpl->load('department'));
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $cpl = Cpl::findOrFail($id);
+        $this->ensureSameDepartment($request, $cpl->department_id);
         $cpl->delete();
 
         return response()->json(null, 204);

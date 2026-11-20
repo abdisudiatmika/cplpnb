@@ -21,6 +21,7 @@ class CourseController extends Controller
 
     public function store(Request $request)
     {
+        $this->pinDepartment($request);
         $departmentId = $request->input('departmentId', $request->input('department_id'));
 
         if ($departmentId === null && $request->user()) {
@@ -43,15 +44,18 @@ class CourseController extends Controller
         return response()->json($course->load('department'), 201);
     }
 
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $course = Course::with('department')->findOrFail($id);
+        $this->ensureSameDepartment($request, $course->department_id);
         return response()->json($course);
     }
 
     public function update(Request $request, string $id)
     {
         $course = Course::findOrFail($id);
+        $this->ensureSameDepartment($request, $course->department_id);
+        $this->pinDepartment($request);
 
         $departmentId = $request->input('departmentId', $request->input('department_id'));
         if ($departmentId !== null) {
@@ -70,9 +74,10 @@ class CourseController extends Controller
         return response()->json($course->load('department'));
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         $course = Course::findOrFail($id);
+        $this->ensureSameDepartment($request, $course->department_id);
         $course->delete();
         return response()->json(null, 204);
     }

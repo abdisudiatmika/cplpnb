@@ -47,8 +47,12 @@ class DepartmentController extends Controller
         return $this->reportSettings($request);
     }
 
-    public function index()
+    public function index(Request $request)
     {
+        if ($this->isDepartmentAdmin($request)) {
+            return response()->json(Department::whereKey($request->user()->department_id)->get());
+        }
+
         return response()->json(Department::all());
     }
 
@@ -65,9 +69,10 @@ class DepartmentController extends Controller
         return response()->json($department, 201);
     }
 
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $department = Department::findOrFail($id);
+        $this->ensureSameDepartment($request, $department->id);
         return response()->json($department);
     }
 

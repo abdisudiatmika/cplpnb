@@ -41,6 +41,8 @@ class MappingController extends Controller
             'cpl_id' => 'required|exists:cpls,id',
             'weight' => 'required|numeric|min:0',
         ]);
+        $this->ensureIdsInDepartment($request, 'courses', [$validated['course_id']]);
+        $this->ensureIdsInDepartment($request, 'cpls', [$validated['cpl_id']]);
 
         $validated['id'] = (string) Str::uuid();
 
@@ -48,15 +50,17 @@ class MappingController extends Controller
         return response()->json($mapping->load(['course', 'cpl']), 201);
     }
 
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $mapping = CourseCplMapping::with(['course', 'cpl'])->findOrFail($id);
+        $this->ensureSameDepartment($request, $mapping->course?->department_id);
         return response()->json($mapping);
     }
 
     public function update(Request $request, string $id)
     {
-        $mapping = CourseCplMapping::findOrFail($id);
+        $mapping = CourseCplMapping::with('course')->findOrFail($id);
+        $this->ensureSameDepartment($request, $mapping->course?->department_id);
 
         $courseId = $request->input('courseId', $request->input('course_id'));
         $cplId = $request->input('cplId', $request->input('cpl_id'));
@@ -69,14 +73,17 @@ class MappingController extends Controller
             'cpl_id' => 'sometimes|required|exists:cpls,id',
             'weight' => 'sometimes|required|numeric|min:0',
         ]);
+        $this->ensureIdsInDepartment($request, 'courses', [$validated['course_id'] ?? null]);
+        $this->ensureIdsInDepartment($request, 'cpls', [$validated['cpl_id'] ?? null]);
 
         $mapping->update($validated);
         return response()->json($mapping->load(['course', 'cpl']));
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
-        $mapping = CourseCplMapping::findOrFail($id);
+        $mapping = CourseCplMapping::with('course')->findOrFail($id);
+        $this->ensureSameDepartment($request, $mapping->course?->department_id);
         $mapping->delete();
         return response()->json(null, 204);
     }
