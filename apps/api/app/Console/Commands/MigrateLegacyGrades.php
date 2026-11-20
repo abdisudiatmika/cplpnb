@@ -39,7 +39,8 @@ class MigrateLegacyGrades extends Command
 
     protected $signature = 'nilai:migrasi-lama
         {--apply : Simpan perubahan. Tanpa opsi ini hanya simulasi (rollback).}
-        {--department= : Batasi ke satu prodi (id atau kode prodi).}';
+        {--department= : Batasi ke satu prodi (id atau kode prodi).}
+        {--ulang : Bongkar hasil migrasi nilai lama sebelumnya (hanya rencana asesmen migrasi) lalu migrasi ulang.}';
 
     protected $description = 'Migrasi nilai akhir lama ke komponen asesmen OBE (nilai akhir tetap sama).';
 
@@ -52,7 +53,7 @@ class MigrateLegacyGrades extends Command
             'nilai_lama' => 0, 'dimigrasi' => 0, 'lewati_belum_diambil' => 0, 'lewati_percobaan_lama' => 0,
             'lewati_tanpa_cpl' => 0, 'lewati_angkatan_tidak_valid' => 0, 'lewati_semester_tidak_valid' => 0,
             'lewati_ada_nilai_dosen' => 0, 'cpmk_otomatis' => 0, 'periode_baru' => 0, 'kelas_baru' => 0,
-            'penawaran_baru' => 0, 'rencana_baru' => 0,
+            'penawaran_baru' => 0, 'rencana_baru' => 0, 'rencana_lama_dibongkar' => 0,
         ];
 
         $this->info($apply ? 'MODE: APPLY (perubahan akan disimpan)' : 'MODE: SIMULASI (semua perubahan dibatalkan)');
@@ -64,10 +65,17 @@ class MigrateLegacyGrades extends Command
             ->get()
             ->keyBy('id');
 
-        $before = $this->legacyCplValues($students);
+        // Capaian kumulatif dan per periode (Ganjil/Genap per tahun ajaran) dengan cara hitung versi lama.
+        $before = ['' => $this->legacyCplValues($students)];
+        foreach ($this->periodsToVerify($students) as [$semesterType, $academicYear]) {
+            $before[$semesterType.'|'.$academicYear] = $this->legacyCplValues($students, $semesterType, $academicYear);
+        }
 
         DB::beginTransaction();
         try {
+            if ($this->option('ulang')) {
+                $this->undoPreviousMigration($students);
+            }
             $this->migrate($students);
             $mismatches = $this->verify($students, $before, $achievements);
 
@@ -112,7 +120,7 @@ class MigrateLegacyGrades extends Command
             ->map(function (Collection $attempts) {
                 $this->stats['lewati_percobaan_lama'] += $attempts->count() - 1;
 
-                return $attempts->sortByDesc(fn ($grade) => sprintf('%s-%02d', $grade->academic_year, $this->semesterNumber($grade->semester) ?? 0))->first();
+                return $attempts->sortByDesc(fn ($grade) => sprintf('%02d-%s', $this->semesterNumber($grade->semester) ?? 0, $grade->academic_year))->first();
             });
 
         $courses = Course::with('curriculum')->whereIn('id', $chosen->pluck('course_id')->unique())->get()->keyBy('id');
@@ -145,14 +153,17 @@ class MigrateLegacyGrades extends Command
             return;
         }
         $semesterNumber = $this->semesterNumber($grade->semester);
-        if (! $semesterNumber || ! preg_match('/^\d{4}\/\d{4}$/', (string) $grade->academic_year)) {
+        if (! $semesterNumber) {
             $this->stats['lewati_semester_tidak_valid']++;
 
             return;
         }
 
+        // Periode ditentukan dari angkatan + nomor semester (sama dengan tampilan versi lama);
+        // kolom academic_year pada nilai lama tidak konsisten sehingga tidak dipakai.
+        $startYear = (int) $student->angkatan + intdiv($semesterNumber - 1, 2);
         $period = AcademicPeriod::firstOrCreate(
-            ['department_id' => $student->department_id, 'academic_year' => $grade->academic_year, 'semester' => $semesterNumber % 2 === 1 ? 'Ganjil' : 'Genap'],
+            ['department_id' => $student->department_id, 'academic_year' => $startYear.'/'.($startYear + 1), 'semester' => $semesterNumber % 2 === 1 ? 'Ganjil' : 'Genap'],
             ['status' => 'Selesai']
         );
         $this->stats['periode_baru'] += $period->wasRecentlyCreated ? 1 : 0;
@@ -203,6 +214,43 @@ class MigrateLegacyGrades extends Command
         }
 
         $this->stats['dimigrasi']++;
+    }
+
+    /**
+     * Hapus rencana asesmen hasil migrasi sebelumnya (semua komponennya bernama ITEM_NAME) beserta
+     * skor, pengajuan, log, peserta, dan penawaran MK yang tidak dipakai rencana lain/penugasan dosen.
+     * Periode berstatus Selesai yang tidak lagi memiliki penawaran ikut dihapus. CPMK tidak dihapus.
+     */
+    private function undoPreviousMigration(Collection $students): void
+    {
+        $plans = AssessmentPlan::with('items')
+            ->whereHas('items', fn ($query) => $query->where('name', self::ITEM_NAME))
+            ->whereHas('courseOffering.course', fn ($query) => $query->whereIn('department_id', $students->pluck('department_id')->unique()))
+            ->get()
+            ->filter(fn (AssessmentPlan $plan) => $plan->items->every(fn ($item) => $item->name === self::ITEM_NAME));
+
+        $offeringIds = $plans->pluck('course_offering_id')->unique();
+        $planIds = $plans->pluck('id');
+        $itemIds = $plans->flatMap(fn ($plan) => $plan->items->pluck('id'));
+
+        GradeAuditLog::whereIn('assessment_plan_id', $planIds)->delete();
+        StudentAssessmentScore::whereIn('assessment_item_id', $itemIds)->delete();
+        GradeSubmission::whereIn('assessment_plan_id', $planIds)->delete();
+        AssessmentItem::whereIn('id', $itemIds)->delete();
+        AssessmentPlan::whereIn('id', $planIds)->delete();
+        $this->stats['rencana_lama_dibongkar'] = $planIds->count();
+
+        $removableOfferings = CourseOffering::whereIn('id', $offeringIds)
+            ->whereDoesntHave('assessmentPlans')
+            ->whereDoesntHave('teachingAssignments')
+            ->pluck('id');
+        CourseEnrollment::whereIn('course_offering_id', $removableOfferings)->delete();
+        CourseOffering::whereIn('id', $removableOfferings)->delete();
+
+        AcademicPeriod::whereIn('department_id', $students->pluck('department_id')->unique())
+            ->where('status', 'Selesai')
+            ->whereDoesntHave('offerings')
+            ->delete();
     }
 
     private function createLockedPlan(CourseOffering $offering, Collection $cpmks): AssessmentPlan
@@ -285,6 +333,49 @@ class MigrateLegacyGrades extends Command
         return round(min(100, max(0, $value)), 2);
     }
 
+    /**
+     * Pasangan (ganjil|genap, tahun ajaran) yang memuat nilai lama, diturunkan dari angkatan + nomor semester.
+     */
+    private function periodsToVerify(Collection $students): array
+    {
+        return DB::table('student_grades')->whereIn('student_id', $students->keys())->get(['student_id', 'semester'])
+            ->map(function ($grade) use ($students) {
+                $student = $students->get($grade->student_id);
+                $number = $this->semesterNumber($grade->semester);
+                if (! $number || ! is_numeric($student?->angkatan)) {
+                    return null;
+                }
+                $start = (int) $student->angkatan + intdiv($number - 1, 2);
+
+                return [$number % 2 === 1 ? 'ganjil' : 'genap', $start.'/'.($start + 1)];
+            })
+            ->filter()->unique(fn ($pair) => implode('|', $pair))->values()->all();
+    }
+
+    /**
+     * Sama dengan CplController::gradeMatchesAcademicPeriod (filter periode versi lama).
+     */
+    private function legacyPeriodMatches(object $grade, ?Student $student, string $semesterType, ?string $academicYear): bool
+    {
+        $number = $this->semesterNumber($grade->semester);
+        if ($number === null) {
+            return true;
+        }
+        if (($semesterType === 'ganjil' && $number % 2 === 0) || ($semesterType === 'genap' && $number % 2 !== 0)) {
+            return false;
+        }
+        if (! $academicYear || ! is_numeric($student?->angkatan) || ! preg_match('/^\d{4}/', $academicYear, $matches)) {
+            return true;
+        }
+        $start = (int) $matches[0];
+        $cohort = (int) $student->angkatan;
+        if ($cohort > $start) {
+            return $number === 0;
+        }
+
+        return $number === (($start - $cohort) * 2) + ($semesterType === 'ganjil' ? 1 : 2);
+    }
+
     private function semesterNumber($semester): ?int
     {
         $value = strtoupper(trim((string) $semester));
@@ -298,13 +389,17 @@ class MigrateLegacyGrades extends Command
     /**
      * Capaian CPL per mahasiswa dengan rumus lama (rata-rata berbobot pemetaan MK-CPL).
      */
-    private function legacyCplValues(Collection $students): array
+    private function legacyCplValues(Collection $students, ?string $semesterType = null, ?string $academicYear = null): array
     {
+        // Nilai terbaru per mahasiswa per MK (percobaan lama dianggap digantikan), lalu difilter periodenya.
         $grades = DB::table('student_grades')->whereIn('student_id', $students->keys())
             ->where('grade', '!=', 'Belum Diambil')->get()
+            ->groupBy(fn ($grade) => $grade->student_id.'|'.$grade->course_id)
+            ->map(fn ($attempts) => $attempts->sortByDesc(fn ($grade) => sprintf('%02d-%s', $this->semesterNumber($grade->semester) ?? 0, $grade->academic_year))->first())
+            ->filter(fn ($grade) => $semesterType === null
+                || $this->legacyPeriodMatches($grade, $students->get($grade->student_id), $semesterType, $academicYear))
             ->groupBy('student_id')
-            ->map(fn ($rows) => $rows->groupBy('course_id')->map(fn ($attempts) => $attempts
-                ->sortByDesc(fn ($grade) => sprintf('%s-%02d', $grade->academic_year, $this->semesterNumber($grade->semester) ?? 0))->first()));
+            ->map(fn ($rows) => $rows->keyBy('course_id'));
         $mappings = CourseCplMapping::whereIn('course_id', DB::table('student_grades')->whereIn('student_id', $students->keys())->distinct()->pluck('course_id'))
             ->get()->groupBy('cpl_id');
 
@@ -329,31 +424,42 @@ class MigrateLegacyGrades extends Command
         return $values;
     }
 
-    private function verify(Collection $students, array $before, StudentCplAchievementService $achievements): int
+    private function verify(Collection $students, array $beforeByPeriod, StudentCplAchievementService $achievements): int
     {
-        $after = $achievements->calculate($students->values());
         $mismatches = 0;
         $examples = [];
-        foreach ($before as $studentId => $cpls) {
-            foreach ($cpls as $cplId => $legacyValue) {
-                $newValue = $after->get($studentId)?->get($cplId);
-                if ($newValue === null || abs((float) $newValue - $legacyValue) > 0.05) {
-                    $mismatches++;
-                    if (count($examples) < 10) {
-                        $examples[] = [$students->get($studentId)?->nim, Cpl::find($cplId)?->code, $legacyValue, $newValue ?? '-'];
+        $checked = 0;
+        foreach ($beforeByPeriod as $key => $before) {
+            [$semesterType, $academicYear] = $key === '' ? [null, null] : explode('|', $key);
+            $after = $achievements->calculate($students->values(), $semesterType, $academicYear);
+            $afterCount = $after->sum(fn ($cpls) => $cpls->count());
+            $beforeCount = collect($before)->sum(fn ($cpls) => count($cpls));
+            if ($afterCount !== $beforeCount) {
+                $mismatches += abs($afterCount - $beforeCount);
+                $examples[] = ['(jumlah)', $key ?: 'kumulatif', $beforeCount, $afterCount];
+            }
+            foreach ($before as $studentId => $cpls) {
+                foreach ($cpls as $cplId => $legacyValue) {
+                    $checked++;
+                    $newValue = $after->get($studentId)?->get($cplId);
+                    if ($newValue === null || abs((float) $newValue - $legacyValue) > 0.05) {
+                        $mismatches++;
+                        if (count($examples) < 10) {
+                            $examples[] = [$students->get($studentId)?->nim, ($key ?: 'kumulatif').' '.Cpl::find($cplId)?->code, $legacyValue, $newValue ?? '-'];
+                        }
                     }
                 }
             }
         }
 
-        $checked = collect($before)->sum(fn ($cpls) => count($cpls));
+        $this->stats['periode_diverifikasi'] = count($beforeByPeriod) - 1;
         $this->stats['cpl_diverifikasi'] = $checked;
         $this->stats['cpl_selisih'] = $mismatches;
         if ($mismatches > 0) {
             $this->warn("Ditemukan {$mismatches} capaian CPL yang berbeda dari perhitungan lama (contoh):");
-            $this->table(['NIM', 'CPL', 'Lama', 'Baru'], $examples);
+            $this->table(['NIM', 'Periode/CPL', 'Lama', 'Baru'], $examples);
         } else {
-            $this->info("Verifikasi: {$checked} capaian CPL mahasiswa sama persis dengan perhitungan lama.");
+            $this->info("Verifikasi: {$checked} capaian CPL mahasiswa (kumulatif dan per periode) sama persis dengan perhitungan lama.");
         }
 
         return $mismatches;

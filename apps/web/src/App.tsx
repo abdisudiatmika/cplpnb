@@ -619,8 +619,9 @@ export default function App() {
   const [studentSearch, setStudentSearch] = useState('');
   const [studentFilterAngkatan, setStudentFilterAngkatan] = useState('');
   const [studentFilterKelas, setStudentFilterKelas] = useState('');
-  const [studentCplSemesterType, setStudentCplSemesterType] = useState(getActiveAcademicPeriod().semesterType);
-  const [studentCplAcademicYear, setStudentCplAcademicYear] = useState(getActiveAcademicPeriod().academicYear);
+  // Bawaan: capaian CPL kumulatif (semua periode); filter per semester tetap bisa dipilih.
+  const [studentCplSemesterType, setStudentCplSemesterType] = useState('');
+  const [studentCplAcademicYear, setStudentCplAcademicYear] = useState('');
   const [studentCplAcademicYears, setStudentCplAcademicYears] = useState<string[]>([]);
   const [studentPage, setStudentPage] = useState(1);
   const [studentItemsPerPage, setStudentItemsPerPage] = useState(25);
@@ -2415,8 +2416,8 @@ export default function App() {
             setGraduateProfiles(profileList);
             const years = Array.isArray(periodData.academicYears) ? periodData.academicYears : [];
             setStudentCplAcademicYears(years);
-            if (years.length > 0 && !years.includes(studentCplAcademicYear)) {
-              setStudentCplAcademicYear(years[0]);
+            if (studentCplAcademicYear && years.length > 0 && !years.includes(studentCplAcademicYear)) {
+              setStudentCplAcademicYear('');
             }
           } else if (activeTab === 'matakuliah') {
             const [courseList, cplList, mappingList, cpmkList] = await Promise.all([

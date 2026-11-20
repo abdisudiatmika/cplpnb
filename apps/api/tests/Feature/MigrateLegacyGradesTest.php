@@ -114,4 +114,37 @@ class MigrateLegacyGradesTest extends TestCase
         $this->assertSame('UTS', $plan->items()->first()->name);
         $this->assertSame(2, AssessmentPlan::count());
     }
+
+    public function test_period_follows_cohort_and_semester_not_inconsistent_stored_year(): void
+    {
+        // Tahun ajaran tersimpan keliru (angkatan 2024 semester 2 tercatat 2026/2027).
+        StudentGrade::where('course_id', $this->tax->id)->update(['academic_year' => '2026/2027']);
+        $filtered = fn () => collect($this->getJson("/api/cpl/achievements/{$this->student->id}?semesterType=genap&academicYear=2024/2025")->assertOk()->json())
+            ->mapWithKeys(fn ($row) => [$row['code'] => $row['value']])->all();
+        $before = $filtered();
+
+        $this->artisan('nilai:migrasi-lama --apply')->assertSuccessful();
+
+        $plan = AssessmentPlan::whereHas('courseOffering', fn ($q) => $q->where('course_id', $this->tax->id))->first();
+        $this->assertSame('Genap', $plan->courseOffering->academicPeriod->semester);
+        $this->assertSame('2024/2025', $plan->courseOffering->academicPeriod->academic_year);
+        $this->assertEquals($before, $filtered());
+        $this->assertEqualsWithDelta(81, $filtered()['CPL-2'], 0.01);
+    }
+
+    public function test_redo_rebuilds_previous_migration_without_duplicates(): void
+    {
+        $this->artisan('nilai:migrasi-lama --apply')->assertSuccessful();
+        $plan = AssessmentPlan::whereHas('courseOffering', fn ($q) => $q->where('course_id', $this->tax->id))->first();
+        // Simulasikan hasil migrasi lama di periode yang salah.
+        $wrong = \App\Models\AcademicPeriod::create(['department_id' => $this->department->id, 'academic_year' => '2026/2027', 'semester' => 'Genap', 'status' => 'Selesai']);
+        $plan->courseOffering->update(['academic_period_id' => $wrong->id]);
+
+        $this->artisan('nilai:migrasi-lama --ulang --apply')->assertSuccessful();
+
+        $this->assertSame(2, AssessmentPlan::count());
+        $this->assertSame(3, StudentAssessmentScore::count());
+        $this->assertFalse(\App\Models\AcademicPeriod::where('academic_year', '2026/2027')->exists());
+        $this->assertSame(3, Cpmk::count());
+    }
 }
