@@ -10,75 +10,9 @@ use App\Http\Controllers\CplController;
 use App\Http\Controllers\MappingController;
 use App\Http\Controllers\GradeController;
 
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 
-Route::get('/reset-superadmin', function () {
-    $user = \App\Models\User::where('role', 'super_admin')->first();
-    if (!$user) {
-        $user = \App\Models\User::create([
-            'id' => (string) \Illuminate\Support\Str::uuid(),
-            'name' => 'Super Admin PNB',
-            'email' => 'superadmin@cpl-pnb.ac.id',
-            'password' => \Illuminate\Support\Facades\Hash::make('password'),
-            'role' => 'super_admin',
-        ]);
-        return response()->json(['message' => 'Superadmin created successfully with password: password']);
-    }
-    $user->password = \Illuminate\Support\Facades\Hash::make('password');
-    $user->save();
-    return response()->json(['message' => 'Superadmin password reset successfully to: password']);
-});
-
-Route::get('/debug-auth', function () {
-    $sessionPath = storage_path('framework/sessions');
-    $isWriteable = is_writable($sessionPath);
-    $sessionFiles = glob($sessionPath . '/*');
-    
-    $logPath = storage_path('logs/laravel.log');
-    $logLines = [];
-    if (file_exists($logPath)) {
-        $logLines = array_slice(file($logPath), -50);
-    }
-
-    $dbCounts = [];
-    $dbError = null;
-    $dbConnection = null;
-    $dbName = null;
-    try {
-        $dbConnection = \Illuminate\Support\Facades\DB::connection()->getName();
-        $dbName = \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
-        
-        $tables = ['users', 'departments', 'students', 'courses', 'cpls', 'course_cpl_mappings', 'student_grades'];
-        foreach ($tables as $table) {
-            if (\Illuminate\Support\Facades\Schema::hasTable($table)) {
-                $dbCounts[$table] = \Illuminate\Support\Facades\DB::table($table)->count();
-            } else {
-                $dbCounts[$table] = 'Table not found';
-            }
-        }
-    } catch (\Exception $e) {
-        $dbError = $e->getMessage();
-    }
-    
-    return response()->json([
-        'session_path' => $sessionPath,
-        'session_path_is_writable' => $isWriteable,
-        'session_files_count' => count($sessionFiles),
-        'session_driver' => config('session.driver'),
-        'session_cookie' => config('session.cookie'),
-        'session_domain' => config('session.domain'),
-        'sanctum_stateful' => config('sanctum.stateful'),
-        'app_url' => config('app.url'),
-        'database_connection' => $dbConnection,
-        'database_name' => $dbName,
-        'database_counts' => $dbCounts,
-        'database_error' => $dbError,
-        'log_lines' => $logLines,
-    ]);
-});
-
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'role:super_admin,admin_jurusan'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/report-settings', [DepartmentController::class, 'reportSettings']);
@@ -112,16 +46,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/grades/student/{studentId}', [GradeController::class, 'byStudent']);
     
     // Resource routes
-    Route::apiResource('departments', DepartmentController::class);
+    Route::apiResource('departments', DepartmentController::class)->only(['index', 'show']);
     Route::apiResource('students', StudentController::class);
     Route::apiResource('courses', CourseController::class);
     Route::apiResource('cpls', CplController::class);
     Route::apiResource('mappings', MappingController::class);
     Route::apiResource('grades', GradeController::class);
     
-    // User admins compatibility
-    Route::get('/user-admins', [AuthController::class, 'getAdmins']);
-    Route::post('/user-admins', [AuthController::class, 'createAdmin']);
-    Route::put('/user-admins/{id}', [AuthController::class, 'updateAdmin']);
-    Route::delete('/user-admins/{id}', [AuthController::class, 'deleteAdmin']);
+    // Khusus Super Admin: kelola prodi dan akun admin prodi
+    Route::middleware('role:super_admin')->group(function () {
+        Route::apiResource('departments', DepartmentController::class)->only(['store', 'update', 'destroy']);
+        Route::get('/user-admins', [AuthController::class, 'getAdmins']);
+        Route::post('/user-admins', [AuthController::class, 'createAdmin']);
+        Route::put('/user-admins/{id}', [AuthController::class, 'updateAdmin']);
+        Route::delete('/user-admins/{id}', [AuthController::class, 'deleteAdmin']);
+    });
 });
