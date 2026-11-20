@@ -15,18 +15,20 @@ class GraduateProfileController extends Controller
     public function index(Request $request)
     {
         $departmentId = $this->departmentId($request);
-        return response()->json(GraduateProfile::with('cplMappings.cpl')
-            ->where('department_id', $departmentId)
+        return response()->json($this->scopeToCurriculum(GraduateProfile::with('cplMappings.cpl')
+            ->where('department_id', $departmentId), $this->currentCurriculum($request, $departmentId))
             ->orderBy('sequence')->orderBy('code')->get()->map(fn ($profile) => $this->payload($profile)));
     }
 
     public function store(Request $request)
     {
         $departmentId = $this->departmentId($request);
-        $validated = $this->validated($request, $departmentId);
-        $profile = DB::transaction(function () use ($validated, $departmentId) {
+        $curriculum = $this->currentCurriculum($request, $departmentId);
+        $validated = $this->validated($request, $departmentId, null, $curriculum);
+        $profile = DB::transaction(function () use ($validated, $departmentId, $curriculum) {
             $profile = GraduateProfile::create([
                 'department_id' => $departmentId,
+                'curriculum_id' => $curriculum?->id,
                 'code' => strtoupper($validated['code']),
                 'name' => $validated['name'],
                 'english_name' => $validated['englishName'] ?? null,
@@ -45,7 +47,7 @@ class GraduateProfileController extends Controller
     {
         $departmentId = $this->departmentId($request);
         abort_unless($graduateProfile->department_id === $departmentId, 403);
-        $validated = $this->validated($request, $departmentId, $graduateProfile);
+        $validated = $this->validated($request, $departmentId, $graduateProfile, $graduateProfile->curriculum);
         DB::transaction(function () use ($graduateProfile, $validated, $departmentId) {
             $graduateProfile->update([
                 'code' => strtoupper($validated['code']), 'name' => $validated['name'],
@@ -65,12 +67,15 @@ class GraduateProfileController extends Controller
         return response()->noContent();
     }
 
-    private function validated(Request $request, string $departmentId, ?GraduateProfile $profile = null): array
+    private function validated(Request $request, string $departmentId, ?GraduateProfile $profile = null, ?\App\Models\Curriculum $curriculumModel = null): array
     {
-        $curriculum = $request->input('curriculumVersion', '2026');
+        $curriculum = $request->input('curriculumVersion', $curriculumModel?->code ?? '2026');
         $request->merge(['code' => strtoupper(trim((string) $request->input('code'))), 'curriculumVersion' => $curriculum]);
+        $uniqueCode = $curriculumModel
+            ? Rule::unique('graduate_profiles')->where(fn ($q) => $q->where('curriculum_id', $curriculumModel->id))
+            : Rule::unique('graduate_profiles')->where(fn ($q) => $q->where('department_id', $departmentId)->where('curriculum_version', $curriculum));
         return $request->validate([
-            'code' => ['required', 'regex:/^PL-[1-9][0-9]*$/', Rule::unique('graduate_profiles')->where(fn ($q) => $q->where('department_id', $departmentId)->where('curriculum_version', $curriculum))->ignore($profile?->id)],
+            'code' => ['required', 'regex:/^PL-[1-9][0-9]*$/', $uniqueCode->ignore($profile?->id)],
             'name' => 'required|string|max:255', 'englishName' => 'nullable|string|max:255',
             'summary' => 'required|string|max:5000', 'curriculumVersion' => 'required|string|max:20',
             'status' => ['required', Rule::in(['Aktif', 'Nonaktif'])], 'sequence' => 'required|integer|min:1|max:999',
@@ -82,7 +87,11 @@ class GraduateProfileController extends Controller
     private function syncMappings(GraduateProfile $profile, array $mappings, string $departmentId): void
     {
         $cplIds = collect($mappings)->pluck('cplId');
-        abort_unless(Cpl::where('department_id', $departmentId)->whereIn('id', $cplIds)->count() === $cplIds->count(), 422, 'Seluruh CPL harus berasal dari jurusan yang sama.');
+        $cplQuery = Cpl::where('department_id', $departmentId)->whereIn('id', $cplIds);
+        if ($profile->curriculum_id) {
+            $cplQuery->where('curriculum_id', $profile->curriculum_id);
+        }
+        abort_unless($cplQuery->count() === $cplIds->count(), 422, 'Seluruh CPL harus berasal dari jurusan dan kurikulum yang sama.');
         $profile->cplMappings()->delete();
         foreach ($mappings as $mapping) GraduateProfileCpl::create(['graduate_profile_id' => $profile->id, 'cpl_id' => $mapping['cplId'], 'contribution_type' => $mapping['type']]);
     }

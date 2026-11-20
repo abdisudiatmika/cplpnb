@@ -21,6 +21,7 @@ class CplController extends Controller
         if ($user && $user->role === 'admin_jurusan') {
             $query->where('department_id', $user->department_id);
         }
+        $this->scopeToCurriculum($query, $this->currentCurriculum($request));
 
         return response()->json($query->get());
     }
@@ -40,6 +41,7 @@ class CplController extends Controller
             'target_value' => $targetValue,
             'department_id' => $departmentId,
         ]);
+        $curriculum = $departmentId ? $this->currentCurriculum($request, $departmentId) : null;
 
         $validated = $request->validate([
             'code' => [
@@ -47,7 +49,9 @@ class CplController extends Controller
                 'string',
                 'max:50',
                 'regex:/^CPL-[1-9][0-9]*$/',
-                Rule::unique('cpls', 'code')->where('department_id', $departmentId),
+                $curriculum
+                    ? Rule::unique('cpls', 'code')->where('curriculum_id', $curriculum->id)
+                    : Rule::unique('cpls', 'code')->where('department_id', $departmentId),
             ],
             'description' => 'required|string',
             'target_value' => 'nullable|integer|min:0|max:100',
@@ -59,6 +63,7 @@ class CplController extends Controller
         }
 
         $validated['id'] = (string) Str::uuid();
+        $validated['curriculum_id'] = $curriculum?->id;
 
         $cpl = Cpl::create($validated);
 
@@ -100,7 +105,9 @@ class CplController extends Controller
                 'string',
                 'max:50',
                 'regex:/^CPL-[1-9][0-9]*$/',
-                Rule::unique('cpls', 'code')->where('department_id', $effectiveDepartmentId)->ignore($cpl->id),
+                $cpl->curriculum_id
+                    ? Rule::unique('cpls', 'code')->where('curriculum_id', $cpl->curriculum_id)->ignore($cpl->id)
+                    : Rule::unique('cpls', 'code')->where('department_id', $effectiveDepartmentId)->ignore($cpl->id),
             ],
             'description' => 'sometimes|required|string',
             'target_value' => 'sometimes|nullable|integer|min:0|max:100',
@@ -138,20 +145,22 @@ class CplController extends Controller
         ]);
 
         $codes = collect($validated['items'])->pluck('code')->map(fn ($code) => strtoupper($code));
+        $curriculum = $this->currentCurriculum($request, $user->department_id);
         abort_if(
-            Cpl::where('department_id', $user->department_id)->whereIn('code', $codes)->exists(),
+            $this->scopeToCurriculum(Cpl::where('department_id', $user->department_id), $curriculum)->whereIn('code', $codes)->exists(),
             422,
             'Salah satu kode CPL sudah digunakan.'
         );
 
-        $created = DB::transaction(function () use ($validated, $user) {
-            return collect($validated['items'])->map(function (array $item) use ($user) {
+        $created = DB::transaction(function () use ($validated, $user, $curriculum) {
+            return collect($validated['items'])->map(function (array $item) use ($user, $curriculum) {
                 return Cpl::create([
                     'id' => (string) Str::uuid(),
                     'code' => strtoupper($item['code']),
                     'description' => $item['description'],
                     'target_value' => $item['targetValue'] ?? 75,
                     'department_id' => $user->department_id,
+                    'curriculum_id' => $curriculum?->id,
                 ]);
             });
         });
@@ -289,17 +298,19 @@ class CplController extends Controller
         $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
         $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
-        $averages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType, $academicYear);
+        $curriculum = $this->curriculumForCohort($departmentId, $angkatan, $this->currentCurriculum($request, $departmentId));
+        $averages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType, $academicYear, $curriculum);
 
         return response()->json($averages);
     }
 
-    private function calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType = null, $academicYear = null)
+    private function calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType = null, $academicYear = null, $curriculum = null)
     {
         $cplQuery = Cpl::query();
         if ($departmentId) {
             $cplQuery->where('department_id', $departmentId);
         }
+        $this->scopeToCurriculum($cplQuery, $curriculum);
         $allCpls = $cplQuery->get();
 
         $studentQuery = \App\Models\Student::query();
@@ -464,6 +475,7 @@ class CplController extends Controller
         if ($departmentId) {
             $coursesQuery->where('department_id', $departmentId);
         }
+        $this->scopeToCurriculum($coursesQuery, $this->curriculumForCohort($departmentId, $angkatan, $departmentId ? $this->currentCurriculum($request, $departmentId) : null));
         $courses = $coursesQuery->get();
 
         $studentQuery = \App\Models\Student::query();
@@ -639,7 +651,8 @@ class CplController extends Controller
         $semesterType = $request->query('semesterType', $request->query('periodeAmi'));
         $academicYear = $request->query('academicYear', $request->query('academic_year'));
 
-        $allCpls = Cpl::where('department_id', $departmentId)->get();
+        $curriculum = $this->curriculumForCohort($departmentId, $student->angkatan, $this->currentCurriculum($request, $departmentId));
+        $allCpls = $this->scopeToCurriculum(Cpl::where('department_id', $departmentId), $curriculum)->get();
         $obeScores = $this->studentCplAchievements
             ->calculate(collect([$student]), $semesterType, $academicYear)
             ->get($student->id, collect());
@@ -729,8 +742,9 @@ class CplController extends Controller
         $academicYear = $request->query('academicYear', $request->query('academic_year'));
         $achievements = $this->achievements($request, $studentId)->getData(true);
         $details = $this->studentCplAchievements->details(collect([$student]), $semesterType, $academicYear)->get($student->id, collect())->values();
-        $profiles = GraduateProfile::with('cplMappings.cpl')
-            ->where('department_id', $student->department_id)->where('status', 'Aktif')->orderBy('sequence')->get()
+        $profileCurriculum = $this->curriculumForCohort($student->department_id, $student->angkatan, $this->currentCurriculum($request, $student->department_id));
+        $profiles = $this->scopeToCurriculum(GraduateProfile::with('cplMappings.cpl')
+            ->where('department_id', $student->department_id)->where('status', 'Aktif'), $profileCurriculum)->orderBy('sequence')->get()
             ->map(function ($profile) use ($achievements) {
                 $values = collect($profile->cplMappings)->map(fn ($mapping) => collect($achievements)->firstWhere('id', $mapping->cpl_id))
                     ->filter(fn ($cpl) => $cpl && (float) ($cpl['value'] ?? 0) > 0)->pluck('value');
@@ -806,7 +820,7 @@ class CplController extends Controller
             return response()->json(['students' => []]);
         }
 
-        $allCpls = Cpl::where('department_id', $departmentId)
+        $allCpls = $this->scopeToCurriculum(Cpl::where('department_id', $departmentId), $this->curriculumForCohort($departmentId, $angkatan, $this->currentCurriculum($request, $departmentId)))
             ->orderBy('code')
             ->get();
         $mappingsByCpl = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')

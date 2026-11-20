@@ -10,7 +10,12 @@ class Course extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = ['code', 'name', 'sks', 'semester', 'department_id'];
+    protected $fillable = ['code', 'name', 'sks', 'semester', 'department_id', 'curriculum_id'];
+
+    public function curriculum()
+    {
+        return $this->belongsTo(Curriculum::class);
+    }
 
     public function department()
     {

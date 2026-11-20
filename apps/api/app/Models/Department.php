@@ -37,6 +37,11 @@ class Department extends Model
         return $this->hasMany(Lecturer::class);
     }
 
+    public function curricula()
+    {
+        return $this->hasMany(Curriculum::class);
+    }
+
     public function graduateProfiles()
     {
         return $this->hasMany(GraduateProfile::class);

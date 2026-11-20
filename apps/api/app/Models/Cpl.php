@@ -10,13 +10,18 @@ class Cpl extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $fillable = ['code', 'description', 'target_value', 'department_id'];
+    protected $fillable = ['code', 'description', 'target_value', 'department_id', 'curriculum_id'];
 
     protected $appends = ['targetValue'];
 
     public function getTargetValueAttribute()
     {
         return $this->attributes['target_value'] ?? null;
+    }
+
+    public function curriculum()
+    {
+        return $this->belongsTo(Curriculum::class);
     }
 
     public function department()

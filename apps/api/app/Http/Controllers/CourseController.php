@@ -16,6 +16,7 @@ class CourseController extends Controller
         if ($user && $user->role === 'admin_jurusan') {
             $query->where('department_id', $user->department_id);
         }
+        $this->scopeToCurriculum($query, $this->currentCurriculum($request));
         return response()->json($query->get());
     }
 
@@ -39,6 +40,7 @@ class CourseController extends Controller
         ]);
 
         $validated['id'] = (string) Str::uuid();
+        $validated['curriculum_id'] = $this->currentCurriculum($request, $validated['department_id'])?->id;
 
         $course = Course::create($validated);
         return response()->json($course->load('department'), 201);
@@ -99,10 +101,12 @@ class CourseController extends Controller
         ]);
 
         $now = now();
-        $courseIds = DB::transaction(function () use ($validated, $departmentId, $now) {
-            return collect($validated['items'])->map(function ($item) use ($departmentId, $now) {
+        $curriculumId = $this->currentCurriculum($request, $departmentId)?->id;
+        $courseIds = DB::transaction(function () use ($validated, $departmentId, $curriculumId, $now) {
+            return collect($validated['items'])->map(function ($item) use ($departmentId, $curriculumId, $now) {
                 $course = Course::firstOrNew([
                     'department_id' => $departmentId,
+                    'curriculum_id' => $curriculumId,
                     'code' => $item['code'],
                 ]);
 
@@ -161,8 +165,8 @@ class CourseController extends Controller
             return response()->json(['error' => 'User does not belong to a department.'], 400);
         }
 
-        $cpl = \App\Models\Cpl::where('code', $cplCode)
-            ->where('department_id', $departmentId)
+        $cpl = $this->scopeToCurriculum(\App\Models\Cpl::where('code', $cplCode)
+            ->where('department_id', $departmentId), $this->currentCurriculum($request, $departmentId))
             ->first();
 
         if (!$cpl) {

@@ -19,8 +19,9 @@ class CpmkController extends Controller
     {
         $departmentId = $this->resolveReadableDepartment($request);
 
+        $curriculum = $this->currentCurriculum($request, $departmentId);
         $query = Cpmk::with(['course.department', 'cplMappings.cpl'])
-            ->whereHas('course', fn ($course) => $course->where('department_id', $departmentId))
+            ->whereHas('course', fn ($course) => $this->scopeToCurriculum($course->where('department_id', $departmentId), $curriculum))
             ->orderBy('code');
 
         if ($request->filled('courseId')) {
@@ -48,8 +49,9 @@ class CpmkController extends Controller
         $departmentId = $this->resolveWritableDepartment($request);
         $data = $this->validatedItem($request->all());
 
-        $cpmk = DB::transaction(function () use ($data, $departmentId) {
-            $cpmk = $this->persistItem($data, $departmentId);
+        $curriculum = $this->currentCurriculum($request, $departmentId);
+        $cpmk = DB::transaction(function () use ($data, $departmentId, $curriculum) {
+            $cpmk = $this->persistItem($data, $departmentId, $curriculum);
             $this->syncCourseMappings($cpmk->course_id);
 
             return $cpmk;
@@ -92,7 +94,9 @@ class CpmkController extends Controller
                 $currentMapping = $cpmk->cplMappings()->first();
                 $cplCode = $validated['cplCode'] ?? $currentMapping?->cpl?->code;
                 throw_unless($cplCode, ValidationException::withMessages(['cplCode' => ['CPL untuk CPMK ini belum ditentukan.']]));
-                $cpl = Cpl::where('department_id', $departmentId)->where('code', strtoupper($cplCode))->firstOrFail();
+                $cpl = Cpl::where('department_id', $departmentId)
+                    ->when($course->curriculum_id, fn ($query) => $query->where('curriculum_id', $course->curriculum_id))
+                    ->where('code', strtoupper($cplCode))->firstOrFail();
                 $cpmk->cplMappings()->delete();
                 CpmkCplMapping::create([
                     'cpmk_id' => $cpmk->id,
@@ -144,8 +148,9 @@ class CpmkController extends Controller
             throw ValidationException::withMessages(['items' => ['Terdapat pasangan mata kuliah dan kode CPMK yang duplikat.']]);
         }
 
-        $created = DB::transaction(function () use ($validated, $departmentId) {
-            $created = collect($validated['items'])->map(fn (array $item) => $this->persistItem($this->validatedItem($item), $departmentId));
+        $curriculum = $this->currentCurriculum($request, $departmentId);
+        $created = DB::transaction(function () use ($validated, $departmentId, $curriculum) {
+            $created = collect($validated['items'])->map(fn (array $item) => $this->persistItem($this->validatedItem($item), $departmentId, $curriculum));
             $created->pluck('course_id')->unique()->each(fn (string $courseId) => $this->syncCourseMappings($courseId));
 
             return $created;
@@ -159,10 +164,10 @@ class CpmkController extends Controller
         );
     }
 
-    private function persistItem(array $data, string $departmentId): Cpmk
+    private function persistItem(array $data, string $departmentId, ?\App\Models\Curriculum $curriculum = null): Cpmk
     {
-        $course = Course::where('department_id', $departmentId)->where('code', $data['courseCode'])->first();
-        $cpl = Cpl::where('department_id', $departmentId)->where('code', $data['cplCode'])->first();
+        $course = $this->scopeToCurriculum(Course::where('department_id', $departmentId), $curriculum)->where('code', $data['courseCode'])->first();
+        $cpl = $this->scopeToCurriculum(Cpl::where('department_id', $departmentId), $curriculum)->where('code', $data['cplCode'])->first();
 
         if (! $course || ! $cpl) {
             throw ValidationException::withMessages([
@@ -174,7 +179,7 @@ class CpmkController extends Controller
             ['course_id' => $course->id, 'code' => $data['code']],
             [
                 'description' => $data['description'],
-                'curriculum_version' => $data['curriculumVersion'] ?? null,
+                'curriculum_version' => $data['curriculumVersion'] ?? $curriculum?->code,
                 'status' => $data['status'] ?? 'Aktif',
             ]
         );

@@ -23,6 +23,10 @@ class MappingController extends Controller
                 $q->where('department_id', $user->department_id);
             });
         }
+        $curriculum = $this->currentCurriculum($request);
+        if ($curriculum) {
+            $query->whereHas('course', fn ($q) => $q->where('curriculum_id', $curriculum->id));
+        }
         return response()->json($query->get());
     }
 

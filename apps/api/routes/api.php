@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\CplController;
 use App\Http\Controllers\CpmkController;
+use App\Http\Controllers\CurriculumController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\GradeController;
 use App\Http\Controllers\GraduateProfileController;
@@ -87,6 +88,13 @@ Route::middleware(['auth:sanctum', 'role:super_admin,admin_jurusan'])->group(fun
     Route::post('/lecturer-gradebooks/{teachingAssignment}/reopen', [LecturerGradebookController::class, 'reopen']);
     Route::post('/teaching-assignments/{teachingAssignment}/sync-enrollments', [LecturerGradebookController::class, 'syncEnrollments']);
     Route::get('/dashboard/obe-summary', [ObeDashboardController::class, 'summary']);
+
+    // Kurikulum per prodi
+    Route::get('/curricula', [CurriculumController::class, 'index']);
+    Route::post('/curricula', [CurriculumController::class, 'store']);
+    Route::put('/curricula/{curriculum}', [CurriculumController::class, 'update']);
+    Route::post('/curricula/{curriculum}/activate', [CurriculumController::class, 'activate']);
+    Route::delete('/curricula/{curriculum}', [CurriculumController::class, 'destroy']);
 
     // Resource routes
     Route::apiResource('departments', DepartmentController::class)->only(['index', 'show']);
