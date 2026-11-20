@@ -40,6 +40,8 @@ class GradeController extends Controller
             'semester' => 'required|string|max:50',
             'academic_year' => 'required|string|max:50',
         ]);
+        $this->ensureIdsInDepartment($request, 'students', [$validated['student_id']]);
+        $this->ensureIdsInDepartment($request, 'courses', [$validated['course_id']]);
 
         $validated['id'] = (string) Str::uuid();
 
@@ -47,15 +49,17 @@ class GradeController extends Controller
         return response()->json($grade->load(['student', 'course']), 201);
     }
 
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
         $grade = StudentGrade::with(['student', 'course'])->findOrFail($id);
+        $this->ensureSameDepartment($request, $grade->student?->department_id);
         return response()->json($grade);
     }
 
     public function update(Request $request, string $id)
     {
-        $grade = StudentGrade::findOrFail($id);
+        $grade = StudentGrade::with('student')->findOrFail($id);
+        $this->ensureSameDepartment($request, $grade->student?->department_id);
 
         $studentId = $request->input('studentId', $request->input('student_id'));
         $courseId = $request->input('courseId', $request->input('course_id'));
@@ -73,14 +77,17 @@ class GradeController extends Controller
             'semester' => 'sometimes|required|string|max:50',
             'academic_year' => 'sometimes|required|string|max:50',
         ]);
+        $this->ensureIdsInDepartment($request, 'students', [$validated['student_id'] ?? null]);
+        $this->ensureIdsInDepartment($request, 'courses', [$validated['course_id'] ?? null]);
 
         $grade->update($validated);
         return response()->json($grade->load(['student', 'course']));
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
-        $grade = StudentGrade::findOrFail($id);
+        $grade = StudentGrade::with('student')->findOrFail($id);
+        $this->ensureSameDepartment($request, $grade->student?->department_id);
         $grade->delete();
         return response()->json(null, 204);
     }
@@ -110,6 +117,9 @@ class GradeController extends Controller
     {
         $items = $request->input('items', []);
         $inserted = [];
+
+        $this->ensureIdsInDepartment($request, 'students', collect($items)->map(fn ($item) => $item['studentId'] ?? $item['student_id'] ?? null));
+        $this->ensureIdsInDepartment($request, 'courses', collect($items)->map(fn ($item) => $item['courseId'] ?? $item['course_id'] ?? null));
         
         foreach ($items as $item) {
             $studentId = $item['studentId'] ?? $item['student_id'] ?? null;
