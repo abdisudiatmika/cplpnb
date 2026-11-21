@@ -80,6 +80,12 @@ class StudentController extends Controller
     {
         $student = Student::findOrFail($id);
         $this->ensureSameDepartment($request, $student->department_id);
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfUsed(
+            'Mahasiswa '.$student->nim,
+            $guard->studentUsage([$student->id])[$student->id],
+            'Menghapusnya akan ikut menghapus nilai tersebut. Ubah status mahasiswa bila sudah tidak aktif.'
+        );
         $student->delete();
         return response()->json(null, 204);
     }
@@ -158,6 +164,14 @@ class StudentController extends Controller
         if ($idsToDelete->isEmpty()) {
             return response()->json(['message' => 'Tidak ada mahasiswa yang cocok untuk dihapus.', 'count' => 0]);
         }
+
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfAnyUsed(
+            'mahasiswa',
+            $guard->studentUsage($idsToDelete),
+            Student::whereIn('id', $idsToDelete)->pluck('nim', 'id'),
+            'Hapus centang mahasiswa tersebut lalu ulangi.'
+        );
 
         Student::whereIn('id', $idsToDelete)->delete();
 

@@ -127,6 +127,12 @@ class CplController extends Controller
     {
         $cpl = Cpl::findOrFail($id);
         $this->ensureSameDepartment($request, $cpl->department_id);
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfUsed(
+            $cpl->code,
+            $guard->cplUsage($cpl->id),
+            'Lepaskan CPL ini dari CPMK dan mata kuliah terlebih dahulu.'
+        );
         $cpl->delete();
 
         return response()->json(null, 204);
@@ -222,54 +228,66 @@ class CplController extends Controller
             })->values());
         }
 
-        // Get all grades for these students & courses
         $courseIds = $mappings->pluck('course_id');
-        $studentsById = $studentQuery->get()->keyBy('id');
-
-        $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
-            ->whereIn('student_id', $students)
-            ->whereIn('course_id', $courseIds)
-            ->get();
-        $allGrades = $this->filterGradesForAcademicPeriod($allGrades, $studentsById, $semesterType, $academicYear);
-
-        $gradesMap = [];
-        foreach ($allGrades as $g) {
-            $gradesMap[$g->course_id][] = $g;
-        }
+        $scoresByCourse = $this->courseScoresByStudent($studentQuery->get(), $semesterType, $academicYear, $courseIds);
 
         $result = [];
         foreach ($mappings as $map) {
-            $grades = $gradesMap[$map->course_id] ?? [];
-            $totalScore = 0;
-            $count = 0;
-
-            foreach ($grades as $g) {
-                if ($g->grade === 'Belum Diambil') {
-                    continue;
-                }
-
-                $scoreVal = 0;
-                if (isset($g->score) && $g->score !== null && $g->score > 0) {
-                    $scoreVal = $g->score <= 10 ? $g->score * 10 : $g->score;
-                } else {
-                    $scoreVal = $this->convertGradeToPct($g->grade);
-                }
-
-                $totalScore += $scoreVal;
-                $count++;
-            }
+            $scores = collect($scoresByCourse[$map->course_id] ?? []);
+            $count = $scores->count();
 
             $result[] = [
                 'course_code' => $map->course_code,
                 'course_name' => $map->course_name,
                 'sks' => $map->sks,
                 'weight' => $map->weight,
-                'average_score' => $count > 0 ? round($totalScore / $count) : 0,
+                'average_score' => $count > 0 ? round($scores->avg()) : 0,
                 'students_graded' => $count,
             ];
         }
 
         return response()->json($result);
+    }
+
+    /**
+     * Nilai mata kuliah per mahasiswa (skala 0-100): [course_id => [student_id => nilai]].
+     * Nilai OBE yang sudah dikunci diutamakan; nilai lama (student_grades) dipakai
+     * untuk mahasiswa yang belum punya nilai OBE di mata kuliah tersebut.
+     */
+    private function courseScoresByStudent($students, $semesterType = null, $academicYear = null, $courseIds = null): array
+    {
+        $students = collect($students);
+        if ($students->isEmpty()) {
+            return [];
+        }
+
+        $legacyGrades = DB::table('student_grades')
+            ->whereIn('student_id', $students->pluck('id'))
+            ->when($courseIds !== null, fn ($q) => $q->whereIn('course_id', $courseIds))
+            ->get();
+        $legacyGrades = $this->filterGradesForAcademicPeriod($legacyGrades, $students->keyBy('id'), $semesterType, $academicYear);
+
+        $scores = [];
+        foreach ($legacyGrades as $g) {
+            if ($g->grade === 'Belum Diambil') {
+                continue;
+            }
+            $scores[$g->course_id][$g->student_id] = (isset($g->score) && $g->score !== null && $g->score > 0)
+                ? ($g->score <= 10 ? $g->score * 10 : $g->score)
+                : $this->convertGradeToPct($g->grade);
+        }
+
+        $courseIdFilter = $courseIds !== null ? collect($courseIds)->flip() : null;
+        foreach ($this->studentCplAchievements->courseFinalScores($students, $semesterType, $academicYear) as $courseId => $obeScores) {
+            if ($courseIdFilter && ! $courseIdFilter->has($courseId)) {
+                continue;
+            }
+            foreach ($obeScores as $studentId => $score) {
+                $scores[$courseId][$studentId] = $score;
+            }
+        }
+
+        return $scores;
     }
 
     private function convertGradeToPct($grade)
@@ -488,48 +506,21 @@ class CplController extends Controller
         if ($kelas) {
             $studentQuery->where('kelas', $kelas);
         }
-        $studentIds = $studentQuery->pluck('id');
 
         $allMappings = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
             ->join('cpls', 'course_cpl_mappings.cpl_id', '=', 'cpls.id')
             ->select('course_cpl_mappings.course_id', 'course_cpl_mappings.cpl_id', 'course_cpl_mappings.weight', 'cpls.code as cpl_code', 'cpls.description as cpl_desc', 'cpls.target_value')
             ->get();
 
-        $studentsById = $studentQuery->get()->keyBy('id');
-
-        $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
-            ->whereIn('student_id', $studentIds)
-            ->get();
-        $allGrades = $this->filterGradesForAcademicPeriod($allGrades, $studentsById, $semesterType, $academicYear);
-
-        $gradesByCourse = [];
-        foreach ($allGrades as $g) {
-            $gradesByCourse[$g->course_id][] = $g;
-        }
+        $scoresByCourse = $this->courseScoresByStudent($studentQuery->get(), $semesterType, $academicYear, $courses->pluck('id'));
 
         $cplAverages = $this->calculateAveragesInternal($departmentId, $angkatan, $kelas, $semesterType, $academicYear);
 
         $result = [];
         foreach ($courses as $c) {
-            $courseGrades = $gradesByCourse[$c->id] ?? [];
-            $totalScore = 0;
-            $gradedCount = 0;
-
-            foreach ($courseGrades as $g) {
-                if ($g->grade === 'Belum Diambil') {
-                    continue;
-                }
-                $scoreVal = 0;
-                if (isset($g->score) && $g->score !== null && $g->score > 0) {
-                    $scoreVal = $g->score <= 10 ? $g->score * 10 : $g->score;
-                } else {
-                    $scoreVal = $this->convertGradeToPct($g->grade);
-                }
-                $totalScore += $scoreVal;
-                $gradedCount++;
-            }
-
-            $avgGrade = $gradedCount > 0 ? round($totalScore / $gradedCount, 2) : 0;
+            $courseScores = collect($scoresByCourse[$c->id] ?? []);
+            $gradedCount = $courseScores->count();
+            $avgGrade = $gradedCount > 0 ? round($courseScores->avg(), 2) : 0;
 
             $courseMappings = $allMappings->where('course_id', $c->id);
             $mappingsData = [];

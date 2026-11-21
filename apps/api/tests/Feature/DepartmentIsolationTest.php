@@ -109,6 +109,9 @@ class DepartmentIsolationTest extends TestCase
         $this->postJson('/api/grades/bulk', ['items' => [[
             'studentId' => $own['student']->id, 'courseId' => $own['course']->id, 'grade' => 'AB', 'score' => 78,
         ]]])->assertOk();
+        // CPL yang masih dipetakan ke MK ditolak; setelah pemetaan dilepas baru boleh dihapus.
+        $this->deleteJson("/api/cpls/{$own['cpl']->id}")->assertStatus(409);
+        $this->deleteJson("/api/mappings/{$own['mapping']->id}")->assertNoContent();
         $this->deleteJson("/api/cpls/{$own['cpl']->id}")->assertNoContent();
 
         $this->assertDatabaseHas('students', ['id' => $own['student']->id, 'name' => 'Nama Baru']);

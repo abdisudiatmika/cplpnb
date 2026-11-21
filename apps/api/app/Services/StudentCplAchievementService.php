@@ -167,6 +167,69 @@ class StudentCplAchievementService
         });
     }
 
+    /**
+     * Nilai akhir mata kuliah (skala 0-100) dari rencana asesmen OBE yang sudah dikunci.
+     * Hasil: [course_id => [student_id => nilai akhir]]. Mahasiswa yang komponen wajibnya
+     * belum lengkap tidak disertakan, sama seperti di buku nilai dosen.
+     */
+    public function courseFinalScores(Collection $students, ?string $semesterType = null, ?string $academicYear = null): Collection
+    {
+        $studentIds = $students->pluck('id')->filter()->values();
+        if ($studentIds->isEmpty()) {
+            return collect();
+        }
+
+        $result = [];
+        foreach ($this->lockedPlans($studentIds, $semesterType, $academicYear, ['items']) as $plan) {
+            $courseId = $plan->courseOffering?->course_id;
+            if (! $courseId) {
+                continue;
+            }
+            foreach ($plan->courseOffering->enrollments as $enrollment) {
+                $scores = $enrollment->scores->keyBy('assessment_item_id');
+                $complete = $plan->items->where('is_required', true)
+                    ->every(fn ($item) => $this->scoreIsComplete($scores->get($item->id)));
+                if (! $complete || $plan->items->isEmpty()) {
+                    continue;
+                }
+
+                $result[$courseId][$enrollment->student_id] = round((float) $plan->items->sum(
+                    fn ($item) => (float) ($scores->get($item->id)?->score ?? 0) * (float) $item->weight / 100
+                ), 2);
+            }
+        }
+
+        return collect($result)->map(fn ($rows) => collect($rows));
+    }
+
+    private function lockedPlans(Collection $studentIds, ?string $semesterType, ?string $academicYear, array $with): Collection
+    {
+        $normalizedSemester = strtolower(trim((string) $semesterType));
+
+        return AssessmentPlan::with(array_merge($with, [
+            'gradeSubmission',
+            'courseOffering.academicPeriod',
+            'courseOffering.enrollments' => fn ($query) => $query
+                ->whereIn('student_id', $studentIds)
+                ->where('enrollment_status', 'active')
+                ->with('scores'),
+        ]))
+            ->where('status', 'Published')
+            ->whereHas('courseOffering.enrollments', fn ($query) => $query
+                ->whereIn('student_id', $studentIds)
+                ->where('enrollment_status', 'active'))
+            ->when(in_array($normalizedSemester, ['ganjil', 'genap'], true), fn ($query) => $query
+                ->whereHas('courseOffering.academicPeriod', fn ($period) => $period
+                    ->where('semester', ucfirst($normalizedSemester))))
+            ->when($academicYear, fn ($query) => $query
+                ->whereHas('courseOffering.academicPeriod', fn ($period) => $period
+                    ->where('academic_year', $academicYear)))
+            ->get()
+            ->groupBy('course_offering_id')
+            ->map(fn ($versions) => $versions->sortByDesc(fn ($plan) => (int) $plan->version)->first())
+            ->filter(fn ($plan) => $plan->gradeSubmission?->status === 'Locked');
+    }
+
     private function scoreIsComplete(?StudentAssessmentScore $score): bool
     {
         if (! $score) {

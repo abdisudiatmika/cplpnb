@@ -116,6 +116,12 @@ class LecturerController extends Controller
     public function destroy(Request $request, Lecturer $lecturer)
     {
         $this->authorizeLecturerAccess($request->user(), $lecturer, true);
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfUsed(
+            'Dosen '.($lecturer->user?->name ?? $lecturer->employee_number),
+            $guard->lecturerUsage($lecturer->id),
+            'Ubah status dosen menjadi Nonaktif, atau hapus penugasannya terlebih dahulu.'
+        );
 
         DB::transaction(function () use ($lecturer) {
             $user = $lecturer->user;

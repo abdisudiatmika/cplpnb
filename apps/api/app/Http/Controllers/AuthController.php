@@ -31,6 +31,13 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
+        // Middleware AuthenticateSession (Sanctum) menyimpan hash kata sandi akun lama ke sesi
+        // baru saat logout. Tanpa dibuang, login sebagai akun lain langsung dianggap sesi
+        // kedaluwarsa pada request berikutnya ("Sesi Anda telah berakhir").
+        if ($request->hasSession()) {
+            $request->session()->forget(['password_hash_sanctum', 'password_hash_web']);
+        }
+
         if (Auth::attempt($request->only('email', 'password'))) {
             $user = Auth::user()->load(['department', 'lecturer']);
             if ($user->role === 'dosen' && (!$user->lecturer || $user->lecturer->status !== 'Aktif')) {

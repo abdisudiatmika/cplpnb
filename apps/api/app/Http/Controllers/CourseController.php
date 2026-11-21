@@ -80,6 +80,12 @@ class CourseController extends Controller
     {
         $course = Course::findOrFail($id);
         $this->ensureSameDepartment($request, $course->department_id);
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfUsed(
+            'Mata kuliah '.$course->code,
+            $guard->courseUsage([$course->id])[$course->id],
+            'Menghapusnya akan ikut menghapus nilai mahasiswa. Hapus penugasan dan nilainya terlebih dahulu bila memang harus dihapus.'
+        );
         $course->delete();
         return response()->json(null, 204);
     }
@@ -149,6 +155,14 @@ class CourseController extends Controller
         if ($idsToDelete->isEmpty()) {
             return response()->json(['message' => 'Tidak ada mata kuliah yang cocok untuk dihapus.', 'count' => 0]);
         }
+
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfAnyUsed(
+            'mata kuliah',
+            $guard->courseUsage($idsToDelete),
+            Course::whereIn('id', $idsToDelete)->pluck('code', 'id'),
+            'Hapus centang mata kuliah tersebut lalu ulangi.'
+        );
 
         Course::whereIn('id', $idsToDelete)->delete();
 

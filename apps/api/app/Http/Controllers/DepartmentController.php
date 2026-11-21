@@ -92,6 +92,12 @@ class DepartmentController extends Controller
     public function destroy(string $id)
     {
         $department = Department::findOrFail($id);
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfUsed(
+            'Prodi '.$department->name,
+            $guard->departmentUsage($department->id),
+            'Hapus atau pindahkan data tersebut terlebih dahulu.'
+        );
         $department->delete();
         return response()->json(null, 204);
     }
