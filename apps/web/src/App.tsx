@@ -551,6 +551,7 @@ export default function App() {
   const [editingCurriculumId, setEditingCurriculumId] = useState<string | null>(null);
   const [curriculumForm, setCurriculumForm] = useState(emptyCurriculumForm);
   const [curriculumSaving, setCurriculumSaving] = useState(false);
+  const [curriculumFormError, setCurriculumFormError] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', password: '', passwordConfirmation: '' });
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -4052,12 +4053,14 @@ export default function App() {
       notes: curriculum.notes || '',
       copyFromId: '',
     } : { ...emptyCurriculumForm, copyFromId: selectedCurriculumId || '' });
+    setCurriculumFormError('');
     setShowCurriculumModal(true);
   };
 
   const saveCurriculum = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!curriculumForm.code.trim() || !curriculumForm.name.trim()) { showToast('Kode dan nama kurikulum wajib diisi.'); return; }
+    if (!curriculumForm.code.trim() || !curriculumForm.name.trim()) { setCurriculumFormError('Kode dan nama kurikulum wajib diisi.'); return; }
+    setCurriculumFormError('');
     setCurriculumSaving(true);
     try {
       const payload = {
@@ -4080,7 +4083,8 @@ export default function App() {
       }
       setShowCurriculumModal(false);
     } catch (error: any) {
-      showToast(error.message || 'Kurikulum gagal disimpan.');
+      // Ditampilkan di dalam formulir supaya tidak tertutup jendela formulir.
+      setCurriculumFormError(error.message || 'Kurikulum gagal disimpan.');
     } finally {
       setCurriculumSaving(false);
     }
@@ -5626,7 +5630,7 @@ export default function App() {
           <div className="flex-1 max-w-[1440px] mx-auto w-full p-md lg:p-xl flex flex-col gap-lg">
         {/* Toast alert popup */}
         {toastMessage && (
-          <div className="fixed top-20 right-6 z-50 bg-primary-container text-on-primary-container px-lg py-md rounded-xl shadow-2xl border border-primary/20 flex items-center gap-sm animate-bounce">
+          <div role="status" className="fixed top-20 right-6 z-[200] max-w-md bg-primary-container text-on-primary-container px-lg py-md rounded-xl shadow-2xl border border-primary/20 flex items-center gap-sm animate-bounce">
             <span className="material-symbols-outlined">info</span>
             <span className="font-label-sm text-label-sm font-bold">{toastMessage}</span>
           </div>
@@ -5854,6 +5858,7 @@ export default function App() {
                     <label className="font-label-sm text-on-surface">Sampai angkatan<input type="number" min="1990" max="2100" className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.cohortTo} placeholder="Kosongkan bila masih berlaku" onChange={event => setCurriculumForm(current => ({ ...current, cohortTo: event.target.value }))} /></label>
                   </div>
                   <p className="font-label-xs text-on-surface-variant">Rentang angkatan kurikulum aktif tidak boleh tumpang tindih. Kosongkan keduanya untuk kurikulum yang berlaku bagi angkatan yang belum tercakup kurikulum lain (hanya satu).</p>
+                  {curriculumFormError && <div role="alert" className="flex items-start gap-sm rounded-md border border-error/40 bg-error/10 px-md py-sm text-error"><span className="material-symbols-outlined text-[18px]">error</span><p className="font-body-sm font-bold">{curriculumFormError}</p></div>}
                   {editingCurriculumId ? (
                     <label className="block font-label-sm text-on-surface">Status<select className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.status} onChange={event => setCurriculumForm(current => ({ ...current, status: event.target.value }))}><option value="Aktif">Berlaku</option><option value="Nonaktif">Nonaktif</option></select></label>
                   ) : (
@@ -6144,7 +6149,7 @@ export default function App() {
                             </div></td>
                           </tr>)}
                         </tbody></table>
-                      </div> : <p className="mt-md rounded-lg bg-surface-container-low px-md py-sm font-body-sm text-on-surface-variant">Belum ada mata kuliah dan kelas yang ditugaskan pada periode ini.</p>)}
+                      </div> : <p className="mt-md rounded-lg bg-surface-container-low px-md py-sm font-body-sm text-on-surface-variant">Belum ada mata kuliah dan kelas yang ditugaskan pada periode ini.{selectedAssignmentPeriodRecord?.status !== 'Aktif' && ' Tekan "Aktifkan" pada status periode di atas untuk mulai menambah kelas ajar.'}</p>)}
                     </div>;
                   })}
                 </div>
