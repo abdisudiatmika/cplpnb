@@ -114,6 +114,43 @@ class CurriculumTest extends TestCase
         $this->assertEqualsCanonicalizing($newCplIds, $newResult->pluck('id')->all());
     }
 
+    public function test_active_curricula_cannot_have_overlapping_cohort_ranges(): void
+    {
+        // Lama: 2020-2023. Bersinggungan di 2023 -> ditolak.
+        $this->postJson('/api/curricula', ['code' => 'X1', 'name' => 'Bentrok', 'cohortFrom' => 2023])
+            ->assertUnprocessable()->assertJsonValidationErrors('cohortFrom');
+        $this->postJson('/api/curricula', ['code' => 'X2', 'name' => 'Bentrok', 'cohortTo' => 2021])
+            ->assertUnprocessable()->assertJsonValidationErrors('cohortFrom');
+
+        $newId = $this->createNewCurriculum(); // 2024 dst.
+        $this->postJson('/api/curricula', ['code' => 'X3', 'name' => 'Bentrok', 'cohortFrom' => 2022, 'cohortTo' => 2025])
+            ->assertUnprocessable();
+
+        // Nonaktif boleh tumpang tindih, tetapi tidak bisa diaktifkan selama masih bentrok.
+        $draftId = $this->postJson('/api/curricula', ['code' => 'X4', 'name' => 'Draf', 'cohortFrom' => 2025, 'status' => 'Nonaktif'])
+            ->assertCreated()->json('id');
+        $this->postJson("/api/curricula/{$draftId}/activate")->assertUnprocessable();
+        $this->putJson("/api/curricula/{$draftId}", ['code' => 'X4', 'name' => 'Draf', 'cohortFrom' => 2025, 'status' => 'Aktif'])->assertUnprocessable();
+
+        // Mengubah rentang kurikulum sendiri tidak dianggap bentrok dengan dirinya.
+        $this->putJson("/api/curricula/{$newId}", ['code' => '2024', 'name' => 'Kurikulum 2024', 'cohortFrom' => 2024, 'cohortTo' => 2026])->assertOk();
+        $this->putJson("/api/curricula/{$draftId}", ['code' => 'X4', 'name' => 'Draf', 'cohortFrom' => 2027, 'status' => 'Aktif'])->assertOk();
+
+        // Satu kurikulum "Semua angkatan" boleh sebagai cadangan; yang kedua ditolak.
+        $this->postJson('/api/curricula', ['code' => 'ALL1', 'name' => 'Cadangan'])->assertCreated();
+        $this->postJson('/api/curricula', ['code' => 'ALL2', 'name' => 'Cadangan 2'])->assertUnprocessable();
+    }
+
+    public function test_ranged_curriculum_wins_over_all_cohort_curriculum(): void
+    {
+        $this->old->update(['cohort_from' => null, 'cohort_to' => null]); // jadi "Semua angkatan"
+        $newId = $this->createNewCurriculum(); // 2024 dst.
+        $student = Student::create(['id' => (string) Str::uuid(), 'nim' => '2402', 'name' => 'Baru', 'angkatan' => '2024', 'kelas' => 'A', 'status' => 'Aktif', 'department_id' => $this->department->id]);
+
+        $result = collect($this->getJson("/api/cpl/achievements/{$student->id}")->assertOk()->json());
+        $this->assertEqualsCanonicalizing(Cpl::where('curriculum_id', $newId)->pluck('id')->all(), $result->pluck('id')->all());
+    }
+
     public function test_curriculum_of_other_department_is_ignored_and_not_editable(): void
     {
         $otherDepartment = Department::create(['name' => 'D2 Administrasi Pajak', 'code' => 'AP']);

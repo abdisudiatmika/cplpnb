@@ -31,10 +31,13 @@ class LecturerGradebookController extends Controller
         $assignments = TeachingAssignment::with($this->assignmentRelations)
             ->where('lecturer_id', $user->lecturer->id)
             ->where('status', 'Aktif')
-            ->whereHas('courseOffering.academicPeriod', fn ($period) => $period->where('status', 'Aktif'))
             ->whereHas('courseOffering.assessmentPlans', fn ($plan) => $plan->where('status', 'Published'))
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            // Kelas periode berjalan di atas; kelas periode yang sudah diarsipkan tetap tampil
+            // sebagai riwayat yang hanya bisa dilihat.
+            ->sortBy(fn (TeachingAssignment $assignment) => $assignment->courseOffering?->academicPeriod?->status === 'Aktif' ? 0 : 1)
+            ->values();
 
         return response()->json($assignments->map(fn (TeachingAssignment $assignment) => $this->assignmentSummaryPayload($assignment)));
     }
@@ -354,11 +357,18 @@ class LecturerGradebookController extends Controller
             abort_unless(
                 $user->lecturer
                 && $assignment->lecturer_id === $user->lecturer->id
-                && $assignment->status === 'Aktif'
-                && $assignment->courseOffering?->academicPeriod?->status === 'Aktif',
+                && $assignment->status === 'Aktif',
                 403,
-                'Penugasan ini tidak aktif pada periode berjalan.'
+                'Penugasan ini tidak aktif.'
             );
+            // Periode yang sudah diarsipkan tetap bisa dibuka dosen, tetapi hanya untuk dilihat.
+            if ($write) {
+                abort_unless(
+                    $assignment->courseOffering?->academicPeriod?->status === 'Aktif',
+                    403,
+                    'Periode ini sudah diarsipkan. Buku nilai hanya dapat dilihat.'
+                );
+            }
 
             return;
         }
@@ -425,6 +435,8 @@ class LecturerGradebookController extends Controller
             'cohortYear' => $offering?->academicClass?->cohort_year,
             'academicYear' => $offering?->academicPeriod?->academic_year,
             'semester' => $offering?->academicPeriod?->semester,
+            'periodStatus' => $offering?->academicPeriod?->status,
+            'periodArchived' => $offering?->academicPeriod?->status !== 'Aktif',
         ];
     }
 

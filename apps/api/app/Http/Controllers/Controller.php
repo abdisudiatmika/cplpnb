@@ -114,7 +114,10 @@ class Controller extends BaseController
                 ->where('status', 'Aktif')
                 ->get()
                 ->filter(fn (Curriculum $curriculum) => $curriculum->coversCohort((int) $cohort))
-                ->sortByDesc(fn (Curriculum $curriculum) => $curriculum->cohort_from ?? 0)
+                // Kurikulum dengan rentang angkatan didahulukan atas kurikulum "Semua angkatan".
+                ->sortByDesc(fn (Curriculum $curriculum) => $curriculum->cohort_from === null && $curriculum->cohort_to === null
+                    ? -1
+                    : ($curriculum->cohort_from ?? 0))
                 ->first();
             if ($match) {
                 return $match;

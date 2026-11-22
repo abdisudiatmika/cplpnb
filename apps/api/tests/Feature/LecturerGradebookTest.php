@@ -105,6 +105,27 @@ class LecturerGradebookTest extends TestCase
         $this->actingAs($otherUser)->putJson('/api/lecturer-gradebooks/'.$context['assignment']->id.'/scores', ['scores' => []])->assertForbidden();
     }
 
+    public function test_lecturer_can_view_but_not_change_gradebook_of_archived_period(): void
+    {
+        $context = $this->context();
+        $id = $context['assignment']->id;
+        AcademicPeriod::query()->update(['status' => 'Selesai']);
+
+        $this->actingAs($context['lecturerUser'])->getJson('/api/lecturer-gradebooks')
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.periodArchived', true);
+        $this->actingAs($context['lecturerUser'])->getJson('/api/lecturer-gradebooks/'.$id)
+            ->assertOk()->assertJsonPath('assignment.periodArchived', true);
+
+        $this->actingAs($context['lecturerUser'])->putJson('/api/lecturer-gradebooks/'.$id.'/scores', ['scores' => []])->assertForbidden();
+        $this->actingAs($context['lecturerUser'])->putJson('/api/lecturer-gradebooks/'.$id.'/analysis', ['analysis' => 'x'])->assertForbidden();
+        $this->actingAs($context['lecturerUser'])->postJson('/api/lecturer-gradebooks/'.$id.'/submit')->assertForbidden();
+
+        // Penugasan yang dinonaktifkan admin tetap tertutup sama sekali.
+        $context['assignment']->update(['status' => 'Nonaktif']);
+        $this->actingAs($context['lecturerUser'])->getJson('/api/lecturer-gradebooks')->assertOk()->assertJsonCount(0);
+        $this->actingAs($context['lecturerUser'])->getJson('/api/lecturer-gradebooks/'.$id)->assertForbidden();
+    }
+
     private function context(): array
     {
         $department = Department::create(['id' => (string) Str::uuid(), 'code' => 'AK', 'name' => 'Akuntansi']);

@@ -585,6 +585,8 @@ export default function App() {
   const [gradebookAssignments, setGradebookAssignments] = useState<any[]>([]);
   const [selectedGradebookAssignmentId, setSelectedGradebookAssignmentId] = useState('');
   const [gradebookData, setGradebookData] = useState<any | null>(null);
+  // Nilai bisa diubah dosen hanya saat masih Draf dan periodenya belum diarsipkan.
+  const gradebookEditable = gradebookData?.submission?.status === 'Draft' && !gradebookData?.assignment?.periodArchived;
   const [gradebookScoreDrafts, setGradebookScoreDrafts] = useState<Record<string, GradebookScoreDraft>>({});
   const [gradebookSaving, setGradebookSaving] = useState(false);
   const [gradebookBottomTab, setGradebookBottomTab] = useState<'analysis' | 'statistics'>('analysis');
@@ -5851,6 +5853,7 @@ export default function App() {
                     <label className="font-label-sm text-on-surface">Berlaku mulai angkatan<input type="number" min="1990" max="2100" className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.cohortFrom} placeholder="2026" onChange={event => setCurriculumForm(current => ({ ...current, cohortFrom: event.target.value }))} /></label>
                     <label className="font-label-sm text-on-surface">Sampai angkatan<input type="number" min="1990" max="2100" className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.cohortTo} placeholder="Kosongkan bila masih berlaku" onChange={event => setCurriculumForm(current => ({ ...current, cohortTo: event.target.value }))} /></label>
                   </div>
+                  <p className="font-label-xs text-on-surface-variant">Rentang angkatan kurikulum aktif tidak boleh tumpang tindih. Kosongkan keduanya untuk kurikulum yang berlaku bagi angkatan yang belum tercakup kurikulum lain (hanya satu).</p>
                   {editingCurriculumId ? (
                     <label className="block font-label-sm text-on-surface">Status<select className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={curriculumForm.status} onChange={event => setCurriculumForm(current => ({ ...current, status: event.target.value }))}><option value="Aktif">Berlaku</option><option value="Nonaktif">Nonaktif</option></select></label>
                   ) : (
@@ -6104,7 +6107,7 @@ export default function App() {
                   )}
                 </div>
               </div>
-              <p className="font-label-xs text-on-surface-variant">Hanya satu periode yang aktif. Mengarsipkan periode menyembunyikan kelas dari dashboard dosen tanpa menghapus nilai atau riwayat.</p>
+              <p className="font-label-xs text-on-surface-variant">Hanya satu periode yang aktif. Untuk menugaskan dosen di periode lain, aktifkan periode tersebut terlebih dahulu. Mengarsipkan periode menyembunyikan kelas dari dashboard dosen tanpa menghapus nilai atau riwayat; dosen masih dapat melihat buku nilainya tanpa bisa mengubah.</p>
             </section>
 
             <section className="app-card overflow-hidden">
@@ -6279,14 +6282,16 @@ export default function App() {
                 <button type="button" className="border border-outline-variant text-on-surface px-md py-sm rounded-lg font-label-sm font-bold" onClick={closeGradebookAssignment}><span className="material-symbols-outlined align-middle text-[18px] mr-xs">arrow_back</span>Kembali</button>
                 <span className="px-md py-sm rounded-lg bg-surface-container-high font-label-xs font-bold">Status: {gradeStatusLabel(gradebookData.submission?.status || 'Draft')}</span>
                 <button type="button" className="border border-primary text-primary px-md py-sm rounded-lg font-label-sm font-bold" onClick={downloadGradebookTemplate}><span className="material-symbols-outlined align-middle text-[18px] mr-xs">download</span>Unduh Template</button>
-                {gradebookData.submission?.status === 'Draft' && <button type="button" className="border border-primary text-primary px-md py-sm rounded-lg font-label-sm font-bold" onClick={() => gradebookImportInputRef.current?.click()}><span className="material-symbols-outlined align-middle text-[18px] mr-xs">upload</span>Impor Excel</button>}
+                {gradebookEditable && <button type="button" className="border border-primary text-primary px-md py-sm rounded-lg font-label-sm font-bold" onClick={() => gradebookImportInputRef.current?.click()}><span className="material-symbols-outlined align-middle text-[18px] mr-xs">upload</span>Impor Excel</button>}
                 <input ref={gradebookImportInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importGradebookTemplate} />
-                {gradebookData.submission?.status === 'Draft' && <>
+                {gradebookEditable && <>
                   <button type="button" className="border border-primary text-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={gradebookSaving} onClick={saveGradebookScores}>{gradebookSaving ? 'Memproses...' : 'Simpan Draf'}</button>
                   <button type="button" className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" disabled={gradebookSaving} onClick={() => runGradebookWorkflow('submit')}>Ajukan Nilai</button>
                 </>}
               </div>}
             </div>
+
+            {gradebookData?.assignment?.periodArchived && <div className="flex items-start gap-sm rounded-lg border border-amber-500/40 bg-amber-50 px-md py-sm text-amber-800"><span className="material-symbols-outlined text-[20px]">inventory_2</span><p className="font-body-sm">Periode {gradebookData.assignment.semester} {gradebookData.assignment.academicYear} sudah diarsipkan. Buku nilai ini hanya dapat dilihat dan diunduh.</p></div>}
 
             {!selectedGradebookAssignmentId && !dataLoading && <section className="border border-outline-variant rounded-xl overflow-hidden bg-surface shadow-md">
               {gradebookAssignments.length === 0 ? <div className="p-xl text-center text-on-surface-variant">Belum ada kelas dengan rencana asesmen terpublikasi. Hubungi admin jurusan.</div> : <div className="overflow-x-auto">
@@ -6307,10 +6312,10 @@ export default function App() {
                       <td className="px-md py-md font-body-sm font-bold text-primary">{assignment.courseCode}</td>
                       <td className="px-md py-md font-body-sm font-bold">{assignment.courseName}</td>
                       <td className="px-md py-md font-body-sm">{assignment.className} · {assignment.cohortYear}</td>
-                      <td className="px-md py-md font-body-sm">{assignment.semester} {assignment.academicYear}</td>
+                      <td className="px-md py-md font-body-sm">{assignment.semester} {assignment.academicYear}{assignment.periodArchived && <span className="ml-xs inline-flex px-sm py-xs rounded-full bg-surface-container-high font-label-xs font-bold text-on-surface-variant">Diarsipkan</span>}</td>
                       <td className="px-md py-md"><p className="font-body-sm font-bold">{complete} dari {total} lengkap</p><div className="mt-xs h-1.5 w-32 bg-surface-container-high rounded-full overflow-hidden"><div className="h-full bg-primary" style={{ width: `${total ? Math.round(complete / total * 100) : 0}%` }} /></div></td>
                       <td className="px-md py-md"><span className={`inline-flex px-sm py-xs rounded-full font-label-xs font-bold ${assignment.gradeStatus === 'Locked' ? 'bg-success/10 text-success' : assignment.gradeStatus === 'Submitted' || assignment.gradeStatus === 'Approved' ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error'}`}>{gradeStatusLabel(assignment.gradeStatus)}</span></td>
-                      <td className="px-md py-md text-right"><button type="button" className="inline-flex items-center gap-xs border border-primary text-primary px-md py-sm rounded-lg font-label-sm font-bold hover:bg-primary/5" onClick={() => openGradebookAssignment(assignment.id)}><span className="material-symbols-outlined text-[18px]">{assignment.gradeStatus === 'Locked' ? 'visibility' : 'edit'}</span>{assignment.gradeStatus === 'Locked' ? 'Lihat Nilai' : 'Input Nilai'}</button></td>
+                      <td className="px-md py-md text-right"><button type="button" className="inline-flex items-center gap-xs border border-primary text-primary px-md py-sm rounded-lg font-label-sm font-bold hover:bg-primary/5" onClick={() => openGradebookAssignment(assignment.id)}><span className="material-symbols-outlined text-[18px]">{assignment.gradeStatus === 'Locked' || assignment.periodArchived ? 'visibility' : 'edit'}</span>{assignment.gradeStatus === 'Locked' || assignment.periodArchived ? 'Lihat Nilai' : 'Input Nilai'}</button></td>
                     </tr>;
                   })}</tbody>
                 </table>
@@ -6346,7 +6351,7 @@ export default function App() {
                         const key = `${student.enrollmentId}:${item.id}`;
                         const draft = gradebookScoreDrafts[key] || { score: '', eligibilityStatus: 'eligible', note: '' };
                         return <td key={item.id} className="align-middle text-center">
-                          <input disabled={gradebookData.submission?.status !== 'Draft'} className="gradebook-score-input w-full bg-white border border-outline-variant px-sm py-xs text-center disabled:opacity-60" type="number" min="0" max="100" step="0.01" value={draft.score} placeholder="0-100" onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { score: e.target.value, eligibilityStatus: 'eligible' })} />
+                          <input disabled={!gradebookEditable} className="gradebook-score-input w-full bg-white border border-outline-variant px-sm py-xs text-center disabled:opacity-60" type="number" min="0" max="100" step="0.01" value={draft.score} placeholder="0-100" onChange={(e) => updateGradebookDraft(student.enrollmentId, item.id, { score: e.target.value, eligibilityStatus: 'eligible' })} />
                         </td>;
                       })}
                       <td className="px-md py-md text-center font-bold">
@@ -6368,10 +6373,10 @@ export default function App() {
               </div>
               {gradebookBottomTab === 'analysis' ? <div className="p-lg">
                 <label className="block font-label-sm font-bold text-on-surface mb-sm">Catatan evaluasi ketercapaian CPMK</label>
-                <textarea disabled={gradebookData.submission?.status !== 'Draft'} className="w-full min-h-[140px] resize-y bg-surface-container-low border border-outline-variant rounded-lg p-md text-on-surface disabled:opacity-60" value={gradebookAnalysis} onChange={(event) => setGradebookAnalysis(event.target.value)} placeholder="Tuliskan CPMK yang belum tercapai, kemungkinan penyebab, dan tindak lanjut pembelajaran..." />
+                <textarea disabled={!gradebookEditable} className="w-full min-h-[140px] resize-y bg-surface-container-low border border-outline-variant rounded-lg p-md text-on-surface disabled:opacity-60" value={gradebookAnalysis} onChange={(event) => setGradebookAnalysis(event.target.value)} placeholder="Tuliskan CPMK yang belum tercapai, kemungkinan penyebab, dan tindak lanjut pembelajaran..." />
                 <div className="mt-md flex items-center justify-between gap-md">
                   <p className="font-label-xs text-on-surface-variant">Catatan dapat diperbarui selama status nilai masih Draf.</p>
-                  {gradebookData.submission?.status === 'Draft' && <button type="button" disabled={gradebookSaving} className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" onClick={saveGradebookAnalysis}>Simpan Analisis</button>}
+                  {gradebookEditable && <button type="button" disabled={gradebookSaving} className="bg-primary text-on-primary px-lg py-sm rounded-lg font-label-sm font-bold disabled:opacity-50" onClick={saveGradebookAnalysis}>Simpan Analisis</button>}
                 </div>
               </div> : <div className="p-lg">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-md">{getGradebookCpmkStatistics().map(stat => <div key={stat.code} className="border border-outline-variant rounded-lg p-md">

@@ -132,6 +132,32 @@ class TeachingAssignmentTest extends TestCase
         $this->actingAs($lecturerUser)->getJson('/api/teaching-assignments/me')->assertJsonCount(1);
     }
 
+    public function test_assignment_in_new_period_requires_activation_while_another_period_is_active(): void
+    {
+        [$department, $admin, $lecturer, $course] = $this->context();
+        $payload = [
+            'lecturerId' => $lecturer->id,
+            'courseId' => $course->id,
+            'className' => 'A',
+            'cohortYear' => 2025,
+            'academicYear' => '2025/2026',
+            'semester' => 'Ganjil',
+        ];
+        // Belum ada periode sama sekali: periode pertama dibuat otomatis dan langsung aktif.
+        $this->actingAs($admin)->postJson('/api/teaching-assignments', $payload)->assertCreated();
+
+        // Periode lain belum dibuat dan Ganjil masih aktif: ditolak, tidak membuat periode aktif kedua.
+        $this->actingAs($admin)->postJson('/api/teaching-assignments', [...$payload, 'semester' => 'Genap'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('academicYear');
+        $this->assertDatabaseCount('academic_periods', 1);
+
+        // Setelah admin mengaktifkan Genap, penugasan diterima dan tetap hanya satu periode aktif.
+        $this->actingAs($admin)->postJson('/api/teaching-assignment-periods/activate', ['academicYear' => '2025/2026', 'semester' => 'Genap'])->assertOk();
+        $this->actingAs($admin)->postJson('/api/teaching-assignments', [...$payload, 'semester' => 'Genap'])->assertCreated();
+        $this->assertSame(1, \App\Models\AcademicPeriod::where('status', 'Aktif')->count());
+    }
+
     private function context(string $code = 'AK', string $name = 'Akuntansi', string $adminEmail = 'admin@example.test'): array
     {
         $department = Department::create(['id' => (string) Str::uuid(), 'code' => $code, 'name' => $name]);

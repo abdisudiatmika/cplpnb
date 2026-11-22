@@ -122,14 +122,27 @@ class TeachingAssignmentController extends Controller
         }
 
         $assignment = DB::transaction(function () use ($validated, $departmentId, $course, $lecturer, $user) {
-            $period = AcademicPeriod::firstOrCreate(
-                [
+            $period = AcademicPeriod::where('department_id', $departmentId)
+                ->where('academic_year', $validated['academicYear'])
+                ->where('semester', $validated['semester'])
+                ->first();
+            if (! $period) {
+                // Periode baru hanya dibuat otomatis bila belum ada periode aktif. Bila sudah ada,
+                // admin harus memakai tombol "Aktifkan" agar tetap hanya satu periode yang aktif.
+                $activePeriod = AcademicPeriod::where('department_id', $departmentId)->where('status', 'Aktif')->first();
+                if ($activePeriod) {
+                    throw ValidationException::withMessages(['academicYear' => [
+                        'Periode aktif saat ini adalah '.$activePeriod->semester.' '.$activePeriod->academic_year.'. '
+                        .'Aktifkan periode '.$validated['semester'].' '.$validated['academicYear'].' terlebih dahulu sebelum menambah penugasan.',
+                    ]]);
+                }
+                $period = AcademicPeriod::create([
                     'department_id' => $departmentId,
                     'academic_year' => $validated['academicYear'],
                     'semester' => $validated['semester'],
-                ],
-                ['status' => 'Aktif']
-            );
+                    'status' => 'Aktif',
+                ]);
+            }
             if ($period->status !== 'Aktif') {
                 throw ValidationException::withMessages(['academicYear' => ['Periode ini sudah diarsipkan. Aktifkan kembali periode sebelum menambah penugasan.']]);
             }

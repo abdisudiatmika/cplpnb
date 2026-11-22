@@ -13,6 +13,7 @@ use App\Models\GraduateProfileCpl;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CurriculumController extends Controller
 {
@@ -34,6 +35,9 @@ class CurriculumController extends Controller
     {
         $departmentId = $this->departmentIdOrFail($request);
         $validated = $this->validated($request, $departmentId);
+        if (($validated['status'] ?? 'Aktif') === 'Aktif') {
+            $this->ensureNoCohortOverlap($departmentId, $validated['cohortFrom'] ?? null, $validated['cohortTo'] ?? null);
+        }
         $request->validate([
             'copyFromId' => ['nullable', 'uuid', Rule::exists('curricula', 'id')->where('department_id', $departmentId)],
         ]);
@@ -67,6 +71,9 @@ class CurriculumController extends Controller
         abort_unless($curriculum->department_id === $departmentId, 404, 'Kurikulum tidak ditemukan.');
         $validated = $this->validated($request, $departmentId, $curriculum);
         abort_if(($validated['status'] ?? $curriculum->status) === 'Nonaktif' && $curriculum->is_default, 422, 'Kurikulum aktif tidak dapat dinonaktifkan. Aktifkan kurikulum lain terlebih dahulu.');
+        if (($validated['status'] ?? $curriculum->status) === 'Aktif') {
+            $this->ensureNoCohortOverlap($departmentId, $validated['cohortFrom'] ?? null, $validated['cohortTo'] ?? null, $curriculum);
+        }
 
         $curriculum->update([
             'code' => $validated['code'],
@@ -84,6 +91,9 @@ class CurriculumController extends Controller
     {
         $departmentId = $this->departmentIdOrFail($request);
         abort_unless($curriculum->department_id === $departmentId, 404, 'Kurikulum tidak ditemukan.');
+        if ($curriculum->status !== 'Aktif') {
+            $this->ensureNoCohortOverlap($departmentId, $curriculum->cohort_from, $curriculum->cohort_to, $curriculum);
+        }
 
         DB::transaction(function () use ($curriculum, $departmentId) {
             Curriculum::where('department_id', $departmentId)->update(['is_default' => false]);
@@ -110,6 +120,53 @@ class CurriculumController extends Controller
         return response()->json(null, 204);
     }
 
+    /**
+     * Kurikulum berstatus Aktif yang punya rentang angkatan tidak boleh saling tumpang tindih,
+     * supaya setiap angkatan jelas memakai satu kurikulum. Satu kurikulum "Semua angkatan"
+     * (tanpa rentang) boleh ada sebagai cadangan untuk angkatan yang tidak tercakup.
+     */
+    private function ensureNoCohortOverlap(string $departmentId, $from, $to, ?Curriculum $ignore = null): void
+    {
+        $from = $from === null || $from === '' ? null : (int) $from;
+        $to = $to === null || $to === '' ? null : (int) $to;
+        $unbounded = $from === null && $to === null;
+
+        $conflict = Curriculum::where('department_id', $departmentId)
+            ->where('status', 'Aktif')
+            ->when($ignore, fn ($query) => $query->where('id', '!=', $ignore->id))
+            ->get()
+            ->first(function (Curriculum $other) use ($from, $to, $unbounded) {
+                $otherUnbounded = $other->cohort_from === null && $other->cohort_to === null;
+                if ($unbounded || $otherUnbounded) {
+                    return $unbounded && $otherUnbounded;
+                }
+
+                return ($from === null || $other->cohort_to === null || $from <= $other->cohort_to)
+                    && ($to === null || $other->cohort_from === null || $other->cohort_from <= $to);
+            });
+
+        if ($conflict) {
+            $range = $this->cohortRangeLabel($conflict->cohort_from, $conflict->cohort_to);
+            $message = $unbounded
+                ? 'Sudah ada kurikulum aktif untuk semua angkatan ('.$conflict->name.'). Isi rentang angkatan, atau nonaktifkan kurikulum tersebut terlebih dahulu.'
+                : 'Rentang angkatan tumpang tindih dengan '.$conflict->name.' ('.$range.'). Ubah rentang angkatan salah satu kurikulum agar setiap angkatan hanya memakai satu kurikulum.';
+
+            throw ValidationException::withMessages(['cohortFrom' => [$message]]);
+        }
+    }
+
+    private function cohortRangeLabel(?int $from, ?int $to): string
+    {
+        if ($from !== null && $to === null) {
+            return 'angkatan '.$from.' dst.';
+        }
+        if ($from === null && $to !== null) {
+            return 's.d. angkatan '.$to;
+        }
+
+        return $from === $to ? 'angkatan '.$from : 'angkatan '.$from.'–'.$to;
+    }
+
     private function departmentIdOrFail(Request $request): string
     {
         $user = $request->user();
@@ -129,7 +186,7 @@ class CurriculumController extends Controller
                 Rule::unique('curricula', 'code')->where('department_id', $departmentId)->ignore($curriculum?->id)],
             'name' => 'required|string|max:100',
             'cohortFrom' => 'nullable|integer|min:1990|max:2100',
-            'cohortTo' => 'nullable|integer|min:1990|max:2100|gte:cohortFrom',
+            'cohortTo' => array_merge(['nullable', 'integer', 'min:1990', 'max:2100'], $request->filled('cohortFrom') ? ['gte:cohortFrom'] : []),
             'status' => ['nullable', Rule::in(['Aktif', 'Nonaktif'])],
             'notes' => 'nullable|string|max:2000',
         ], [
