@@ -90,7 +90,7 @@ class CpmkController extends Controller
                 'status' => $validated['status'] ?? $cpmk->status,
             ]);
 
-            if (isset($validated['cplCode']) || isset($validated['contributionWeight'])) {
+            if (isset($validated['cplCode'])) {
                 $currentMapping = $cpmk->cplMappings()->first();
                 $cplCode = $validated['cplCode'] ?? $currentMapping?->cpl?->code;
                 throw_unless($cplCode, ValidationException::withMessages(['cplCode' => ['CPL untuk CPMK ini belum ditentukan.']]));
@@ -101,7 +101,8 @@ class CpmkController extends Controller
                 CpmkCplMapping::create([
                     'cpmk_id' => $cpmk->id,
                     'cpl_id' => $cpl->id,
-                    'contribution_weight' => $validated['contributionWeight'] ?? $currentMapping?->contribution_weight ?? 100,
+                    // Nilai sementara; bobot akhir dibagi rata oleh syncCourseMappings().
+                    'contribution_weight' => $currentMapping?->contribution_weight ?? 100,
                 ]);
             }
 
@@ -192,7 +193,7 @@ class CpmkController extends Controller
 
         CpmkCplMapping::updateOrCreate(
             ['cpmk_id' => $cpmk->id, 'cpl_id' => $cpl->id],
-            ['contribution_weight' => $data['contributionWeight'] ?? 100]
+            ['contribution_weight' => 100] // dibagi rata oleh syncCourseMappings()
         );
 
         return $cpmk;
@@ -223,24 +224,10 @@ class CpmkController extends Controller
         return $item;
     }
 
+    /** Bobot CPMK selalu dibagi rata per mata kuliah; lihat CpmkWeightBalancer. */
     private function syncCourseMappings(string $courseId): void
     {
-        $derivedMappings = CpmkCplMapping::query()
-            ->join('cpmks', 'cpmk_cpl_mappings.cpmk_id', '=', 'cpmks.id')
-            ->where('cpmks.course_id', $courseId)
-            ->where('cpmks.status', 'Aktif')
-            ->groupBy('cpmk_cpl_mappings.cpl_id')
-            ->selectRaw('cpmk_cpl_mappings.cpl_id, SUM(cpmk_cpl_mappings.contribution_weight) AS weight')
-            ->get();
-
-        CourseCplMapping::where('course_id', $courseId)->delete();
-        foreach ($derivedMappings as $mapping) {
-            CourseCplMapping::create([
-                'course_id' => $courseId,
-                'cpl_id' => $mapping->cpl_id,
-                'weight' => (float) $mapping->weight,
-            ]);
-        }
+        app(\App\Services\CpmkWeightBalancer::class)->rebalance($courseId);
     }
 
     private function resolveReadableDepartment(Request $request): string

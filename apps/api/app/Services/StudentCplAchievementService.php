@@ -19,7 +19,10 @@ use Illuminate\Support\Facades\DB;
  *  2. Nilai per CPMK yang diinput admin prodi (student_cpmk_scores).
  *  3. Nilai satuan mata kuliah (student_grades, termasuk data lama). Nilai ini diberikan
  *     sama ke setiap CPMK aktif mata kuliah tersebut. Bila mata kuliah belum punya CPMK
- *     yang terpetakan ke CPL, dipakai pemetaan mata kuliah -> CPL.
+ *     yang terpetakan ke CPL, dipakai pemetaan mata kuliah -> CPL dengan bobot dibagi rata.
+ *
+ * Bobot CPMK -> CPL dibagi rata per mata kuliah (CpmkWeightBalancer), sehingga setiap mata
+ * kuliah menyumbang total 100% yang terbagi ke CPL-CPL yang didukungnya.
  *
  * Bila dosen sudah memberi nilai untuk mahasiswa pada sebuah mata kuliah, nilai admin
  * untuk mata kuliah itu diabaikan. Nilai CPMK admin menggantikan nilai satuan hanya pada
@@ -359,20 +362,25 @@ class StudentCplAchievementService
             }
         }
 
-        // Mata kuliah tanpa CPMK terpetakan memakai pemetaan mata kuliah -> CPL.
+        // Mata kuliah tanpa CPMK terpetakan memakai pemetaan mata kuliah -> CPL, dengan 100%
+        // dibagi rata ke CPL yang terpetakan (sama seperti pembagian rata bobot CPMK).
         if ($fallbackCourseIds) {
             $courseCpls = DB::table('course_cpl_mappings')
                 ->join('cpls', 'course_cpl_mappings.cpl_id', '=', 'cpls.id')
                 ->whereIn('course_cpl_mappings.course_id', array_keys($fallbackCourseIds))
-                ->select('course_cpl_mappings.course_id', 'course_cpl_mappings.cpl_id', 'course_cpl_mappings.weight', 'cpls.code')
+                ->where('course_cpl_mappings.weight', '>', 0)
+                ->select('course_cpl_mappings.course_id', 'course_cpl_mappings.cpl_id', 'cpls.code')
                 ->get()
-                ->groupBy('course_id');
+                ->groupBy('course_id')
+                ->map(function ($maps) {
+                    $share = round(100 / $maps->count(), 4);
+
+                    return $maps->map(fn ($map) => ['id' => $map->cpl_id, 'code' => $map->code, 'weight' => $share])->values()->all();
+                });
             foreach ($entries as $studentId => $rows) {
                 foreach ($rows as $index => $row) {
                     if ($row['fallbackCourseId']) {
-                        $entries[$studentId][$index]['cpls'] = $courseCpls->get($row['fallbackCourseId'], collect())
-                            ->map(fn ($map) => ['id' => $map->cpl_id, 'code' => $map->code, 'weight' => (float) $map->weight])
-                            ->values()->all();
+                        $entries[$studentId][$index]['cpls'] = $courseCpls->get($row['fallbackCourseId'], []);
                     }
                 }
             }

@@ -40,8 +40,10 @@ class ImportCpmksTest extends TestCase
         $this->assertSame(62, Cpmk::whereHas('cplMappings')->count());
 
         $siaWeights = CourseCplMapping::with('cpl')->where('course_id', $sia->id)->get()->mapWithKeys(fn ($m) => [$m->cpl->code => (float) $m->weight])->all();
-        $this->assertEqualsWithDelta(3, $siaWeights['CPL-6'], 0.001);
-        $this->assertEqualsWithDelta(1, $siaWeights['CPL-2'], 0.001);
+        // 3 CPMK aktif dibagi rata (33,33%): dua untuk CPL-6, satu untuk CPL-2; total 100%.
+        $this->assertEqualsWithDelta(66.67, $siaWeights['CPL-6'], 0.02);
+        $this->assertEqualsWithDelta(33.33, $siaWeights['CPL-2'], 0.02);
+        $this->assertEqualsWithDelta(100, array_sum($siaWeights), 0.001);
         $this->assertArrayNotHasKey('CPL-9', $siaWeights);
 
         // Aman diulang.

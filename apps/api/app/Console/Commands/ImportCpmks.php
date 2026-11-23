@@ -16,10 +16,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Impor CPMK dan pemetaan CPMK-CPL dari file JSON (hasil olah dokumen CPMK prodi).
  *
- * Bobot kontribusi tiap CPMK diambil dari bobot pemetaan MK-CPL yang sudah ada dibagi jumlah
- * CPMK untuk CPL tersebut pada MK yang sama, sehingga skala bobot perhitungan CPL tidak berubah.
- * Pasangan MK-CPL yang baru (belum ada sebelumnya) memakai --default-weight.
- * Setelah impor, pemetaan MK-CPL MK terkait diturunkan ulang dari CPMK (sama seperti menu CPMK).
+ * Bobot kontribusi CPMK dibagi rata per mata kuliah (CpmkWeightBalancer), sama seperti menu CPMK;
+ * setelah impor, pemetaan MK-CPL MK terkait diturunkan ulang dari CPMK.
  */
 class ImportCpmks extends Command
 {
@@ -27,7 +25,6 @@ class ImportCpmks extends Command
         {file : Path file JSON berisi items[courseCode, code, description, cplCode, contributionWeight?]}
         {--department= : Kode, id, atau nama prodi (default: field "department" pada file)}
         {--curriculum= : Kode kurikulum tujuan (default: kurikulum aktif prodi)}
-        {--default-weight=1 : Bobot untuk pasangan MK-CPL yang belum ada sebelumnya}
         {--apply : Simpan perubahan. Tanpa opsi ini hanya simulasi (rollback).}';
 
     protected $description = 'Impor CPMK dan pemetaan CPMK-CPL dari file JSON.';
@@ -55,7 +52,6 @@ class ImportCpmks extends Command
             ->orderByDesc('is_default')->first();
 
         $apply = (bool) $this->option('apply');
-        $defaultWeight = (float) $this->option('default-weight');
         $this->info(($apply ? 'MODE: APPLY' : 'MODE: SIMULASI').' | Prodi: '.$department->name.' | Kurikulum: '.($curriculum?->name ?? '(tanpa kurikulum)'));
 
         $items = collect($payload['items'])->map(fn ($item) => [
@@ -105,12 +101,10 @@ class ImportCpmks extends Command
         try {
             foreach ($items->groupBy('courseCode') as $courseCode => $courseItems) {
                 $course = $courses->get($courseCode);
-                $existingWeights = CourseCplMapping::where('course_id', $course->id)->get()->keyBy('cpl_id')->map(fn ($m) => (float) $m->weight);
                 $before = $this->mappingSummary($course->id);
 
                 foreach ($courseItems->groupBy('cplCode') as $cplCode => $cplItems) {
                     $cpl = $cpls->get($cplCode);
-                    $pairWeight = $existingWeights->get($cpl->id, $defaultWeight);
                     foreach ($cplItems as $item) {
                         $cpmk = Cpmk::firstOrNew(['course_id' => $course->id, 'code' => $item['code']]);
                         $stats[$cpmk->exists ? 'cpmk_diperbarui' : 'cpmk_baru']++;
@@ -124,7 +118,7 @@ class ImportCpmks extends Command
                         CpmkCplMapping::create([
                             'cpmk_id' => $cpmk->id,
                             'cpl_id' => $cpl->id,
-                            'contribution_weight' => (float) ($item['contributionWeight'] ?? round($pairWeight / $cplItems->count(), 4)),
+                            'contribution_weight' => 100, // dibagi rata oleh syncCourseMappings()
                         ]);
                     }
                 }
@@ -174,22 +168,9 @@ class ImportCpmks extends Command
             ->join(', ');
     }
 
-    /**
-     * Sama dengan CpmkController::syncCourseMappings: bobot MK-CPL = jumlah bobot kontribusi CPMK aktif.
-     */
+    /** Bobot CPMK dibagi rata lalu pemetaan MK-CPL diturunkan ulang (sama dengan menu CPMK). */
     private function syncCourseMappings(string $courseId): void
     {
-        $derived = CpmkCplMapping::query()
-            ->join('cpmks', 'cpmk_cpl_mappings.cpmk_id', '=', 'cpmks.id')
-            ->where('cpmks.course_id', $courseId)
-            ->where('cpmks.status', 'Aktif')
-            ->groupBy('cpmk_cpl_mappings.cpl_id')
-            ->selectRaw('cpmk_cpl_mappings.cpl_id, SUM(cpmk_cpl_mappings.contribution_weight) AS weight')
-            ->get();
-
-        CourseCplMapping::where('course_id', $courseId)->delete();
-        foreach ($derived as $mapping) {
-            CourseCplMapping::create(['course_id' => $courseId, 'cpl_id' => $mapping->cpl_id, 'weight' => (float) $mapping->weight]);
-        }
+        app(\App\Services\CpmkWeightBalancer::class)->rebalance($courseId);
     }
 }
