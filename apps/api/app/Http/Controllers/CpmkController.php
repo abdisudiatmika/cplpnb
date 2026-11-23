@@ -47,12 +47,19 @@ class CpmkController extends Controller
     {
         $this->authorizeAdministrator($request->user());
         $departmentId = $this->resolveWritableDepartment($request);
+        $request->validate(
+            ['contributionWeight' => 'required|numeric|min:0.01|max:100'],
+            ['contributionWeight.required' => 'Bobot kontribusi wajib diisi (0,01-100%).'],
+            ['contributionWeight' => 'bobot kontribusi']
+        );
         $data = $this->validatedItem($request->all());
 
         $curriculum = $this->currentCurriculum($request, $departmentId);
         $cpmk = DB::transaction(function () use ($data, $departmentId, $curriculum) {
-            $cpmk = $this->persistItem($data, $departmentId, $curriculum);
+            [$cpmk] = $this->persistItem($data, $departmentId, $curriculum);
+            $this->weights()->setCpmkWeight($cpmk, round((float) $data['contributionWeight'], 2));
             $this->syncCourseMappings($cpmk->course_id);
+            $this->weights()->assertWithinLimit($cpmk->course_id, $cpmk->id);
 
             return $cpmk;
         });
@@ -73,8 +80,8 @@ class CpmkController extends Controller
             'curriculumVersion' => 'sometimes|nullable|string|max:50',
             'status' => ['sometimes', 'required', Rule::in(['Aktif', 'Nonaktif'])],
             'cplCode' => ['sometimes', 'required', 'string', 'regex:/^CPL-[1-9][0-9]*$/'],
-            'contributionWeight' => 'sometimes|numeric|min:0.01|max:100',
-        ]);
+            'contributionWeight' => 'sometimes|required|numeric|min:0.01|max:100',
+        ], [], ['contributionWeight' => 'bobot kontribusi']);
 
         $code = strtoupper($validated['code'] ?? $cpmk->code);
         $duplicate = Cpmk::where('course_id', $course->id)->where('code', $code)->whereKeyNot($cpmk->id)->exists();
@@ -82,6 +89,7 @@ class CpmkController extends Controller
 
         DB::transaction(function () use ($validated, $cpmk, $course, $departmentId, $code) {
             $previousCourseId = $cpmk->course_id;
+            $totalBefore = $course->id === $previousCourseId ? $this->weights()->activeTotal($course->id) : null;
             $cpmk->update([
                 'course_id' => $course->id,
                 'code' => $code,
@@ -90,6 +98,7 @@ class CpmkController extends Controller
                 'status' => $validated['status'] ?? $cpmk->status,
             ]);
 
+            $currentWeight = round((float) $cpmk->cplMappings()->sum('contribution_weight'), 2);
             if (isset($validated['cplCode'])) {
                 $currentMapping = $cpmk->cplMappings()->first();
                 $cplCode = $validated['cplCode'] ?? $currentMapping?->cpl?->code;
@@ -101,15 +110,18 @@ class CpmkController extends Controller
                 CpmkCplMapping::create([
                     'cpmk_id' => $cpmk->id,
                     'cpl_id' => $cpl->id,
-                    // Nilai sementara; bobot akhir dibagi rata oleh syncCourseMappings().
-                    'contribution_weight' => $currentMapping?->contribution_weight ?? 100,
+                    'contribution_weight' => $currentWeight,
                 ]);
+            }
+            if (isset($validated['contributionWeight'])) {
+                $this->weights()->setCpmkWeight($cpmk, round((float) $validated['contributionWeight'], 2));
             }
 
             $this->syncCourseMappings($previousCourseId);
             if ($course->id !== $previousCourseId) {
                 $this->syncCourseMappings($course->id);
             }
+            $this->weights()->assertWithinLimit($course->id, $cpmk->id, $totalBefore);
         });
 
         return response()->json($this->payload($cpmk->fresh(['course.department', 'cplMappings.cpl'])));
@@ -157,8 +169,26 @@ class CpmkController extends Controller
 
         $curriculum = $this->currentCurriculum($request, $departmentId);
         $created = DB::transaction(function () use ($validated, $departmentId, $curriculum) {
-            $created = collect($validated['items'])->map(fn (array $item) => $this->persistItem($this->validatedItem($item), $departmentId, $curriculum));
-            $created->pluck('course_id')->unique()->each(fn (string $courseId) => $this->syncCourseMappings($courseId));
+            $created = collect();
+            $unweighted = [];
+            foreach ($validated['items'] as $item) {
+                $data = $this->validatedItem($item);
+                [$cpmk, $newMapping] = $this->persistItem($data, $departmentId, $curriculum);
+                if (isset($data['contributionWeight']) && $data['contributionWeight'] !== '') {
+                    $this->weights()->setCpmkWeight($cpmk, round((float) $data['contributionWeight'], 2));
+                } elseif ($newMapping) {
+                    // Tanpa bobot di file: CPMK baru membagi rata sisa bobot mata kuliahnya.
+                    $unweighted[$cpmk->course_id][] = $cpmk->id;
+                }
+                $created->push($cpmk);
+            }
+            foreach ($created->pluck('course_id')->unique() as $courseId) {
+                if (isset($unweighted[$courseId])) {
+                    $this->weights()->fillRemaining($courseId, $unweighted[$courseId]);
+                }
+                $this->syncCourseMappings($courseId);
+                $this->weights()->assertWithinLimit($courseId);
+            }
 
             return $created;
         });
@@ -171,7 +201,8 @@ class CpmkController extends Controller
         );
     }
 
-    private function persistItem(array $data, string $departmentId, ?\App\Models\Curriculum $curriculum = null): Cpmk
+    /** @return array{0: Cpmk, 1: bool} CPMK dan apakah pemetaan CPMK-CPL-nya baru dibuat. */
+    private function persistItem(array $data, string $departmentId, ?\App\Models\Curriculum $curriculum = null): array
     {
         $course = $this->scopeToCurriculum(Course::where('department_id', $departmentId), $curriculum)->where('code', $data['courseCode'])->first();
         $cpl = $this->scopeToCurriculum(Cpl::where('department_id', $departmentId), $curriculum)->where('code', $data['cplCode'])->first();
@@ -191,12 +222,12 @@ class CpmkController extends Controller
             ]
         );
 
-        CpmkCplMapping::updateOrCreate(
+        $mapping = CpmkCplMapping::firstOrCreate(
             ['cpmk_id' => $cpmk->id, 'cpl_id' => $cpl->id],
-            ['contribution_weight' => 100] // dibagi rata oleh syncCourseMappings()
+            ['contribution_weight' => 0] // bobot diisi pemanggil
         );
 
-        return $cpmk;
+        return [$cpmk, $mapping->wasRecentlyCreated];
     }
 
     private function validatedItem(array $item): array
@@ -224,10 +255,15 @@ class CpmkController extends Controller
         return $item;
     }
 
-    /** Bobot CPMK selalu dibagi rata per mata kuliah; lihat CpmkWeightBalancer. */
+    /** Pemetaan MK-CPL diturunkan dari bobot CPMK aktif; lihat CpmkWeightBalancer. */
     private function syncCourseMappings(string $courseId): void
     {
-        app(\App\Services\CpmkWeightBalancer::class)->rebalance($courseId);
+        $this->weights()->syncCourseMappings($courseId);
+    }
+
+    private function weights(): \App\Services\CpmkWeightBalancer
+    {
+        return app(\App\Services\CpmkWeightBalancer::class);
     }
 
     private function resolveReadableDepartment(Request $request): string

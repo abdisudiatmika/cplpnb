@@ -23,6 +23,8 @@ class CpmkManagementTest extends TestCase
             512,
             JSON_THROW_ON_ERROR
         );
+        // Dokumen CPMK tidak memuat bobot: CPMK baru membagi rata sisa bobot mata kuliahnya.
+        $fixture['cpmks'] = array_map(fn (array $item) => array_diff_key($item, ['contributionWeight' => true]), $fixture['cpmks']);
 
         $department = $this->department($fixture['department']['code'], $fixture['department']['name']);
         $admin = $this->user('admin_jurusan', $department->id, 'fixture-admin@example.test');

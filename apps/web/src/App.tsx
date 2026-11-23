@@ -4157,7 +4157,7 @@ export default function App() {
       description: cpmk.description,
       cplCode: cpmk.cplCode,
       curriculumVersion: cpmk.curriculumVersion || '',
-      contributionWeight: String(cpmk.contributionWeight || 100),
+      contributionWeight: cpmk.contributionWeight ? String(Number(cpmk.contributionWeight)).replace('.', ',') : '',
       status: cpmk.status,
     });
     setShowCpmkModal(true);
@@ -4221,9 +4221,19 @@ export default function App() {
       setCpmkFormError(`Kode ${normalizedCode} menunjukkan CPL-${codeCplNumber}. Untuk ${cpmkForm.cplCode}, gunakan kode yang diawali CPMK${String(selectedCplNumber).padStart(2, '0')}, misalnya CPMK${String(selectedCplNumber).padStart(2, '0')}-01.`);
       return;
     }
+    const weight = Number(String(cpmkForm.contributionWeight).trim().replace(',', '.'));
+    if (!String(cpmkForm.contributionWeight).trim() || !Number.isFinite(weight) || weight < 0.01 || weight > 100) {
+      setCpmkFormError('Bobot kontribusi wajib diisi dengan angka 0,01 sampai 100, misalnya 22,5.');
+      return;
+    }
+    if (cpmkWeightOver) {
+      setCpmkFormError(`Total bobot CPMK aktif mata kuliah ini menjadi ${formatPercent(cpmkProjectedTotal)}%, melebihi 100%. Bobot maksimal untuk CPMK ini ${formatPercent(cpmkAvailableWeight)}%. Kurangi dulu bobot CPMK lain bila perlu.`);
+      return;
+    }
     setCpmkSaving(true);
     try {
       const payload = {
+        contributionWeight: Math.round(weight * 100) / 100,
         courseId: course.id,
         courseCode: course.code,
         code: normalizedCode,
@@ -5342,12 +5352,19 @@ export default function App() {
 
   // MAIN LAYOUT (LOGGED IN)
   // Bobot CPMK dibagi rata otomatis per mata kuliah (100% / jumlah CPMK aktif); dihitung ulang di server.
-  const cpmkActiveCount = cpmkMasters.filter(item => item.courseId === cpmkForm.courseId && item.id !== editingCpmkId && item.status === 'Aktif').length
-    + (cpmkForm.status === 'Aktif' ? 1 : 0);
-  const cpmkEqualShare = cpmkActiveCount > 0 ? 100 / cpmkActiveCount : 0;
-  const cpmkWeightNote = cpmkForm.status === 'Aktif'
-    ? `${cpmkActiveCount} CPMK aktif pada mata kuliah ini, masing-masing ${cpmkEqualShare.toFixed(2).replace(/\.00$/, '')}% (total 100%).`
-    : `CPMK nonaktif tidak mendapat bobot; ${cpmkActiveCount} CPMK aktif lain dibagi rata.`;
+  const formatPercent = (value: number) => (Math.round(value * 100) / 100).toLocaleString('id-ID', { maximumFractionDigits: 2 });
+  const cpmkOtherActive = cpmkMasters.filter(item => item.courseId === cpmkForm.courseId && item.id !== editingCpmkId && item.status === 'Aktif');
+  const cpmkOtherActiveTotal = cpmkOtherActive.reduce((sum, item) => sum + (Number(item.contributionWeight) || 0), 0);
+  const cpmkAvailableWeight = Math.max(0, Math.round((100 - cpmkOtherActiveTotal) * 100) / 100);
+  const cpmkFormWeight = Number(String(cpmkForm.contributionWeight).replace(',', '.'));
+  const cpmkProjectedTotal = cpmkOtherActiveTotal + (cpmkForm.status === 'Aktif' && Number.isFinite(cpmkFormWeight) ? cpmkFormWeight : 0);
+  const cpmkEditingOriginal = cpmkMasters.find(item => item.id === editingCpmkId);
+  const cpmkCurrentTotal = cpmkOtherActiveTotal + (cpmkEditingOriginal && cpmkEditingOriginal.courseId === cpmkForm.courseId && cpmkEditingOriginal.status === 'Aktif' ? Number(cpmkEditingOriginal.contributionWeight) || 0 : 0);
+  // Data lama yang sudah di atas 100% tetap boleh diedit selama totalnya tidak bertambah.
+  const cpmkWeightOver = cpmkProjectedTotal > 100.001 && (!cpmkEditingOriginal || cpmkProjectedTotal > cpmkCurrentTotal + 0.001);
+  const cpmkWeightNote = cpmkForm.courseId
+    ? `${cpmkOtherActive.length} CPMK aktif lain pada mata kuliah ini berbobot ${formatPercent(cpmkOtherActiveTotal)}%. Sisa bobot: ${formatPercent(cpmkAvailableWeight)}%. Total setelah disimpan: ${formatPercent(cpmkProjectedTotal)}% (maksimal 100%).`
+    : 'Pilih mata kuliah untuk melihat sisa bobot.';
 
   return (
     <div className="app-shell font-body-base text-body-base selection:bg-primary/30 min-h-screen flex flex-col bg-[#F5F7FB]">
@@ -5934,7 +5951,7 @@ export default function App() {
                     <td className="px-md py-sm font-bold text-primary">{cpmk.code}</td>
                     <td className="px-md py-sm"><p className="font-body-sm font-bold">{cpmk.courseName}</p><p className="font-label-xs text-on-surface-variant">{cpmk.courseCode}</p></td>
                     <td className="px-md py-sm font-body-sm max-w-[420px]">{cpmk.description}</td>
-                    <td className="px-md py-sm font-bold">{cpmk.cplCode}</td><td className="px-md py-sm">{cpmk.contributionWeight}%</td>
+                    <td className="px-md py-sm font-bold">{cpmk.cplCode}</td><td className="px-md py-sm">{cpmk.status === 'Aktif' ? `${formatPercent(Number(cpmk.contributionWeight) || 0)}%` : <span className="text-on-surface-variant">Nonaktif</span>}</td>
                     <td className="px-md py-sm"><div className="flex justify-center gap-sm"><button type="button" title="Ubah CPMK" className="p-xs text-primary" onClick={() => editCpmk(cpmk)}><span className="material-symbols-outlined">edit</span></button><button type="button" title="Hapus CPMK" className="p-xs text-error" onClick={() => deleteCpmk(cpmk)}><span className="material-symbols-outlined">delete</span></button></div></td>
                   </tr>) : <tr><td colSpan={6} className="px-lg py-xl text-center text-on-surface-variant">Belum ada CPMK.</td></tr>}
                 </tbody>
@@ -5955,10 +5972,10 @@ export default function App() {
                     <label className="font-label-sm text-on-surface">Kode CPMK<input readOnly className="mt-xs w-full cursor-not-allowed border border-outline-variant rounded-md bg-surface-container px-sm py-sm font-bold text-primary" value={cpmkForm.code} placeholder="Terbentuk otomatis" /><span className="mt-xs block font-label-xs text-on-surface-variant">Urutan mengikuti CPMK yang sudah ada pada mata kuliah ini.</span></label>
                   </div>
                   <label className="block font-label-sm text-on-surface">Deskripsi CPMK<textarea className="mt-xs w-full min-h-[120px] border border-outline-variant rounded-md px-sm py-sm resize-y" value={cpmkForm.description} placeholder="Kemampuan yang diharapkan setelah menyelesaikan mata kuliah..." onChange={event => setCpmkForm(current => ({ ...current, description: event.target.value }))} /></label>
-                  <div className="flex items-start gap-sm rounded-md border border-primary/15 bg-primary/5 px-md py-sm font-label-sm text-on-surface-variant"><span className="material-symbols-outlined text-[18px] text-primary">balance</span><span>Bobot kontribusi dibagi rata otomatis: {cpmkWeightNote}</span></div>
+                  <div className={`flex items-start gap-sm rounded-md border px-md py-sm font-label-sm ${cpmkWeightOver ? 'border-error/25 bg-error/5 text-error' : 'border-primary/15 bg-primary/5 text-on-surface-variant'}`}><span className={`material-symbols-outlined text-[18px] ${cpmkWeightOver ? 'text-error' : 'text-primary'}`}>balance</span><span>Bobot kontribusi sesuai RPS. {cpmkWeightNote}</span></div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-md">
                     <label className="font-label-sm text-on-surface">Kurikulum<input className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={cpmkForm.curriculumVersion} placeholder="2026" onChange={event => setCpmkForm(current => ({ ...current, curriculumVersion: event.target.value }))} /></label>
-                    <label className="font-label-sm text-on-surface">Bobot Kontribusi<input readOnly className="mt-xs w-full cursor-not-allowed border border-outline-variant rounded-md bg-surface-container px-sm py-sm font-bold text-on-surface" value={cpmkForm.status === 'Aktif' ? `${cpmkEqualShare.toFixed(2)}%` : '0% (nonaktif)'} /><span className="mt-xs block font-label-xs text-on-surface-variant">Otomatis: 100% ÷ jumlah CPMK aktif.</span></label>
+                    <label className="font-label-sm text-on-surface">Bobot Kontribusi (%)<input type="text" inputMode="decimal" className={`mt-xs w-full border rounded-md px-sm py-sm font-bold text-on-surface ${cpmkWeightOver ? 'border-error' : 'border-outline-variant'}`} value={cpmkForm.contributionWeight} placeholder={`Sisa ${formatPercent(cpmkAvailableWeight)}`} onChange={event => { setCpmkFormError(''); setCpmkForm(current => ({ ...current, contributionWeight: event.target.value })); }} /><span className="mt-xs block font-label-xs text-on-surface-variant">Contoh 22,5. CPMK nonaktif tidak dihitung.</span></label>
                     <label className="font-label-sm text-on-surface">Status<select className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm bg-surface" value={cpmkForm.status} onChange={event => setCpmkForm(current => ({ ...current, status: event.target.value }))}><option>Aktif</option><option>Nonaktif</option></select></label>
                   </div>
                 </div>
@@ -5983,10 +6000,10 @@ export default function App() {
                   <label className="font-label-sm text-on-surface">Kode CPMK<input readOnly className="mt-xs w-full cursor-not-allowed border border-outline-variant rounded-md bg-surface-container px-sm py-sm font-bold text-primary" value={cpmkForm.code} placeholder="Terbentuk otomatis" /><span className="mt-xs block font-label-xs text-on-surface-variant">Urutan mengikuti CPMK yang sudah ada pada mata kuliah ini.</span></label>
                 </div>
                 <label className="block font-label-sm text-on-surface">Deskripsi CPMK<textarea className="mt-xs w-full min-h-[120px] border border-outline-variant rounded-md px-sm py-sm resize-y" value={cpmkForm.description} placeholder="Kemampuan yang diharapkan setelah menyelesaikan mata kuliah..." onChange={event => setCpmkForm(current => ({ ...current, description: event.target.value }))} /></label>
-                <div className="flex items-start gap-sm rounded-md border border-primary/15 bg-primary/5 px-md py-sm font-label-sm text-on-surface-variant"><span className="material-symbols-outlined text-[18px] text-primary">balance</span><span>Bobot kontribusi dibagi rata otomatis: {cpmkWeightNote}</span></div>
+                <div className={`flex items-start gap-sm rounded-md border px-md py-sm font-label-sm ${cpmkWeightOver ? 'border-error/25 bg-error/5 text-error' : 'border-primary/15 bg-primary/5 text-on-surface-variant'}`}><span className={`material-symbols-outlined text-[18px] ${cpmkWeightOver ? 'text-error' : 'text-primary'}`}>balance</span><span>Bobot kontribusi sesuai RPS. {cpmkWeightNote}</span></div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-md">
                   <label className="font-label-sm text-on-surface">Kurikulum<input className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm" value={cpmkForm.curriculumVersion} placeholder="2026" onChange={event => setCpmkForm(current => ({ ...current, curriculumVersion: event.target.value }))} /></label>
-                  <label className="font-label-sm text-on-surface">Bobot Kontribusi<input readOnly className="mt-xs w-full cursor-not-allowed border border-outline-variant rounded-md bg-surface-container px-sm py-sm font-bold text-on-surface" value={cpmkForm.status === 'Aktif' ? `${cpmkEqualShare.toFixed(2)}%` : '0% (nonaktif)'} /><span className="mt-xs block font-label-xs text-on-surface-variant">Otomatis: 100% ÷ jumlah CPMK aktif.</span></label>
+                  <label className="font-label-sm text-on-surface">Bobot Kontribusi (%)<input type="text" inputMode="decimal" className={`mt-xs w-full border rounded-md px-sm py-sm font-bold text-on-surface ${cpmkWeightOver ? 'border-error' : 'border-outline-variant'}`} value={cpmkForm.contributionWeight} placeholder={`Sisa ${formatPercent(cpmkAvailableWeight)}`} onChange={event => { setCpmkFormError(''); setCpmkForm(current => ({ ...current, contributionWeight: event.target.value })); }} /><span className="mt-xs block font-label-xs text-on-surface-variant">Contoh 22,5. CPMK nonaktif tidak dihitung.</span></label>
                   <label className="font-label-sm text-on-surface">Status<select className="mt-xs w-full border border-outline-variant rounded-md px-sm py-sm bg-surface" value={cpmkForm.status} onChange={event => setCpmkForm(current => ({ ...current, status: event.target.value }))}><option>Aktif</option><option>Nonaktif</option></select></label>
                 </div>
               </div>
@@ -7387,7 +7404,7 @@ export default function App() {
                                                   <td className="px-lg py-sm font-body-sm font-bold text-primary">{cpmk.code}</td>
                                                   <td className="px-lg py-sm"><span className="inline-flex px-sm py-xs rounded-full bg-primary/10 text-primary border border-primary/15 font-label-xs font-bold">{cpmk.cplCode}</span></td>
                                                   <td className="px-lg py-sm font-body-sm text-on-surface-variant max-w-md">{cpmk.description}</td>
-                                                  <td className="px-lg py-sm font-body-sm text-center font-bold text-on-surface">{cpmk.contributionWeight}%</td>
+                                                  <td className={`px-lg py-sm font-body-sm text-center font-bold ${cpmk.status === 'Aktif' ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>{formatPercent(Number(cpmk.contributionWeight) || 0)}%</td>
                                                   <td className="px-lg py-sm text-center"><span className={`inline-flex px-sm py-xs rounded-full font-label-xs font-bold ${cpmk.status === 'Aktif' ? 'bg-success/10 text-success' : 'bg-surface-container text-on-surface-variant'}`}>{cpmk.status}</span></td>
                                                   <td className="px-lg py-sm"><div className="flex justify-center gap-xs"><button type="button" title="Ubah CPMK" className="p-xs text-primary" onClick={() => editCpmk(cpmk)}><span className="material-symbols-outlined text-[19px]">edit</span></button><button type="button" title="Hapus CPMK" className="p-xs text-error" onClick={() => deleteCpmk(cpmk)}><span className="material-symbols-outlined text-[19px]">delete</span></button></div></td>
                                                 </tr>
@@ -7398,6 +7415,18 @@ export default function App() {
                                               </tr>
                                             )}
                                           </tbody>
+                                          {(() => {
+                                            const active = cpmkMasters.filter(cpmk => cpmk.courseId === course.id && cpmk.status === 'Aktif');
+                                            if (active.length === 0) return null;
+                                            const total = Math.round(active.reduce((sum, cpmk) => sum + (Number(cpmk.contributionWeight) || 0), 0) * 100) / 100;
+                                            const tone = Math.abs(total - 100) < 0.01 ? 'text-success' : total > 100 ? 'text-error' : 'text-warning';
+                                            const note = Math.abs(total - 100) < 0.01 ? '' : total > 100 ? ' – melebihi 100%, kurangi bobot CPMK' : ` – kurang ${formatPercent(100 - total)}% dari 100%`;
+                                            return <tfoot><tr className="border-t border-outline-variant/40 bg-surface-container/40">
+                                              <td colSpan={3} className="px-lg py-sm font-label-sm font-bold text-on-surface text-right">Total bobot CPMK aktif</td>
+                                              <td className={`px-lg py-sm font-body-sm text-center font-bold ${tone}`}>{formatPercent(total)}%</td>
+                                              <td colSpan={2} className={`px-lg py-sm font-label-xs ${tone}`}>{note}</td>
+                                            </tr></tfoot>;
+                                          })()}
                                         </table>
                                       </div>
                                   </div>

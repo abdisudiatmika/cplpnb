@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\DB;
  *     sama ke setiap CPMK aktif mata kuliah tersebut. Bila mata kuliah belum punya CPMK
  *     yang terpetakan ke CPL, dipakai pemetaan mata kuliah -> CPL dengan bobot dibagi rata.
  *
- * Bobot CPMK -> CPL dibagi rata per mata kuliah (CpmkWeightBalancer), sehingga setiap mata
+ * Bobot CPMK -> CPL diisi admin prodi per mata kuliah (CpmkWeightBalancer, maks. total 100%), sehingga setiap mata
  * kuliah menyumbang total 100% yang terbagi ke CPL-CPL yang didukungnya.
  *
  * Bila dosen sudah memberi nilai untuk mahasiswa pada sebuah mata kuliah, nilai admin

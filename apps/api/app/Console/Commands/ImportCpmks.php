@@ -9,6 +9,7 @@ use App\Models\Cpmk;
 use App\Models\CpmkCplMapping;
 use App\Models\Curriculum;
 use App\Models\Department;
+use App\Services\CpmkWeightBalancer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -16,8 +17,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * Impor CPMK dan pemetaan CPMK-CPL dari file JSON (hasil olah dokumen CPMK prodi).
  *
- * Bobot kontribusi CPMK dibagi rata per mata kuliah (CpmkWeightBalancer), sama seperti menu CPMK;
- * setelah impor, pemetaan MK-CPL MK terkait diturunkan ulang dari CPMK.
+ * Bobot kontribusi: contributionWeight dari file bila ada; bila tidak, CPMK lama mempertahankan bobotnya
+ * dan CPMK baru membagi rata sisa bobot mata kuliahnya. --bagi-rata membagi rata seluruh CPMK aktif MK
+ * yang diimpor. Total bobot CPMK aktif per MK tidak boleh melebihi 100%.
+ * Setelah impor, pemetaan MK-CPL MK terkait diturunkan ulang dari CPMK.
  */
 class ImportCpmks extends Command
 {
@@ -25,6 +28,7 @@ class ImportCpmks extends Command
         {file : Path file JSON berisi items[courseCode, code, description, cplCode, contributionWeight?]}
         {--department= : Kode, id, atau nama prodi (default: field "department" pada file)}
         {--curriculum= : Kode kurikulum tujuan (default: kurikulum aktif prodi)}
+        {--bagi-rata : Bagi rata bobot seluruh CPMK aktif pada MK yang diimpor (mengabaikan bobot di file)}
         {--apply : Simpan perubahan. Tanpa opsi ini hanya simulasi (rollback).}';
 
     protected $description = 'Impor CPMK dan pemetaan CPMK-CPL dari file JSON.';
@@ -97,11 +101,13 @@ class ImportCpmks extends Command
         $mappingChanges = [];
         $stats = ['cpmk_baru' => 0, 'cpmk_diperbarui' => 0, 'cpmk_lain_tetap' => 0];
 
+        $weights = app(CpmkWeightBalancer::class);
         DB::beginTransaction();
         try {
             foreach ($items->groupBy('courseCode') as $courseCode => $courseItems) {
                 $course = $courses->get($courseCode);
                 $before = $this->mappingSummary($course->id);
+                $unweighted = [];
 
                 foreach ($courseItems->groupBy('cplCode') as $cplCode => $cplItems) {
                     $cpl = $cpls->get($cplCode);
@@ -114,17 +120,31 @@ class ImportCpmks extends Command
                             'status' => 'Aktif',
                         ])->save();
 
+                        $previousWeight = round((float) $cpmk->cplMappings()->sum('contribution_weight'), 2);
+                        $weight = is_numeric($item['contributionWeight']) ? round((float) $item['contributionWeight'], 2) : $previousWeight;
+                        if ($weight <= 0) {
+                            $unweighted[] = $cpmk->id;
+                        }
                         $cpmk->cplMappings()->delete();
                         CpmkCplMapping::create([
                             'cpmk_id' => $cpmk->id,
                             'cpl_id' => $cpl->id,
-                            'contribution_weight' => 100, // dibagi rata oleh syncCourseMappings()
+                            'contribution_weight' => max(0, $weight),
                         ]);
                     }
                 }
 
                 $stats['cpmk_lain_tetap'] += Cpmk::where('course_id', $course->id)->whereNotIn('code', $courseItems->pluck('code'))->count();
-                $this->syncCourseMappings($course->id);
+                if ($this->option('bagi-rata')) {
+                    $weights->rebalance($course->id);
+                } else {
+                    $weights->fillRemaining($course->id, $unweighted);
+                    $weights->syncCourseMappings($course->id);
+                }
+                $total = $weights->activeTotal($course->id);
+                if ($total > CpmkWeightBalancer::MAX_TOTAL + 0.001) {
+                    throw new \RuntimeException("Total bobot CPMK aktif {$courseCode} menjadi {$total}%, melebihi 100%. Perbaiki bobot di file atau pakai --bagi-rata.");
+                }
                 $after = $this->mappingSummary($course->id);
                 if ($before !== $after) {
                     $mappingChanges[] = [$courseCode, $course->name, $before ?: '-', $after ?: '-'];
@@ -166,11 +186,5 @@ class ImportCpmks extends Command
             ->sortBy(fn ($mapping) => (int) preg_replace('/\D/', '', (string) $mapping->cpl?->code))
             ->map(fn ($mapping) => $mapping->cpl?->code.'x'.rtrim(rtrim(number_format((float) $mapping->weight, 4, '.', ''), '0'), '.'))
             ->join(', ');
-    }
-
-    /** Bobot CPMK dibagi rata lalu pemetaan MK-CPL diturunkan ulang (sama dengan menu CPMK). */
-    private function syncCourseMappings(string $courseId): void
-    {
-        app(\App\Services\CpmkWeightBalancer::class)->rebalance($courseId);
     }
 }
