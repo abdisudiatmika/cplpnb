@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminGradeController;
 use App\Http\Controllers\AssessmentPlanController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CourseController;
@@ -70,6 +71,9 @@ Route::middleware(['auth:sanctum', 'role:super_admin,admin_jurusan'])->group(fun
     Route::get('/grades/periods', [GradeController::class, 'periods']);
     Route::get('/grades/export/all', [GradeController::class, 'exportAll']);
     Route::get('/grades/student/{studentId}', [GradeController::class, 'byStudent']);
+    Route::get('/admin-grades/sheet', [AdminGradeController::class, 'sheet']);
+    Route::put('/admin-grades/cpmk-scores', [AdminGradeController::class, 'saveCpmkScores']);
+    Route::put('/admin-grades/single-scores', [AdminGradeController::class, 'saveSingleScores']);
 
     // Lecturer master data, CPMK, and teaching assignments.
     Route::apiResource('lecturers', LecturerController::class);

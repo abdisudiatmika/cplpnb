@@ -251,8 +251,8 @@ class CplController extends Controller
 
     /**
      * Nilai mata kuliah per mahasiswa (skala 0-100): [course_id => [student_id => nilai]].
-     * Nilai OBE yang sudah dikunci diutamakan; nilai lama (student_grades) dipakai
-     * untuk mahasiswa yang belum punya nilai OBE di mata kuliah tersebut.
+     * Urutan prioritas: buku nilai dosen yang dikunci, rata-rata nilai CPMK admin, lalu
+     * nilai satuan mata kuliah (student_grades).
      */
     private function courseScoresByStudent($students, $semesterType = null, $academicYear = null, $courseIds = null): array
     {
@@ -265,16 +265,23 @@ class CplController extends Controller
             ->whereIn('student_id', $students->pluck('id'))
             ->when($courseIds !== null, fn ($q) => $q->whereIn('course_id', $courseIds))
             ->get();
-        $legacyGrades = $this->filterGradesForAcademicPeriod($legacyGrades, $students->keyBy('id'), $semesterType, $academicYear);
+        $studentsById = $students->keyBy('id');
+        $legacyGrades = $legacyGrades
+            ->groupBy(fn ($g) => $g->student_id.'|'.$g->course_id)
+            ->map(fn ($attempts) => $this->studentCplAchievements->latestAttempt($attempts))
+            ->filter(fn ($g) => $this->studentCplAchievements->matchesAcademicPeriod(
+            $g->semester ?? null,
+            $studentsById->get($g->student_id)?->angkatan,
+            $semesterType,
+            $academicYear
+        ));
 
         $scores = [];
         foreach ($legacyGrades as $g) {
             if ($g->grade === 'Belum Diambil') {
                 continue;
             }
-            $scores[$g->course_id][$g->student_id] = (isset($g->score) && $g->score !== null && $g->score > 0)
-                ? ($g->score <= 10 ? $g->score * 10 : $g->score)
-                : $this->convertGradeToPct($g->grade);
+            $scores[$g->course_id][$g->student_id] = $this->studentCplAchievements->legacyScore($g->score ?? null, $g->grade);
         }
 
         $courseIdFilter = $courseIds !== null ? collect($courseIds)->flip() : null;
@@ -288,23 +295,6 @@ class CplController extends Controller
         }
 
         return $scores;
-    }
-
-    private function convertGradeToPct($grade)
-    {
-        switch ($grade) {
-            case 'A': return 95;
-            case 'AB': return 85;
-            case 'A-': return 90;
-            case 'B+': return 85;
-            case 'B': return 75;
-            case 'BC': return 65;
-            case 'B-': return 75;
-            case 'C+': return 70;
-            case 'C': return 60;
-            case 'D': return 50;
-            default: return 0;
-        }
     }
 
     public function averages(Request $request)
@@ -344,48 +334,14 @@ class CplController extends Controller
 
         $studentsList = $studentQuery->get();
 
-        // Nilai OBE resmi berasal dari rencana asesmen yang sudah dikunci.
-        // Data student_grades tetap dipakai sebagai fallback untuk data historis.
-        $obeScoresByStudent = $this->studentCplAchievements
+        // Nilai CPL per mahasiswa dari semua sumber (buku nilai dosen, nilai CPMK admin,
+        // nilai satuan mata kuliah); prioritasnya diatur di StudentCplAchievementService.
+        $cplScoresByStudent = $this->studentCplAchievements
             ->calculate($studentsList, $semesterType, $academicYear);
-
-        $allMappings = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
-            ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
-            ->select('course_cpl_mappings.cpl_id', 'course_cpl_mappings.course_id', 'course_cpl_mappings.weight', 'courses.sks')
-            ->when($departmentId, function ($q) use ($departmentId) {
-                return $q->where('courses.department_id', $departmentId);
-            })->get();
-
-        $studentsById = $studentsList->keyBy('id');
-
-        $allGrades = \Illuminate\Support\Facades\DB::table('student_grades')
-            ->join('students', 'student_grades.student_id', '=', 'students.id')
-            ->select('student_grades.student_id', 'student_grades.course_id', 'student_grades.grade', 'student_grades.score', 'student_grades.semester')
-            ->when($departmentId, function ($q) use ($departmentId) {
-                return $q->where('students.department_id', $departmentId);
-            })
-            ->when($angkatan, function ($q) use ($angkatan) {
-                return $q->where('students.angkatan', $angkatan);
-            })
-            ->when($kelas, function ($q) use ($kelas) {
-                return $q->where('students.kelas', $kelas);
-            })
-            ->get();
-        $allGrades = $this->filterGradesForAcademicPeriod($allGrades, $studentsById, $semesterType, $academicYear);
-
-        $gradesMap = [];
-        foreach ($allGrades as $g) {
-            $gradesMap[$g->student_id.'_'.$g->course_id] = [
-                'grade' => $g->grade,
-                'score' => $g->score,
-            ];
-        }
 
         $averages = [];
 
         foreach ($allCpls as $cpl) {
-            $mappings = $allMappings->where('cpl_id', $cpl->id);
-
             if ($studentsList->isEmpty()) {
                 $averages[] = [
                     'id' => $cpl->id,
@@ -404,39 +360,9 @@ class CplController extends Controller
             $studentsMeasured = 0;
 
             foreach ($studentsList as $student) {
-                $studentObeScores = $obeScoresByStudent->get($student->id, collect());
-                if ($studentObeScores->has($cpl->id)) {
-                    $totalCplSum += (float) $studentObeScores->get($cpl->id);
-                    $studentsMeasured++;
-
-                    continue;
-                }
-
-                $totalScoreWeight = 0;
-                $totalWeight = 0;
-                $takenCoursesCount = 0;
-
-                foreach ($mappings as $map) {
-                    $key = $student->id.'_'.$map->course_id;
-                    $gObj = $gradesMap[$key] ?? null;
-
-                    if ($gObj && $gObj['grade'] !== 'Belum Diambil') {
-                        $scoreVal = 0;
-                        if (isset($gObj['score']) && $gObj['score'] !== null && $gObj['score'] > 0) {
-                            $scoreVal = $gObj['score'] <= 10 ? $gObj['score'] * 10 : $gObj['score'];
-                        } else {
-                            $scoreVal = $this->convertGradeToPct($gObj['grade']);
-                        }
-
-                        $multiplier = $map->weight;
-                        $totalScoreWeight += $scoreVal * $multiplier;
-                        $totalWeight += $multiplier;
-                        $takenCoursesCount++;
-                    }
-                }
-
-                if ($takenCoursesCount > 0 && $totalWeight > 0) {
-                    $totalCplSum += $totalScoreWeight / $totalWeight;
+                $studentScores = $cplScoresByStudent->get($student->id, collect());
+                if ($studentScores->has($cpl->id)) {
+                    $totalCplSum += (float) $studentScores->get($cpl->id);
                     $studentsMeasured++;
                 }
             }
@@ -551,86 +477,6 @@ class CplController extends Controller
         return response()->json($result);
     }
 
-    private function filterGradesForAcademicPeriod($grades, $studentsById, $semesterType = null, $academicYear = null)
-    {
-        if (! $semesterType && ! $academicYear) {
-            return $grades;
-        }
-
-        return $grades->filter(function ($grade) use ($studentsById, $semesterType, $academicYear) {
-            $student = $studentsById->get($grade->student_id);
-
-            return $this->gradeMatchesAcademicPeriod($grade->semester ?? null, $student->angkatan ?? null, $semesterType, $academicYear);
-        })->values();
-    }
-
-    private function gradeMatchesAcademicPeriod($gradeSemester, $angkatan, $semesterType = null, $academicYear = null)
-    {
-        $semesterNumber = $this->semesterToNumber($gradeSemester);
-        if ($semesterNumber === null) {
-            return true;
-        }
-
-        $period = strtolower(trim((string) $semesterType));
-        if ($period === 'ganjil' && $semesterNumber % 2 === 0) {
-            return false;
-        }
-        if ($period === 'genap' && $semesterNumber % 2 !== 0) {
-            return false;
-        }
-
-        if (! $academicYear) {
-            return true;
-        }
-
-        $currentSemester = $this->currentSemesterForCohort($angkatan, $academicYear, $period);
-
-        return $currentSemester === null || $semesterNumber === $currentSemester;
-    }
-
-    private function currentSemesterForCohort($angkatan, $academicYear, $semesterType = null)
-    {
-        if (! $angkatan || ! preg_match('/^\d{4}/', (string) $academicYear, $matches)) {
-            return null;
-        }
-
-        $academicStartYear = (int) $matches[0];
-        $cohortYear = (int) $angkatan;
-        if ($cohortYear > $academicStartYear) {
-            return 0;
-        }
-
-        $period = strtolower(trim((string) $semesterType));
-        $semesterOffset = $period === 'ganjil' ? 1 : 2;
-
-        return max(0, (($academicStartYear - $cohortYear) * 2) + $semesterOffset);
-    }
-
-    private function semesterToNumber($semester)
-    {
-        $value = strtoupper(trim((string) $semester));
-        if ($value === '') {
-            return null;
-        }
-
-        if (is_numeric($value)) {
-            return (int) $value;
-        }
-
-        $roman = [
-            'I' => 1,
-            'II' => 2,
-            'III' => 3,
-            'IV' => 4,
-            'V' => 5,
-            'VI' => 6,
-            'VII' => 7,
-            'VIII' => 8,
-        ];
-
-        return $roman[$value] ?? null;
-    }
-
     public function achievements(Request $request, string $studentId)
     {
         $student = \App\Models\Student::findOrFail($studentId);
@@ -644,79 +490,14 @@ class CplController extends Controller
 
         $curriculum = $this->curriculumForCohort($departmentId, $student->angkatan, $this->currentCurriculum($request, $departmentId));
         $allCpls = $this->scopeToCurriculum(Cpl::where('department_id', $departmentId), $curriculum)->get();
-        $obeScores = $this->studentCplAchievements
+        $scores = $this->studentCplAchievements
             ->calculate(collect([$student]), $semesterType, $academicYear)
             ->get($student->id, collect());
 
-        $allMappings = DB::table('course_cpl_mappings')
-            ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
-            ->select('course_cpl_mappings.cpl_id', 'course_cpl_mappings.course_id', 'course_cpl_mappings.weight', 'courses.sks')
-            ->where('courses.department_id', $departmentId)
-            ->get();
-
-        $allGrades = DB::table('student_grades')
-            ->where('student_id', $studentId)
-            ->get();
-        $allGrades = $this->filterGradesForAcademicPeriod(
-            $allGrades,
-            collect([$student->id => $student]),
-            $semesterType,
-            $academicYear
-        );
-
-        $gradesMap = [];
-        foreach ($allGrades as $g) {
-            $gradesMap[$g->course_id] = [
-                'grade' => $g->grade,
-                'score' => $g->score,
-            ];
-        }
-
-        $achievements = [];
-
-        foreach ($allCpls as $cpl) {
-            if ($obeScores->has($cpl->id)) {
-                $achievements[] = $this->achievementPayload($cpl, (float) $obeScores->get($cpl->id));
-
-                continue;
-            }
-
-            $mappings = $allMappings->where('cpl_id', $cpl->id);
-
-            if ($mappings->isEmpty()) {
-                $achievements[] = $this->achievementPayload($cpl, null);
-
-                continue;
-            }
-
-            $totalScoreWeight = 0;
-            $totalWeight = 0;
-            $takenCoursesCount = 0;
-
-            foreach ($mappings as $map) {
-                $gObj = $gradesMap[$map->course_id] ?? null;
-
-                if ($gObj && $gObj['grade'] !== 'Belum Diambil') {
-                    $scoreVal = 0;
-                    if (isset($gObj['score']) && $gObj['score'] !== null && $gObj['score'] > 0) {
-                        $scoreVal = $gObj['score'] <= 10 ? $gObj['score'] * 10 : $gObj['score'];
-                    } else {
-                        $scoreVal = $this->convertGradeToPct($gObj['grade']);
-                    }
-
-                    $multiplier = $map->weight;
-                    $totalScoreWeight += $scoreVal * $multiplier;
-                    $totalWeight += $multiplier;
-                    $takenCoursesCount++;
-                }
-            }
-
-            if ($takenCoursesCount === 0 || $totalWeight == 0) {
-                $achievements[] = $this->achievementPayload($cpl, null);
-            } else {
-                $achievements[] = $this->achievementPayload($cpl, round($totalScoreWeight / $totalWeight, 2));
-            }
-        }
+        $achievements = $allCpls->map(fn ($cpl) => $this->achievementPayload(
+            $cpl,
+            $scores->has($cpl->id) ? (float) $scores->get($cpl->id) : null
+        ))->values()->all();
 
         return response()->json($achievements);
     }
@@ -814,62 +595,14 @@ class CplController extends Controller
         $allCpls = $this->scopeToCurriculum(Cpl::where('department_id', $departmentId), $this->curriculumForCohort($departmentId, $angkatan, $this->currentCurriculum($request, $departmentId)))
             ->orderBy('code')
             ->get();
-        $mappingsByCpl = \Illuminate\Support\Facades\DB::table('course_cpl_mappings')
-            ->join('courses', 'course_cpl_mappings.course_id', '=', 'courses.id')
-            ->select('course_cpl_mappings.cpl_id', 'course_cpl_mappings.course_id', 'course_cpl_mappings.weight')
-            ->where('courses.department_id', $departmentId)
-            ->get()
-            ->groupBy('cpl_id');
+        $scoresByStudent = $this->studentCplAchievements->calculate($students, $semesterType, $academicYear);
 
-        $studentsById = $students->keyBy('id');
-        $gradesByStudent = $this->filterGradesForAcademicPeriod(
-            \Illuminate\Support\Facades\DB::table('student_grades')
-                ->whereIn('student_id', $students->pluck('id'))
-                ->get(),
-            $studentsById,
-            $semesterType,
-            $academicYear
-        )->groupBy('student_id');
-        $obeScoresByStudent = $this->studentCplAchievements->calculate($students, $semesterType, $academicYear);
-
-        $result = $students->map(function ($student) use ($allCpls, $mappingsByCpl, $gradesByStudent, $obeScoresByStudent) {
-            $gradesMap = [];
-            foreach ($gradesByStudent->get($student->id, collect()) as $grade) {
-                $gradesMap[$grade->course_id] = [
-                    'grade' => $grade->grade,
-                    'score' => $grade->score,
-                ];
-            }
-            $obeScores = $obeScoresByStudent->get($student->id, collect());
-
-            $achievements = $allCpls->map(function ($cpl) use ($mappingsByCpl, $gradesMap, $obeScores) {
-                if ($obeScores->has($cpl->id)) {
-                    return $this->achievementPayload($cpl, (float) $obeScores->get($cpl->id));
-                }
-
-                $mappings = $mappingsByCpl->get($cpl->id, collect());
-                $totalScoreWeight = 0;
-                $totalWeight = 0;
-
-                foreach ($mappings as $mapping) {
-                    $grade = $gradesMap[$mapping->course_id] ?? null;
-                    if (! $grade || $grade['grade'] === 'Belum Diambil') {
-                        continue;
-                    }
-
-                    $score = isset($grade['score']) && $grade['score'] !== null && $grade['score'] > 0
-                        ? ($grade['score'] <= 10 ? $grade['score'] * 10 : $grade['score'])
-                        : $this->convertGradeToPct($grade['grade']);
-                    $weight = (float) $mapping->weight;
-                    $totalScoreWeight += $score * $weight;
-                    $totalWeight += $weight;
-                }
-
-                return $this->achievementPayload(
-                    $cpl,
-                    $totalWeight > 0 ? round($totalScoreWeight / $totalWeight, 2) : null
-                );
-            })->values();
+        $result = $students->map(function ($student) use ($allCpls, $scoresByStudent) {
+            $scores = $scoresByStudent->get($student->id, collect());
+            $achievements = $allCpls->map(fn ($cpl) => $this->achievementPayload(
+                $cpl,
+                $scores->has($cpl->id) ? (float) $scores->get($cpl->id) : null
+            ))->values();
 
             return [
                 'id' => $student->id,

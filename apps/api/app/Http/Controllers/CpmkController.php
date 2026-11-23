@@ -119,6 +119,12 @@ class CpmkController extends Controller
         $this->authorizeAdministrator($request->user());
         $departmentId = $this->resolveWritableDepartment($request);
         abort_unless($cpmk->course()->where('department_id', $departmentId)->exists(), 403, 'CPMK tidak berada pada jurusan Anda.');
+        $guard = app(\App\Services\DeletionGuard::class);
+        $guard->abortIfUsed(
+            $cpmk->code,
+            $guard->cpmkUsage($cpmk->id),
+            'Ubah status CPMK menjadi Nonaktif bila tidak dipakai lagi.'
+        );
         DB::transaction(function () use ($cpmk) {
             $courseId = $cpmk->course_id;
             $cpmk->delete();

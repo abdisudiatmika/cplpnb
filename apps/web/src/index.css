@@ -283,6 +283,31 @@ table tbody tr:hover {
   color: #94A3B8;
 }
 
+/* Input nilai admin (per CPMK / nilai satuan) */
+.app-shell .admin-grade-table tbody td { padding: 8px 10px !important; }
+.app-shell .admin-grade-table thead th { padding: 10px 10px !important; }
+.app-shell .admin-grade-table .admin-grade-student {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #FFFFFF;
+  box-shadow: 6px 0 8px -8px rgba(15, 23, 42, 0.45);
+}
+.app-shell .admin-grade-table thead th.admin-grade-student { background: #FFFFFF !important; }
+.app-shell .admin-grade-table tbody tr:hover .admin-grade-student { background: #F8F9FA; }
+/* Selector input global memakai tiga :not([type]) sehingga bobotnya lebih tinggi; perlu !important. */
+.app-shell input.admin-grade-cell[data-state="edited"] {
+  border-color: #F59E0B !important;
+  background-color: #FFFBEB !important;
+  color: #92400E !important;
+  font-weight: 700;
+}
+.app-shell input.admin-grade-cell[data-state="invalid"] {
+  border-color: #EF4444 !important;
+  background-color: #FEF2F2 !important;
+  color: #B91C1C !important;
+}
+
 .app-shell .material-symbols-outlined {
   flex: 0 0 auto;
   max-width: 28px;

@@ -61,6 +61,8 @@ class DeletionGuard
             ->whereIn('course_offerings.course_id', $ids)
             ->groupBy('course_offerings.course_id')
             ->selectRaw('course_offerings.course_id as course_id, COUNT(*) as total')->pluck('total', 'course_id');
+        $adminCpmk = DB::table('student_cpmk_scores')->whereIn('course_id', $ids)
+            ->groupBy('course_id')->selectRaw('course_id, COUNT(*) as total')->pluck('total', 'course_id');
         $assignments = DB::table('teaching_assignments')
             ->join('course_offerings', 'teaching_assignments.course_offering_id', '=', 'course_offerings.id')
             ->whereIn('course_offerings.course_id', $ids)
@@ -70,6 +72,7 @@ class DeletionGuard
         return $ids->mapWithKeys(fn ($id) => [$id => [
             'nilai lama' => (int) ($legacy[$id] ?? 0),
             'nilai komponen OBE' => (int) ($obe[$id] ?? 0),
+            'nilai CPMK admin' => (int) ($adminCpmk[$id] ?? 0),
             'penugasan dosen' => (int) ($assignments[$id] ?? 0),
         ]]);
     }
@@ -89,10 +92,13 @@ class DeletionGuard
             ->whereIn('course_enrollments.student_id', $ids)
             ->groupBy('course_enrollments.student_id')
             ->selectRaw('course_enrollments.student_id as student_id, COUNT(*) as total')->pluck('total', 'student_id');
+        $adminCpmk = DB::table('student_cpmk_scores')->whereIn('student_id', $ids)
+            ->groupBy('student_id')->selectRaw('student_id, COUNT(*) as total')->pluck('total', 'student_id');
 
         return $ids->mapWithKeys(fn ($id) => [$id => [
             'nilai lama' => (int) ($legacy[$id] ?? 0),
             'nilai komponen OBE' => (int) ($obe[$id] ?? 0),
+            'nilai CPMK admin' => (int) ($adminCpmk[$id] ?? 0),
         ]]);
     }
 
@@ -101,6 +107,15 @@ class DeletionGuard
     {
         return [
             'penugasan mengajar' => DB::table('teaching_assignments')->where('lecturer_id', $lecturerId)->count(),
+        ];
+    }
+
+    /** @return array<string, int> */
+    public function cpmkUsage(string $cpmkId): array
+    {
+        return [
+            'nilai CPMK admin' => DB::table('student_cpmk_scores')->where('cpmk_id', $cpmkId)->count(),
+            'komponen asesmen' => DB::table('assessment_items')->where('cpmk_id', $cpmkId)->count(),
         ];
     }
 

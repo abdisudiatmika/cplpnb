@@ -10,6 +10,7 @@ import { CourseRadarChart } from './components/CourseRadarChart';
 import { BarChart } from './components/BarChart';
 import { CplPrintTemplate } from './components/CplPrintTemplate';
 import { LandingPage } from './components/LandingPage';
+import { AdminGradeInput } from './components/AdminGradeInput';
 
 // API Configuration
 const API_BASE = import.meta.env.PROD 
@@ -335,6 +336,7 @@ const TAB_ROUTES: Record<string, string> = {
   matakuliah: 'mata-kuliah',
   graduate_profiles: 'profil-lulusan',
   cpl: 'cpl',
+  nilai: 'nilai',
   hasil_cpl: 'hasil-cpl',
   report_settings: 'pengaturan-laporan',
   lecturers: 'dosen',
@@ -753,6 +755,7 @@ export default function App() {
   const courseFileInputRef = useRef<HTMLInputElement>(null);
   const studentFileInputRef = useRef<HTMLInputElement>(null);
   const gradeFileInputRef = useRef<HTMLInputElement>(null);
+  const [gradeInputMode, setGradeInputMode] = useState<'cpmk' | 'single' | 'student'>('cpmk');
 
   const requestConfirmation = (options: Partial<AppDialogState> & Pick<AppDialogState, 'title' | 'message'>) => new Promise<boolean>((resolve) => {
     appDialogResolverRef.current = value => resolve(value === true);
@@ -5543,6 +5546,19 @@ export default function App() {
                   <span>CPL</span>
                 </button>
 
+                {/* Input Nilai (admin) */}
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'nilai'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => navigateToTab('nilai')}
+                >
+                  <span className="material-symbols-outlined">edit_square</span>
+                  <span>Input Nilai</span>
+                </button>
+
                 {/* Hasil CPL */}
                 <button 
                   className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
@@ -7639,9 +7655,13 @@ export default function App() {
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-md">
               <div>
                 <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Input Nilai Mahasiswa</h3>
-                <p className="font-body-sm text-body-sm text-on-surface-variant">Kelola lembar nilai mata kuliah mahasiswa untuk perhitungan CPL.</p>
+                <p className="font-body-sm text-body-sm text-on-surface-variant">
+                  {gradeInputMode === 'cpmk' && 'Isi nilai setiap CPMK per mata kuliah dan angkatan.'}
+                  {gradeInputMode === 'single' && 'Isi satu nilai mata kuliah per mahasiswa; sistem membagikannya ke setiap CPMK mata kuliah.'}
+                  {gradeInputMode === 'student' && 'Lihat dan ubah nilai mata kuliah per mahasiswa.'}
+                </p>
               </div>
-              <div className="flex flex-col md:flex-row items-center gap-md">
+              {gradeInputMode === 'student' && <div className="flex flex-col md:flex-row items-center gap-md">
                 <input 
                   type="file" 
                   accept=".xlsx, .xls, .pdf, application/pdf"
@@ -7672,10 +7692,51 @@ export default function App() {
                     Input Nilai Baru
                   </button>
                 )}
-              </div>
+              </div>}
             </div>
 
-            {selectedStudentId ? (
+            <div role="tablist" aria-label="Cara input nilai" className="inline-flex flex-wrap gap-xs rounded-xl border border-outline-variant bg-surface-container p-xs">
+              {([
+                ['cpmk', 'grid_on', 'Input per CPMK'],
+                ['single', 'edit_note', 'Input Nilai Satuan'],
+                ['student', 'person_search', 'Per Mahasiswa'],
+              ] as const).map(([mode, icon, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={gradeInputMode === mode}
+                  className={`flex items-center gap-xs rounded-lg px-lg py-sm font-label-sm font-bold transition-colors ${gradeInputMode === mode ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:bg-surface-variant'}`}
+                  onClick={() => setGradeInputMode(mode)}
+                >
+                  <span className="material-symbols-outlined text-[18px]">{icon}</span>{label}
+                </button>
+              ))}
+            </div>
+
+            <div className={gradeInputMode === 'student' ? 'hidden' : ''}>
+              <AdminGradeInput
+                mode={gradeInputMode === 'single' ? 'single' : 'cpmk'}
+                courses={courses}
+                students={students}
+                apiCall={apiCall}
+                showToast={showToast}
+                showNotice={showNotice}
+                requestConfirmation={requestConfirmation}
+                renderCoursePicker={(value, onChange, options) => (
+                  <SearchablePicker
+                    value={value}
+                    onChange={onChange}
+                    options={options}
+                    placeholder="Pilih mata kuliah"
+                    searchPlaceholder="Cari kode atau nama mata kuliah..."
+                    emptyText="Mata kuliah tidak ditemukan."
+                  />
+                )}
+              />
+            </div>
+
+            {gradeInputMode !== 'student' ? null : selectedStudentId ? (
               <div className="space-y-lg">
                 <button 
                   className="flex items-center gap-sm text-primary hover:underline font-label-md font-bold transition-all"
