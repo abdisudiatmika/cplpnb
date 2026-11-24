@@ -81,6 +81,24 @@ class TeachingAssignmentTest extends TestCase
         $this->assertDatabaseCount('teaching_assignments', 0);
     }
 
+    public function test_department_admin_can_assign_lecturer_from_another_department_to_own_course(): void
+    {
+        [$departmentA, $adminA, , $courseA] = $this->context();
+        [, , $lecturerB, , $lecturerUserB] = $this->context('PN', 'Pariwisata', 'admin-b@example.test');
+
+        $this->actingAs($adminA)->postJson('/api/teaching-assignments', [
+            'lecturerId' => $lecturerB->id,
+            'courseId' => $courseA->id,
+            'className' => 'A',
+            'cohortYear' => 2025,
+            'academicYear' => '2025/2026',
+            'semester' => 'Ganjil',
+        ])->assertCreated();
+
+        $this->actingAs($lecturerUserB)->getJson('/api/teaching-assignments/me')
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.courseName', 'Pendidikan Pancasila');
+    }
+
     public function test_lecturer_only_sees_own_active_assignments(): void
     {
         [$department, $admin, $lecturer, $course, $lecturerUser] = $this->context();

@@ -137,6 +137,7 @@ interface Lecturer {
   departmentId: string;
   departmentName: string | null;
   departmentCode: string | null;
+  canEdit?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -546,6 +547,8 @@ export default function App() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
+  const [lecturerSearch, setLecturerSearch] = useState('');
+  const [lecturerScope, setLecturerScope] = useState<'mine' | 'all'>('all');
   const [lecturerProfile, setLecturerProfile] = useState<Lecturer | null>(null);
   const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
   const [assignmentPeriods, setAssignmentPeriods] = useState<AcademicPeriodSummary[]>([]);
@@ -566,6 +569,8 @@ export default function App() {
   }));
   const [assignmentPeriodSaving, setAssignmentPeriodSaving] = useState(false);
   const [expandedAssignmentLecturerId, setExpandedAssignmentLecturerId] = useState<string | null>(null);
+  const [assignmentLecturerSearch, setAssignmentLecturerSearch] = useState('');
+  const [showOtherLecturerPicker, setShowOtherLecturerPicker] = useState(false);
   const [cpmkMasters, setCpmkMasters] = useState<CpmkMaster[]>([]);
   const [graduateProfiles, setGraduateProfiles] = useState<GraduateProfile[]>([]);
   const [editingGraduateProfileId, setEditingGraduateProfileId] = useState<string | null>(null);
@@ -4938,9 +4943,37 @@ export default function App() {
       return `${year}/${year + 1}`;
     }),
   ])).sort().reverse(), [assignmentPeriods]);
-  const activeAssignmentLecturers = React.useMemo(() => lecturers
-    .filter(lecturer => lecturer.status === 'Aktif')
-    .sort((first, second) => first.name.localeCompare(second.name, 'id')), [lecturers]);
+  const visibleLecturers = React.useMemo(() => {
+    const text = lecturerSearch.trim().toLowerCase();
+    const ownDepartment = currentUser?.department_id || currentUser?.departmentId;
+    return lecturers
+      .filter(lecturer => lecturerScope === 'all' || currentUser?.role !== 'admin_jurusan' || lecturer.departmentId === ownDepartment)
+      .filter(lecturer => !text || `${lecturer.name} ${lecturer.employeeNumber} ${lecturer.email} ${lecturer.departmentName || ''} ${lecturer.departmentCode || ''}`.toLowerCase().includes(text));
+  }, [lecturers, lecturerSearch, lecturerScope, currentUser]);
+  // Daftar penugasan: dosen homebase prodi ini ditambah dosen prodi lain yang pernah mengajar di prodi ini.
+  // Dosen prodi lain lainnya dipilih lewat "Tugaskan dosen prodi lain" agar daftar tidak memuat seluruh dosen PNB.
+  const activeAssignmentLecturers = React.useMemo(() => {
+    const ownDepartment = currentUser?.department_id || currentUser?.departmentId;
+    const taughtHere = new Set(teachingAssignments.map(assignment => assignment.lecturerId));
+    const text = assignmentLecturerSearch.trim().toLowerCase();
+    return lecturers
+      .filter(lecturer => lecturer.status === 'Aktif')
+      .filter(lecturer => currentUser?.role !== 'admin_jurusan' || lecturer.departmentId === ownDepartment || taughtHere.has(lecturer.id) || expandedAssignmentLecturerId === lecturer.id)
+      .filter(lecturer => !text || `${lecturer.name} ${lecturer.employeeNumber} ${lecturer.departmentName || ''}`.toLowerCase().includes(text))
+      .sort((first, second) => first.name.localeCompare(second.name, 'id'));
+  }, [lecturers, teachingAssignments, assignmentLecturerSearch, expandedAssignmentLecturerId, currentUser]);
+  const otherDepartmentLecturerOptions = React.useMemo(() => {
+    const shown = new Set(activeAssignmentLecturers.map(lecturer => lecturer.id));
+    return lecturers
+      .filter(lecturer => lecturer.status === 'Aktif' && !shown.has(lecturer.id))
+      .sort((first, second) => first.name.localeCompare(second.name, 'id'))
+      .map(lecturer => ({
+        value: lecturer.id,
+        label: lecturer.name,
+        meta: `NIP/NIDN: ${lecturer.employeeNumber}${lecturer.departmentName ? ` · Homebase: ${lecturer.departmentName}` : ''}`,
+        searchText: `${lecturer.email} ${lecturer.departmentName || ''} ${lecturer.departmentCode || ''}`,
+      }));
+  }, [lecturers, activeAssignmentLecturers]);
 
   // Get unique Angkatan values dynamically from students
   const uniqueAngkatanList = React.useMemo(() => {
@@ -6153,8 +6186,40 @@ export default function App() {
             <section className="app-card overflow-hidden">
               <div className="flex items-center justify-between gap-md border-b border-outline-variant px-lg py-md">
                 <div><h4 className="font-headline-lg font-bold text-on-surface">Daftar Dosen</h4><p className="font-body-sm text-on-surface-variant">{selectedAssignmentPeriod.semester} {selectedAssignmentPeriod.academicYear} · {periodTeachingAssignments.length} kelas ajar</p></div>
-                <span className="rounded-full bg-primary/10 px-md py-xs font-label-sm font-bold text-primary">{activeAssignmentLecturers.length} dosen aktif</span>
+                <span className="rounded-full bg-primary/10 px-md py-xs font-label-sm font-bold text-primary">{activeAssignmentLecturers.length} dosen</span>
               </div>
+              <div className="flex flex-col gap-sm border-b border-outline-variant px-lg py-sm sm:flex-row sm:items-center">
+                <div className="relative flex-1 max-w-md">
+                  <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+                  <input className="w-full bg-surface-container border border-outline-variant rounded-lg pl-[38px] pr-md py-sm font-label-sm" placeholder="Cari dosen pada daftar ini..." value={assignmentLecturerSearch} onChange={event => setAssignmentLecturerSearch(event.target.value)} />
+                </div>
+                {currentUser?.role === 'admin_jurusan' && (
+                  <button type="button" className="inline-flex items-center justify-center gap-xs rounded-lg border border-primary px-md py-sm font-label-sm font-bold text-primary hover:bg-primary/5" onClick={() => setShowOtherLecturerPicker(value => !value)} aria-expanded={showOtherLecturerPicker}>
+                    <span className="material-symbols-outlined text-[18px]">group_add</span>Tugaskan dosen prodi lain
+                  </button>
+                )}
+              </div>
+              {showOtherLecturerPicker && currentUser?.role === 'admin_jurusan' && (
+                <div className="border-b border-outline-variant bg-primary/5 px-lg py-md space-y-sm">
+                  <p className="font-body-sm text-on-surface-variant">Pilih dosen dari prodi lain (cari nama, NIP/NIDN, atau prodi homebase). Dosen yang dipilih akan muncul di daftar dan langsung dibuka untuk ditambah kelas ajarnya.</p>
+                  <SearchablePicker
+                    value=""
+                    onChange={lecturerId => {
+                      const lecturer = lecturers.find(item => item.id === lecturerId);
+                      if (!lecturer) return;
+                      setShowOtherLecturerPicker(false);
+                      setAssignmentLecturerSearch('');
+                      setExpandedAssignmentLecturerId(lecturer.id);
+                      if (selectedAssignmentPeriodRecord?.status === 'Aktif') openAssignmentForLecturer(lecturer);
+                    }}
+                    options={otherDepartmentLecturerOptions}
+                    placeholder="Pilih dosen prodi lain"
+                    searchPlaceholder="Cari nama, NIP/NIDN, atau prodi..."
+                    emptyText="Dosen tidak ditemukan."
+                    initiallyOpen
+                  />
+                </div>
+              )}
               {dataLoading ? <div className="p-xl text-center text-on-surface-variant">Memuat penugasan...</div> : activeAssignmentLecturers.length > 0 ? (
                 <div className="divide-y divide-outline-variant">
                   {activeAssignmentLecturers.map(lecturer => {
@@ -6164,7 +6229,7 @@ export default function App() {
                       <div className="flex flex-col gap-md lg:flex-row lg:items-center lg:justify-between">
                         <button type="button" aria-expanded={isExpanded} className="flex min-w-0 flex-1 items-center gap-md rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40" onClick={() => setExpandedAssignmentLecturerId(current => current === lecturer.id ? null : lecturer.id)}>
                           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 font-bold text-primary">{lecturer.name.charAt(0)}</div>
-                          <div className="min-w-0 flex-1"><p className="truncate font-body-sm font-bold text-on-surface">{lecturer.name}</p><p className="font-label-xs text-on-surface-variant">{lecturer.employeeNumber} · {lecturerAssignments.length} kelas ajar</p></div>
+                          <div className="min-w-0 flex-1"><p className="truncate font-body-sm font-bold text-on-surface">{lecturer.name}</p><p className="font-label-xs text-on-surface-variant">{lecturer.employeeNumber} · {lecturerAssignments.length} kelas ajar{lecturer.departmentId !== (currentUser?.department_id || currentUser?.departmentId) && lecturer.departmentName ? ` · Homebase: ${lecturer.departmentName}` : ''}</p></div>
                           <span className="material-symbols-outlined shrink-0 text-on-surface-variant">{isExpanded ? 'expand_less' : 'expand_more'}</span>
                         </button>
                         {isExpanded && <button type="button" disabled={selectedAssignmentPeriodRecord?.status !== 'Aktif'} className="inline-flex items-center justify-center gap-xs rounded-lg border border-primary px-md py-sm font-label-sm font-bold text-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-40" title={selectedAssignmentPeriodRecord?.status === 'Aktif' ? 'Tambahkan mata kuliah dan kelas untuk dosen ini' : 'Aktifkan periode terlebih dahulu'} onClick={() => openAssignmentForLecturer(lecturer)}><span className="material-symbols-outlined text-[18px]">add</span>Tambah Kelas Ajar</button>}
@@ -6188,7 +6253,7 @@ export default function App() {
                     </div>;
                   })}
                 </div>
-              ) : <div className="p-xl text-center text-on-surface-variant">Belum ada dosen aktif. Tambahkan dosen melalui menu Dosen.</div>}
+              ) : <div className="p-xl text-center text-on-surface-variant">{assignmentLecturerSearch ? 'Tidak ada dosen yang cocok pada daftar ini. Gunakan "Tugaskan dosen prodi lain" untuk mencari di seluruh prodi.' : 'Belum ada dosen aktif. Tambahkan dosen melalui menu Dosen.'}</div>}
             </section>
           </div>
         )}
@@ -6199,13 +6264,29 @@ export default function App() {
               <div>
                 <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Dosen</h3>
                 <p className="font-body-sm text-body-sm text-on-surface-variant">
-                  {currentUser?.role === 'super_admin' ? 'Kelola akun dosen pada seluruh jurusan.' : 'Kelola akun dosen pada jurusan Anda.'}
+                  {currentUser?.role === 'super_admin'
+                    ? 'Kelola akun dosen pada seluruh jurusan.'
+                    : 'Daftar dosen bersama seluruh prodi. Dosen prodi lain bisa langsung dipilih di Penugasan Dosen; hanya dosen ber-homebase di prodi Anda yang dapat Anda ubah.'}
                 </p>
               </div>
               <button className="flex items-center gap-sm bg-primary text-on-primary px-lg py-md rounded-xl font-label-sm text-label-sm font-bold glow-primary" onClick={() => openAddModal('lecturer')}>
                 <span className="material-symbols-outlined">person_add</span>
                 Tambah Dosen
               </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-sm sm:items-center">
+              <div className="relative flex-1 max-w-md">
+                <span className="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+                <input className="w-full bg-surface-container border border-outline-variant rounded-lg pl-[38px] pr-md py-sm font-label-sm" placeholder="Cari nama, NIP/NIDN, email, atau prodi..." value={lecturerSearch} onChange={event => setLecturerSearch(event.target.value)} />
+              </div>
+              {currentUser?.role === 'admin_jurusan' && (
+                <div role="tablist" aria-label="Lingkup dosen" className="inline-flex gap-xs rounded-lg border border-outline-variant bg-surface-container p-xs">
+                  {([['all', 'Semua prodi'], ['mine', 'Homebase prodi saya']] as const).map(([scope, label]) => (
+                    <button key={scope} type="button" role="tab" aria-selected={lecturerScope === scope} onClick={() => setLecturerScope(scope)} className={`rounded-md px-md py-xs font-label-sm font-bold ${lecturerScope === scope ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-variant'}`}>{label}</button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="glass-panel rounded-xl overflow-x-auto shadow-xl">
@@ -6219,13 +6300,13 @@ export default function App() {
                       <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">NIP/NIDN</th>
                       <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Nama</th>
                       <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Email</th>
-                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Jurusan</th>
+                      <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Homebase</th>
                       <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase">Status</th>
                       <th className="px-lg py-md font-label-xs text-on-surface-variant font-bold uppercase text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/50">
-                    {lecturers.length > 0 ? lecturers.map((lecturer, index) => (
+                    {visibleLecturers.length > 0 ? visibleLecturers.map((lecturer, index) => (
                       <tr key={lecturer.id} className="hover-row transition-colors">
                         <td className="px-lg py-md font-body-sm">{index + 1}</td>
                         <td className="px-lg py-md font-body-sm font-bold text-primary">{lecturer.employeeNumber}</td>
@@ -6240,6 +6321,11 @@ export default function App() {
                           </span>
                         </td>
                         <td className="px-lg py-md">
+                          {lecturer.canEdit === false ? (
+                            <div className="flex justify-center" title={`Dikelola admin prodi ${lecturer.departmentName || 'homebase'} atau Super Admin`}>
+                              <span className="inline-flex items-center gap-xs rounded-full bg-surface-container px-sm py-xs font-label-xs text-on-surface-variant"><span className="material-symbols-outlined text-[16px]">lock</span>Prodi lain</span>
+                            </div>
+                          ) : (
                           <div className="flex items-center justify-center gap-sm">
                             <button className="p-xs text-on-surface-variant hover:text-secondary transition-colors" onClick={() => openEditModal('lecturer', lecturer)} title="Ubah dosen">
                               <span className="material-symbols-outlined text-[20px]">edit</span>
@@ -6248,10 +6334,11 @@ export default function App() {
                               <span className="material-symbols-outlined text-[20px]">delete</span>
                             </button>
                           </div>
+                          )}
                         </td>
                       </tr>
                     )) : (
-                      <tr><td colSpan={7} className="px-lg py-xl text-center text-on-surface-variant">Belum ada akun dosen pada lingkup jurusan ini.</td></tr>
+                      <tr><td colSpan={7} className="px-lg py-xl text-center text-on-surface-variant">{lecturers.length > 0 ? 'Tidak ada dosen yang cocok dengan pencarian.' : 'Belum ada akun dosen.'}</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -8764,7 +8851,7 @@ export default function App() {
                               .map(lecturer => ({
                                 value: lecturer.id,
                                 label: lecturer.name,
-                                meta: `NIP/NIDN: ${lecturer.employeeNumber}`,
+                                meta: `NIP/NIDN: ${lecturer.employeeNumber}${lecturer.departmentName ? ` · Homebase: ${lecturer.departmentName}` : ''}`,
                                 searchText: `${lecturer.email} ${lecturer.departmentName || ''}`,
                               }))}
                             placeholder="Pilih dosen aktif"

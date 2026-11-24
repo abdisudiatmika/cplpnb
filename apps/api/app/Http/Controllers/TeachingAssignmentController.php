@@ -116,7 +116,8 @@ class TeachingAssignmentController extends Controller
         $validated = $request->validate($this->storeRules());
 
         $course = Course::where('department_id', $departmentId)->findOrFail($validated['courseId']);
-        $lecturer = Lecturer::where('department_id', $departmentId)->findOrFail($validated['lecturerId']);
+        // Dosen adalah data bersama: dosen dari prodi (homebase) mana pun boleh ditugaskan.
+        $lecturer = Lecturer::findOrFail($validated['lecturerId']);
         if ($lecturer->status !== 'Aktif') {
             throw ValidationException::withMessages(['lecturerId' => ['Dosen nonaktif tidak dapat diberi penugasan.']]);
         }

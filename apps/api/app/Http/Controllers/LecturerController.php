@@ -17,12 +17,11 @@ class LecturerController extends Controller
         $user = $request->user();
         $this->authorizeAdministrator($user);
 
+        // Dosen adalah data bersama lintas prodi: semua admin melihat seluruh dosen agar bisa
+        // menugaskan dosen dari prodi lain. Pengubahan tetap dibatasi pada prodi homebase.
         $query = Lecturer::with(['user', 'department'])->orderByDesc('created_at');
-        if ($user->role === 'admin_jurusan') {
-            $query->where('department_id', $user->department_id);
-        }
 
-        return response()->json($query->get()->map(fn (Lecturer $lecturer) => $this->payload($lecturer)));
+        return response()->json($query->get()->map(fn (Lecturer $lecturer) => $this->payload($lecturer, $user)));
     }
 
     public function me(Request $request)
@@ -44,6 +43,7 @@ class LecturerController extends Controller
         $departmentId = $this->resolveDepartmentId($request, $actor);
 
         $request->merge(['department_id' => $departmentId]);
+        $this->rejectExistingLecturer($request);
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
@@ -71,13 +71,13 @@ class LecturerController extends Controller
             ]);
         });
 
-        return response()->json($this->payload($lecturer->load(['user', 'department'])), 201);
+        return response()->json($this->payload($lecturer->load(['user', 'department']), $actor), 201);
     }
 
     public function show(Request $request, Lecturer $lecturer)
     {
-        $this->authorizeLecturerAccess($request->user(), $lecturer);
-        return response()->json($this->payload($lecturer->load(['user', 'department'])));
+        $this->authorizeLecturerAccess($request->user(), $lecturer, false, true);
+        return response()->json($this->payload($lecturer->load(['user', 'department']), $request->user()));
     }
 
     public function update(Request $request, Lecturer $lecturer)
@@ -110,7 +110,7 @@ class LecturerController extends Controller
                 ->all());
         });
 
-        return response()->json($this->payload($lecturer->fresh(['user', 'department'])));
+        return response()->json($this->payload($lecturer->fresh(['user', 'department']), $actor));
     }
 
     public function destroy(Request $request, Lecturer $lecturer)
@@ -140,7 +140,7 @@ class LecturerController extends Controller
         }
     }
 
-    private function authorizeLecturerAccess(?User $user, Lecturer $lecturer, bool $administratorOnly = false): void
+    private function authorizeLecturerAccess(?User $user, Lecturer $lecturer, bool $administratorOnly = false, bool $readOnly = false): void
     {
         abort_unless($user, 403, 'Unauthorized');
 
@@ -149,9 +149,40 @@ class LecturerController extends Controller
         }
 
         $this->authorizeAdministrator($user);
-        if ($user->role === 'admin_jurusan') {
-            abort_unless($lecturer->department_id === $user->department_id, 403, 'Dosen tidak berada pada jurusan Anda.');
+        if ($user->role === 'admin_jurusan' && ! $readOnly) {
+            abort_unless(
+                $lecturer->department_id === $user->department_id,
+                403,
+                'Dosen ini ber-homebase di prodi lain. Hanya admin prodi homebase atau Super Admin yang dapat mengubahnya.'
+            );
         }
+    }
+
+    /**
+     * Dosen tidak boleh didaftarkan dua kali. Bila NIP/NIDN atau email sudah dipakai dosen lain,
+     * arahkan admin untuk memilih dosen tersebut di Penugasan Dosen.
+     */
+    private function rejectExistingLecturer(Request $request): void
+    {
+        $employeeNumber = trim((string) $request->input('employee_number'));
+        $email = trim((string) $request->input('email'));
+        $existing = Lecturer::with(['user', 'department'])
+            ->where(function ($query) use ($employeeNumber, $email) {
+                $query->when($employeeNumber !== '', fn ($q) => $q->where('employee_number', $employeeNumber))
+                    ->when($email !== '', fn ($q) => $q->orWhereHas('user', fn ($user) => $user->where('email', $email)));
+            })
+            ->when($employeeNumber === '' && $email === '', fn ($query) => $query->whereRaw('1 = 0'))
+            ->first();
+        if (! $existing) {
+            return;
+        }
+
+        $field = $existing->employee_number === $employeeNumber ? 'employee_number' : 'email';
+        $label = $field === 'employee_number' ? 'NIP/NIDN '.$employeeNumber : 'Email '.$email;
+        $homebase = $existing->department?->name ?? 'prodi lain';
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            $field => [$label.' sudah terdaftar atas nama '.$existing->user?->name.' (homebase '.$homebase.'). Dosen tidak perlu ditambahkan lagi; pilih langsung di menu Penugasan Dosen.'],
+        ]);
     }
 
     private function resolveDepartmentId(Request $request, User $user, ?string $fallback = null): ?string
@@ -163,8 +194,11 @@ class LecturerController extends Controller
         return $request->input('departmentId', $request->input('department_id', $fallback));
     }
 
-    private function payload(Lecturer $lecturer): array
+    private function payload(Lecturer $lecturer, ?User $viewer = null): array
     {
+        $canEdit = $viewer && ($viewer->role === 'super_admin'
+            || ($viewer->role === 'admin_jurusan' && $viewer->department_id === $lecturer->department_id));
+
         return [
             'id' => $lecturer->id,
             'userId' => $lecturer->user_id,
@@ -176,6 +210,7 @@ class LecturerController extends Controller
             'departmentId' => $lecturer->department_id,
             'departmentName' => $lecturer->department?->name,
             'departmentCode' => $lecturer->department?->code,
+            'canEdit' => $canEdit,
             'createdAt' => $lecturer->created_at,
             'updatedAt' => $lecturer->updated_at,
         ];

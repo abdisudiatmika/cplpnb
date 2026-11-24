@@ -62,13 +62,39 @@ class LecturerManagementTest extends TestCase
             'status' => 'Aktif',
         ]);
 
+        // Dosen data bersama: boleh dilihat dan dipilih, tetapi hanya prodi homebase yang boleh mengubah.
         $this->actingAs($adminA)->getJson('/api/lecturers/' . $lecturer->id)
-            ->assertForbidden();
+            ->assertOk()->assertJsonPath('canEdit', false)->assertJsonPath('departmentName', 'Pariwisata');
+        $this->actingAs($adminA)->getJson('/api/lecturers')
+            ->assertOk()->assertJsonCount(1)->assertJsonPath('0.canEdit', false);
         $this->actingAs($adminA)->putJson('/api/lecturers/' . $lecturer->id, [
             'name' => 'Tidak Boleh Diubah',
         ])->assertForbidden();
         $this->actingAs($adminA)->deleteJson('/api/lecturers/' . $lecturer->id)
             ->assertForbidden();
+    }
+
+    public function test_existing_lecturer_cannot_be_registered_twice_from_another_department(): void
+    {
+        $departmentA = $this->department('AK', 'Akuntansi');
+        $departmentB = $this->department('PN', 'Pariwisata');
+        $adminA = $this->user('admin_jurusan', $departmentA->id, 'admin-a@example.test');
+        $lecturerUser = $this->user('dosen', $departmentB->id, 'dosen-b@example.test');
+        Lecturer::create(['user_id' => $lecturerUser->id, 'department_id' => $departmentB->id, 'employee_number' => 'NIP-B', 'status' => 'Aktif']);
+
+        $this->actingAs($adminA)->postJson('/api/lecturers', [
+            'name' => 'Dosen B Lagi', 'email' => 'baru@example.test', 'password' => 'password123', 'employee_number' => 'NIP-B',
+        ])->assertStatus(422)->assertJsonPath('errors.employee_number.0', fn ($message) => str_contains($message, 'sudah terdaftar') && str_contains($message, 'Pariwisata') && str_contains($message, 'Penugasan Dosen'));
+
+        $this->actingAs($adminA)->postJson('/api/lecturers', [
+            'name' => 'Dosen B Lagi', 'email' => 'dosen-b@example.test', 'password' => 'password123', 'employee_number' => 'NIP-BARU',
+        ])->assertStatus(422)->assertJsonValidationErrors('email');
+
+        $this->assertSame(1, Lecturer::count());
+
+        $this->actingAs($adminA)->postJson('/api/lecturers', [
+            'name' => 'Dosen A', 'email' => 'dosen-a@example.test', 'password' => 'password123', 'employee_number' => 'NIP-A',
+        ])->assertCreated()->assertJsonPath('canEdit', true)->assertJsonPath('departmentId', $departmentA->id);
     }
 
     public function test_lecturer_can_read_own_profile_but_cannot_list_all_lecturers(): void
