@@ -46,7 +46,7 @@ class LecturerController extends Controller
         $this->rejectExistingLecturer($request);
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email',
+            'email' => 'nullable|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8',
             'employee_number' => 'required|string|max:100|unique:lecturers,employee_number',
             'department_id' => 'required|exists:departments,id',
@@ -57,7 +57,7 @@ class LecturerController extends Controller
             $user = User::create([
                 'id' => (string) Str::uuid(),
                 'name' => $validated['name'],
-                'email' => $validated['email'],
+                'email' => ($validated['email'] ?? null) ?: null,
                 'password' => Hash::make($validated['password']),
                 'role' => 'dosen',
                 'department_id' => $validated['department_id'],
@@ -89,7 +89,7 @@ class LecturerController extends Controller
         $request->merge(['department_id' => $departmentId]);
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'email' => ['sometimes', 'required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($lecturer->user_id)],
+            'email' => ['sometimes', 'nullable', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($lecturer->user_id)],
             'password' => 'nullable|string|min:8',
             'employee_number' => ['sometimes', 'required', 'string', 'max:100', Rule::unique('lecturers', 'employee_number')->ignore($lecturer->id)],
             'department_id' => 'required|exists:departments,id',
@@ -98,6 +98,9 @@ class LecturerController extends Controller
 
         DB::transaction(function () use ($validated, $lecturer) {
             $userUpdates = collect($validated)->only(['name', 'email', 'department_id'])->all();
+            if (array_key_exists('email', $userUpdates)) {
+                $userUpdates['email'] = $userUpdates['email'] ?: null;
+            }
             if (!empty($validated['password'])) {
                 $userUpdates['password'] = Hash::make($validated['password']);
             }

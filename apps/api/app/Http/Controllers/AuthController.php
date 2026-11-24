@@ -26,10 +26,12 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        // Kolom "email" menerima email, atau NIP/NUPTK untuk akun dosen (data kepegawaian tidak selalu memuat email).
         $request->validate([
-            'email' => 'required|email',
+            'email' => 'required|string|max:255',
             'password' => 'required',
-        ]);
+        ], ['email.required' => 'Email atau NIP wajib diisi.']);
+        $identifier = trim((string) $request->input('email'));
 
         // Middleware AuthenticateSession (Sanctum) menyimpan hash kata sandi akun lama ke sesi
         // baru saat logout. Tanpa dibuang, login sebagai akun lain langsung dianggap sesi
@@ -38,8 +40,8 @@ class AuthController extends Controller
             $request->session()->forget(['password_hash_sanctum', 'password_hash_web']);
         }
 
-        if (Auth::attempt($request->only('email', 'password'))) {
-            $user = Auth::user()->load(['department', 'lecturer']);
+        if ($this->attemptLogin($identifier, (string) $request->input('password'))) {
+            $user = Auth::guard('web')->user()->load(['department', 'lecturer']);
             if ($user->role === 'dosen' && (!$user->lecturer || $user->lecturer->status !== 'Aktif')) {
                 Auth::guard('web')->logout();
                 if ($request->hasSession()) {
@@ -177,5 +179,22 @@ class AuthController extends Controller
         $user = User::where('role', 'admin_jurusan')->findOrFail($id);
         $user->delete();
         return response()->json(null, 204);
+    }
+
+    /** Login dengan email, atau dengan NIP/NUPTK (nomor pegawai) untuk akun dosen. */
+    private function attemptLogin(string $identifier, string $password): bool
+    {
+        if (str_contains($identifier, '@')) {
+            return Auth::guard('web')->attempt(['email' => $identifier, 'password' => $password]);
+        }
+
+        $lecturer = \App\Models\Lecturer::with('user')->where('employee_number', $identifier)->first();
+        $user = $lecturer?->user;
+        if (! $user || ! \Illuminate\Support\Facades\Hash::check($password, $user->password)) {
+            return false;
+        }
+        Auth::guard('web')->login($user);
+
+        return true;
     }
 }

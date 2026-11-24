@@ -130,7 +130,7 @@ interface Lecturer {
   id: string;
   userId: string;
   name: string;
-  email: string;
+  email: string | null;
   role: 'dosen';
   employeeNumber: string;
   status: 'Aktif' | 'Nonaktif';
@@ -2628,7 +2628,7 @@ export default function App() {
     setLoginSuccess(false);
 
     if (!emailInput.trim()) {
-      setLoginError('Email tidak boleh kosong');
+      setLoginError('Email atau NIP tidak boleh kosong');
       return;
     }
     if (!passwordInput.trim()) {
@@ -4551,8 +4551,8 @@ export default function App() {
         const list = await apiCall('/user-admins');
         setAdmins(list);
       } else if (modalType === 'lecturer') {
-        if (!lecturerFormName.trim() || !lecturerFormEmail.trim() || !lecturerFormEmployeeNumber.trim() || (!editingId && !lecturerFormPassword)) {
-          setModalError('Nama, email, NIP/NIDN, dan password wajib diisi.');
+        if (!lecturerFormName.trim() || !lecturerFormEmployeeNumber.trim() || (!editingId && !lecturerFormPassword)) {
+          setModalError('Nama, NIP/NIDN, dan password wajib diisi. Email boleh dikosongkan; dosen dapat login dengan NIP/NIDN.');
           return;
         }
         const departmentId = currentUser?.role === 'super_admin'
@@ -4565,7 +4565,7 @@ export default function App() {
 
         const payload = {
           name: lecturerFormName.trim(),
-          email: lecturerFormEmail.trim(),
+          email: lecturerFormEmail.trim() || null,
           password: lecturerFormPassword || undefined,
           employee_number: lecturerFormEmployeeNumber.trim(),
           departmentId,
@@ -4869,7 +4869,7 @@ export default function App() {
       setAdminFormDeptId(item.department_id || item.departmentId || '');
     } else if (type === 'lecturer') {
       setLecturerFormName(item.name);
-      setLecturerFormEmail(item.email);
+      setLecturerFormEmail(item.email || '');
       setLecturerFormPassword('');
       setLecturerFormEmployeeNumber(item.employeeNumber || item.employee_number || '');
       setLecturerFormDeptId(item.departmentId || item.department_id || '');
@@ -4948,7 +4948,7 @@ export default function App() {
     const ownDepartment = currentUser?.department_id || currentUser?.departmentId;
     return lecturers
       .filter(lecturer => lecturerScope === 'all' || currentUser?.role !== 'admin_jurusan' || lecturer.departmentId === ownDepartment)
-      .filter(lecturer => !text || `${lecturer.name} ${lecturer.employeeNumber} ${lecturer.email} ${lecturer.departmentName || ''} ${lecturer.departmentCode || ''}`.toLowerCase().includes(text));
+      .filter(lecturer => !text || `${lecturer.name} ${lecturer.employeeNumber} ${lecturer.email || ''} ${lecturer.departmentName || ''} ${lecturer.departmentCode || ''}`.toLowerCase().includes(text));
   }, [lecturers, lecturerSearch, lecturerScope, currentUser]);
   // Daftar penugasan: dosen homebase prodi ini ditambah dosen prodi lain yang pernah mengajar di prodi ini.
   // Dosen prodi lain lainnya dipilih lewat "Tugaskan dosen prodi lain" agar daftar tidak memuat seluruh dosen PNB.
@@ -4971,7 +4971,7 @@ export default function App() {
         value: lecturer.id,
         label: lecturer.name,
         meta: `NIP/NIDN: ${lecturer.employeeNumber}${lecturer.departmentName ? ` · Homebase: ${lecturer.departmentName}` : ''}`,
-        searchText: `${lecturer.email} ${lecturer.departmentName || ''} ${lecturer.departmentCode || ''}`,
+        searchText: `${lecturer.email || ''} ${lecturer.departmentName || ''} ${lecturer.departmentCode || ''}`,
       }));
   }, [lecturers, activeAssignmentLecturers]);
 
@@ -5300,7 +5300,7 @@ export default function App() {
               <form className="flex flex-col gap-6" onSubmit={handleLogin}>
                 <div className="flex flex-col gap-3">
                   <label className="text-[15px] font-bold text-gray-800 ml-1" htmlFor="email">
-                    Email
+                    Email atau NIP
                   </label>
                   <div className="relative">
                     <span className="material-symbols-outlined absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 text-[22px]">
@@ -5309,8 +5309,9 @@ export default function App() {
                     <input 
                       className="w-full bg-[#F1F5F9] border-none rounded-full py-[18px] pl-[52px] pr-5 text-gray-800 text-[15px] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0d2a6a]/30 transition-all" 
                       id="email" 
-                      placeholder="nama@pnb.ac.id"
-                      type="email"
+                      placeholder="nama@pnb.ac.id atau NIP/NUPTK"
+                      type="text"
+                      autoComplete="username"
                       value={emailInput}
                       onChange={(e) => setEmailInput(e.target.value)}
                       disabled={loginLoading || loginSuccess}
@@ -6311,7 +6312,7 @@ export default function App() {
                         <td className="px-lg py-md font-body-sm">{index + 1}</td>
                         <td className="px-lg py-md font-body-sm font-bold text-primary">{lecturer.employeeNumber}</td>
                         <td className="px-lg py-md font-body-sm font-medium text-on-surface">{lecturer.name}</td>
-                        <td className="px-lg py-md font-body-sm text-on-surface-variant">{lecturer.email}</td>
+                        <td className="px-lg py-md font-body-sm text-on-surface-variant">{lecturer.email || <span className="italic">— (login dengan NIP)</span>}</td>
                         <td className="px-lg py-md font-body-sm text-on-surface-variant">
                           {lecturer.departmentName ? `${lecturer.departmentName}${lecturer.departmentCode ? ` (${lecturer.departmentCode})` : ''}` : '—'}
                         </td>
@@ -8749,8 +8750,8 @@ export default function App() {
                     <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all" placeholder="Nomor identitas dosen" type="text" value={lecturerFormEmployeeNumber} onChange={(e) => setLecturerFormEmployeeNumber(e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-sm">
-                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Email</label>
-                    <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all" placeholder="dosen@pnb.ac.id" type="email" value={lecturerFormEmail} onChange={(e) => setLecturerFormEmail(e.target.value)} />
+                    <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Email (opsional)</label>
+                    <input className="w-full bg-surface-container border border-outline-variant/60 rounded-lg shadow-sm py-md px-md text-on-surface font-body-base focus:outline-none focus:border-primary transition-all" placeholder="dosen@pnb.ac.id (boleh kosong, login dengan NIP/NIDN)" type="email" value={lecturerFormEmail} onChange={(e) => setLecturerFormEmail(e.target.value)} />
                   </div>
                   <div className="flex flex-col gap-sm">
                     <label className="font-label-sm text-label-sm text-on-surface-variant ml-xs">Password {modalAction === 'edit' && '(Kosongkan jika tidak ingin diubah)'}</label>
@@ -8852,7 +8853,7 @@ export default function App() {
                                 value: lecturer.id,
                                 label: lecturer.name,
                                 meta: `NIP/NIDN: ${lecturer.employeeNumber}${lecturer.departmentName ? ` · Homebase: ${lecturer.departmentName}` : ''}`,
-                                searchText: `${lecturer.email} ${lecturer.departmentName || ''}`,
+                                searchText: `${lecturer.email || ''} ${lecturer.departmentName || ''}`,
                               }))}
                             placeholder="Pilih dosen aktif"
                             searchPlaceholder="Cari nama, NIP/NIDN, atau email..."
