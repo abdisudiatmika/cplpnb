@@ -53,6 +53,7 @@ class StudentCplAchievementService
                     'cpmkId' => $entry['cpmk']->id,
                     'cpmkCode' => $entry['cpmk']->code,
                     'description' => $entry['cpmk']->description,
+                    'courseId' => $entry['courseId'],
                     'courseCode' => $entry['courseCode'],
                     'courseName' => $entry['courseName'],
                     'className' => $entry['className'],

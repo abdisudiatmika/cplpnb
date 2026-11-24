@@ -11,6 +11,7 @@ import { BarChart } from './components/BarChart';
 import { CplPrintTemplate } from './components/CplPrintTemplate';
 import { LandingPage } from './components/LandingPage';
 import { AdminGradeInput } from './components/AdminGradeInput';
+import { CpmkEvaluationReport } from './components/CpmkEvaluationReport';
 
 // API Configuration
 const API_BASE = import.meta.env.PROD 
@@ -338,6 +339,7 @@ const TAB_ROUTES: Record<string, string> = {
   cpl: 'cpl',
   nilai: 'nilai',
   hasil_cpl: 'hasil-cpl',
+  evaluasi_cpmk: 'evaluasi-cpmk',
   report_settings: 'pengaturan-laporan',
   lecturers: 'dosen',
   teaching_assignments: 'penugasan-dosen',
@@ -2464,6 +2466,8 @@ export default function App() {
               const gradeList = await apiCall(`/grades/student/${selectedStudentId}`);
               setGrades(gradeList);
             }
+          } else if (activeTab === 'evaluasi_cpmk') {
+            setStudents(await apiCall('/students'));
           } else if (activeTab === 'hasil_cpl') {
             let url = '/cpl/averages';
             const params = new URLSearchParams();
@@ -5574,6 +5578,19 @@ export default function App() {
                   <span>Hasil CPL</span>
                 </button>
 
+                {/* Evaluasi CPMK */}
+                <button
+                  className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
+                    activeTab === 'evaluasi_cpmk'
+                      ? 'text-primary font-bold bg-primary/5'
+                      : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
+                  }`}
+                  onClick={() => navigateToTab('evaluasi_cpmk')}
+                >
+                  <span className="material-symbols-outlined">fact_check</span>
+                  <span>Evaluasi CPMK</span>
+                </button>
+
                 <button
                   className={`w-full flex items-center gap-md px-md py-sm rounded-lg text-left transition-all duration-200 ease-in-out font-label-sm text-label-sm ${
                     activeTab === 'report_settings'
@@ -8090,6 +8107,16 @@ export default function App() {
                 {reportSettingsSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}
               </button>
             </form>
+          </div>
+        )}
+
+        {currentUser?.role === 'admin_jurusan' && activeTab === 'evaluasi_cpmk' && (
+          <div className="p-gutter space-y-lg flex-1">
+            <div>
+              <h3 className="font-display-3xl text-display-3xl font-bold text-on-surface">Evaluasi CPMK per Mata Kuliah</h3>
+              <p className="font-body-sm text-body-sm text-on-surface-variant">Persentase mahasiswa yang mencapai setiap CPMK, sebagai bahan evaluasi RPS dan perbaikan pembelajaran tiap semester.</p>
+            </div>
+            <CpmkEvaluationReport students={students} apiCall={apiCall} showToast={showToast} />
           </div>
         )}
 

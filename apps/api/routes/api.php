@@ -50,6 +50,8 @@ Route::middleware(['auth:sanctum', 'role:super_admin,admin_jurusan'])->group(fun
     Route::get('/cpl/transcript/{id}', [CplController::class, 'transcript']);
     Route::get('/cpl/course-breakdown/{cplId}', [CplController::class, 'courseBreakdown']);
     Route::get('/cpl/course-summary', [CplController::class, 'courseSummary']);
+    Route::get('/reports/cpmk-evaluation', [\App\Http\Controllers\CpmkEvaluationController::class, 'index']);
+    Route::get('/reports/cpmk-evaluation/{courseId}', [\App\Http\Controllers\CpmkEvaluationController::class, 'show']);
     Route::get('/cpl', [CplController::class, 'index']);
     Route::post('/cpl', [CplController::class, 'store']);
     Route::put('/cpl/{id}', [CplController::class, 'update']);
